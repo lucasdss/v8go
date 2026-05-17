@@ -1,28 +1,28 @@
-package gov8_test
+package v8go_test
 
 import (
 	"testing"
 
-	"github.com/lucasdss/v8go/pkg/gov8"
+	"github.com/lucasdss/v8go"
 	"github.com/lucasdss/v8go/pkg/js"
 )
 
 func TestEvaluateSimple(t *testing.T) {
-	result := gov8.Evaluate("1 + 2")
+	result := v8go.Evaluate("1 + 2")
 	if result.ToNumber() != 3 {
 		t.Errorf("expected 3, got %v", result.ToNumber())
 	}
 }
 
 func TestEvaluateString(t *testing.T) {
-	result := gov8.Evaluate(`"hello " + "world"`)
+	result := v8go.Evaluate(`"hello " + "world"`)
 	if result.ToString() != "hello world" {
 		t.Errorf("expected 'hello world', got %q", result.ToString())
 	}
 }
 
 func TestEngineConsoleLog(t *testing.T) {
-	engine := gov8.NewEngine()
+	engine := v8go.NewEngine()
 	engine.Evaluate(`console.log("test")`)
 	logs := engine.ConsoleOutput()
 	if len(logs) != 1 || logs[0] != "test" {
@@ -31,7 +31,7 @@ func TestEngineConsoleLog(t *testing.T) {
 }
 
 func TestEvaluateComplex(t *testing.T) {
-	result := gov8.Evaluate(`
+	result := v8go.Evaluate(`
 		function factorial(n) {
 			if (n <= 1) { return 1; }
 			return n * factorial(n - 1);
@@ -58,7 +58,7 @@ func TestFunctionScopedVar(t *testing.T) {
 }
 
 func TestVersion(t *testing.T) {
-	v := gov8.Version()
+	v := v8go.Version()
 	if v == "" {
 		t.Error("version should not be empty")
 	}

@@ -31,7 +31,7 @@ package main
 
 import (
     "fmt"
-    "github.com/lucasdss/v8go/pkg/gov8"
+    "github.com/lucasdss/v8go"
 )
 
 func main() {

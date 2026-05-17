@@ -7,7 +7,7 @@
 //
 //	result := gov8.Evaluate("1 + 2")
 //	fmt.Println(result) // 3
-package gov8
+package v8go
 
 import (
 	"github.com/lucasdss/v8go/pkg/js"
