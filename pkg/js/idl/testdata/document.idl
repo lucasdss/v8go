@@ -1,0 +1,5 @@
+interface Document {
+  attribute DOMString title;
+  Element getElementById(DOMString id);
+  Element createElement(DOMString tagName);
+};

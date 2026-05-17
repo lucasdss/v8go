@@ -1,0 +1,7 @@
+interface Element : Node {
+  attribute DOMString id;
+  attribute DOMString className;
+  readonly attribute DOMString tagName;
+  DOMString getAttribute(DOMString name);
+  boolean hasAttribute(DOMString name);
+};
