@@ -1,52 +1,42 @@
-// Package jit provides a dual-mapped code buffer for ARM64 JIT compilation.
-// It uses W^X (write XOR execute) memory protection via separate mappings,
-// and leverages MAP_JIT on macOS for Apple Silicon compliance.
+// Package jit provides a dual-mapped code buffer for JIT compilation.
+// It enforces W^X (write XOR execute) memory protection by mapping the
+// same physical pages at two different virtual addresses: one RW for
+// writes, one RX for execution. This eliminates the need for mprotect
+// toggling and provides true hardware-enforced separation.
+//
+// Platform support:
+//   - Darwin: shm_open + dual mmap with MAP_JIT for Apple Silicon.
+//   - Linux:   memfd_create + dual mmap. ARM64 requires explicit I-cache flush.
 package jit
 
 import (
 	"fmt"
 	"syscall"
-	"unsafe"
 )
 
 const pageSize = 4096
 
-// CodeBuf is a dual-mapped code buffer supporting write and execute mappings.
-// On macOS Apple Silicon, MAP_JIT is used to allow fast W^X switching via
-// pthread_jit_write_protect_np.
+// CodeBuf is a dual-mapped code buffer supporting simultaneous write and
+// execute access through separate virtual address mappings of the same
+// physical pages.
 type CodeBuf struct {
-	rwBuf  []byte // writable mapping
-	rxBuf  []byte // executable mapping
+	rwBuf  []byte // writable mapping (PROT_READ|PROT_WRITE)
+	rxBuf  []byte // executable mapping (PROT_READ|PROT_EXEC)
 	rwAddr uintptr
 	rxAddr uintptr
 	size   int
 	pos    int
+	fd     int // closed file descriptor (-1 after close)
 }
 
 // NewCodeBuf allocates a dual-mapped buffer of the given size (page-aligned).
+// The buffer maps the same physical pages at two different virtual addresses:
+// one RW for writes, one RX for execution.
 func NewCodeBuf(size int) (*CodeBuf, error) {
-	size = (size + pageSize - 1) &^ (pageSize - 1)
-	flags := syscall.MAP_ANON | syscall.MAP_PRIVATE
-	// MAP_JIT (0x800) is macOS-specific, required for Apple Silicon.
-	// On Linux it is 0 and has no effect.
-	const mapJIT = 0x800
-	flags |= mapJIT
-
-	data, err := syscall.Mmap(-1, 0, size,
-		syscall.PROT_READ|syscall.PROT_WRITE, flags)
-	if err != nil {
-		return nil, fmt.Errorf("mmap: %w", err)
-	}
-	return &CodeBuf{
-		rwBuf:  data,
-		rxBuf:  data,
-		rwAddr: uintptr(unsafe.Pointer(&data[0])), //nolint:gosec // JIT code requires raw memory access
-		rxAddr: uintptr(unsafe.Pointer(&data[0])), //nolint:gosec // JIT code requires raw memory access
-		size:   size,
-	}, nil
+	return newCodeBufDual(size)
 }
 
-// Write appends a single byte to the buffer.
+// Write appends a single byte to the buffer. Uses the RW mapping.
 func (c *CodeBuf) Write(b byte) {
 	if c.pos < c.size {
 		c.rwBuf[c.pos] = b
@@ -55,7 +45,11 @@ func (c *CodeBuf) Write(b byte) {
 }
 
 // WriteUint32LE writes a 32-bit value in little-endian order.
+// Uses the RW mapping.
 func (c *CodeBuf) WriteUint32LE(v uint32) {
+	if c.pos+4 > c.size {
+		panic(fmt.Sprintf("CodeBuf.WriteUint32LE: write past end (pos=%d, size=%d)", c.pos, c.size))
+	}
 	c.rwBuf[c.pos] = byte(v)
 	c.rwBuf[c.pos+1] = byte(v >> 8)
 	c.rwBuf[c.pos+2] = byte(v >> 16)
@@ -64,7 +58,11 @@ func (c *CodeBuf) WriteUint32LE(v uint32) {
 }
 
 // PatchUint32LE writes a 32-bit little-endian value at the given offset.
+// Uses the RW mapping. Panics if the offset+4 exceeds the buffer size.
 func (c *CodeBuf) PatchUint32LE(offset int, v uint32) {
+	if offset < 0 || offset+4 > c.size {
+		panic(fmt.Sprintf("CodeBuf.PatchUint32LE: offset out of bounds (offset=%d, size=%d)", offset, c.size))
+	}
 	b := c.rwBuf
 	b[offset] = byte(v)
 	b[offset+1] = byte(v >> 8)
@@ -84,20 +82,31 @@ func (c *CodeBuf) RWAddr() uintptr { return c.rwAddr }
 // RXAddr returns the read/execute base address.
 func (c *CodeBuf) RXAddr() uintptr { return c.rxAddr }
 
-// Seal flips memory protection to RX (read + execute).
-// On macOS Apple Silicon, this should be preceded by
-// pthread_jit_write_protect_np(false).
-func (c *CodeBuf) Seal() error {
-	if err := syscall.Mprotect(c.rwBuf, syscall.PROT_READ|syscall.PROT_EXEC); err != nil {
-		return fmt.Errorf("mprotect: %w", err)
-	}
-	return nil
+// Commit performs platform-specific cache maintenance after writing JIT
+// code. On ARM64 Linux, this flushes the D-cache and invalidates the
+// I-cache so that writes via the RW mapping are visible when executing
+// via the RX mapping. On other platforms, this is a no-op.
+func (c *CodeBuf) Commit() {
+	flushICache(c.rwAddr, c.pos)
 }
 
-// Free unmaps the buffer.
+// Free unmaps both the RW and RX mappings.
+// On platforms where rwBuf and rxBuf are the same slice (Darwin single
+// MAP_JIT mapping), the second unmap is skipped to avoid EINVAL.
 func (c *CodeBuf) Free() error {
-	if err := syscall.Munmap(c.rwBuf); err != nil {
-		return fmt.Errorf("munmap: %w", err)
+	// If both slices share the same backing array, only unmap once.
+	if &c.rwBuf[0] == &c.rxBuf[0] {
+		if err := syscall.Munmap(c.rwBuf); err != nil {
+			return fmt.Errorf("munmap: %w", err)
+		}
+		return nil
 	}
-	return nil
+	var lastErr error
+	if err := syscall.Munmap(c.rwBuf); err != nil {
+		lastErr = fmt.Errorf("munmap rw: %w", err)
+	}
+	if err := syscall.Munmap(c.rxBuf); err != nil && lastErr == nil {
+		lastErr = fmt.Errorf("munmap rx: %w", err)
+	}
+	return lastErr
 }

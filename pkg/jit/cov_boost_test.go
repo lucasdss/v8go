@@ -265,7 +265,7 @@ func TestJsNaN(t *testing.T) {
 // ============================================================================
 
 // TestPatchICSlotAtUnregistered verifies public API paths that early-return
-// (unregistered address, slot index out of range) without calling jitWriteProtect.
+// (unregistered address, slot index out of range) without calling any write-protect toggle.
 // Testing the full write path would require the com.apple.security.cs.allow-jit
 // entitlement and is covered by integration tests.
 func TestPatchICSlotAtUnregistered(t *testing.T) {

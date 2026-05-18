@@ -65,9 +65,7 @@ func init() {
 		if code == nil {
 			return 0, fmt.Errorf("turbofan: nil code buffer")
 		}
-		if err := code.Seal(); err != nil {
-			return 0, fmt.Errorf("turbofan: seal failed: %w", err)
-		}
+		code.Commit() // flush I-cache on platforms that need it
 		return code.RXAddr(), nil
 	}
 }

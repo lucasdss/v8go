@@ -2789,11 +2789,9 @@ func TestCodeBufSealR4(t *testing.T) {
 	if err != nil {
 		t.Fatal(err)
 	}
-	// Seal may fail on macOS without entitlements — that's fine.
-	err = buf.Seal()
-	if err != nil {
-		t.Logf("Seal failed (expected without entitlements): %v", err)
-	}
+	// Commit replaces Seal in the dual-mapping implementation.
+	// It handles platform-specific cache maintenance.
+	buf.Commit()
 	// Clean up.
 	buf.Free()
 }

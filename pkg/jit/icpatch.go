@@ -38,12 +38,10 @@ var codeBufRegistry sync.Map
 var icSlotOffsets sync.Map
 
 // RegisterCodeBuf registers a code buffer for runtime IC patching.
+// With dual-mapping, no Seal is needed — writes always go through the RW
+// mapping, and execution through the RX mapping.
 func RegisterCodeBuf(rxAddr uintptr, buf *CodeBuf, slotOffsets []int) {
-	if err := buf.Seal(); err != nil {
-		// Seal failure is non-fatal on macOS (MAP_JIT handles protection),
-		// but we log it for debugging.
-		return
-	}
+	buf.Commit() // flush I-cache on platforms that need it (ARM64 Linux)
 	codeBufRegistry.Store(rxAddr, buf)
 	if len(slotOffsets) > 0 {
 		icSlotOffsets.Store(rxAddr, slotOffsets)
@@ -111,10 +109,10 @@ func patchICSlotCommon(rxAddr uintptr, slotIdx int, shapePtr unsafe.Pointer, pro
 }
 
 // PatchICSlotAt patches the JIT IC slot from the interpreter's feedback.
+// With dual-mapping, writes go directly through the RW mapping — no
+// write-protect toggle is needed.
 func PatchICSlotAt(rxAddr uintptr, slotIdx int, shapePtr unsafe.Pointer, propOffset int) {
-	jitWriteProtect(false)
 	patchICSlotCommon(rxAddr, slotIdx, shapePtr, propOffset, PatchICSlot)
-	jitWriteProtect(true)
 }
 
 // PatchPolymorphicICSlotAt patches a JIT IC slot with 2-4 polymorphic shapes.
@@ -122,8 +120,6 @@ func PatchICSlotAt(rxAddr uintptr, slotIdx int, shapePtr unsafe.Pointer, propOff
 // the remaining shapes are handled by the interpreter slow path on miss.
 // If count > 4, transitions to megamorphic (permanent jump to slow path).
 func PatchPolymorphicICSlotAt(rxAddr uintptr, slotIdx int, shapes []unsafe.Pointer, offsets []int) {
-	jitWriteProtect(false)
-	defer jitWriteProtect(true)
 	buf, slotByteOff, ok := resolveICSlot(rxAddr, slotIdx)
 	if !ok {
 		return
@@ -139,8 +135,6 @@ func PatchPolymorphicICSlotAt(rxAddr uintptr, slotIdx int, shapes []unsafe.Point
 
 // PatchMegamorphicICSlotAt patches a slot to permanently jump to the slow path.
 func PatchMegamorphicICSlotAt(rxAddr uintptr, slotIdx int) {
-	jitWriteProtect(false)
-	defer jitWriteProtect(true)
 	buf, slotByteOff, ok := resolveICSlot(rxAddr, slotIdx)
 	if !ok {
 		return
@@ -186,9 +180,7 @@ func PatchICSlotStore(buf *CodeBuf, slotOffset int, shapePtr uintptr, propOffset
 
 // PatchICSlotStoreAt patches a store IC slot from runtime feedback.
 func PatchICSlotStoreAt(rxAddr uintptr, slotIdx int, shapePtr unsafe.Pointer, propOffset int) {
-	jitWriteProtect(false)
 	patchICSlotCommon(rxAddr, slotIdx, shapePtr, propOffset, PatchICSlotStore)
-	jitWriteProtect(true)
 }
 
 func init() {
@@ -197,5 +189,8 @@ func init() {
 	js.PatchICSlotStoreHook = PatchICSlotStoreAt
 	js.PatchPolyICSlotHook = PatchPolymorphicICSlotAt
 	js.PatchMegaICSlotHook = PatchMegamorphicICSlotAt
+	// On Darwin, jitWriteProtect toggles pthread_jit_write_protect_np
+	// which is required for MAP_JIT page execution on Apple Silicon.
+	// On Linux with true dual-mapping, this is a no-op.
 	js.JITProtectHook = jitWriteProtect
 }

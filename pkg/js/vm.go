@@ -1301,8 +1301,72 @@ func opInstanceof(vm *VM, frame *VMFrame, instr Instruction) {
 			}
 			proto = proto.Prototype
 		}
+		// Cross-realm fallback: if pointer comparison failed and the LHS
+		// object came from a different VM (different RealmID), try matching
+		// by prototype ConstructorName. Only triggered when the RHS
+		// prototype's ConstructorName is a known built-in type.
+		if !found && rhsProto.IsObject() && rhsProto.ObjVal != nil {
+			rhsName := rhsProto.ObjVal.ConstructorName
+			if isBuiltinPrototype(rhsName) {
+				proto = lhs.ObjVal.Prototype
+				for proto != nil {
+					if proto.ConstructorName == rhsName {
+						found = true
+						break
+					}
+					proto = proto.Prototype
+				}
+			}
+		}
 		frame.Acc = NewBoolean(found)
 	}
+}
+
+// builtinPrototypes lists ConstructorNames of built-in prototypes that
+// participate in cross-realm instanceof checks. "Object" is excluded
+// because NewJSObject() sets it as the default, so it would match
+// everything and break standard prototype chain logic.
+var builtinPrototypes = map[string]bool{
+	"Array":           true,
+	"String":          true,
+	"Number":          true,
+	"Boolean":         true,
+	"Function":        true,
+	"Date":            true,
+	"RegExp":          true,
+	"Error":           true,
+	"TypeError":       true,
+	"SyntaxError":     true,
+	"RangeError":      true,
+	"ReferenceError":  true,
+	"URIError":        true,
+	"EvalError":       true,
+	"Map":             true,
+	"Set":             true,
+	"WeakMap":         true,
+	"WeakSet":         true,
+	"WeakRef":         true,
+	"Promise":         true,
+	"ArrayBuffer":     true,
+	"DataView":        true,
+	"Int8Array":       true,
+	"Uint8Array":      true,
+	"Uint8ClampedArray": true,
+	"Int16Array":      true,
+	"Uint16Array":     true,
+	"Int32Array":      true,
+	"Uint32Array":     true,
+	"Float32Array":    true,
+	"Float64Array":    true,
+	"BigInt64Array":   true,
+	"BigUint64Array":  true,
+	"Symbol":          true,
+	"Proxy":           true,
+	"FinalizationRegistry": true,
+}
+
+func isBuiltinPrototype(name string) bool {
+	return builtinPrototypes[name]
 }
 
 func opIn(vm *VM, frame *VMFrame, instr Instruction) {
