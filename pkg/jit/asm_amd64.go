@@ -280,6 +280,97 @@ func (a *Assembler) AMD64_JGE(l *Label) {
 	}
 }
 
+// AMD64_JB emits: JB rel32  (0F 82 cd) — jump if below (CF=1).
+func (a *Assembler) AMD64_JB(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x82)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
+// AMD64_JBE emits: JBE rel32  (0F 86 cd) — jump if below or equal (CF=1 OR ZF=1).
+func (a *Assembler) AMD64_JBE(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x86)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
+// AMD64_JA emits: JA rel32  (0F 87 cd) — jump if above (CF=0 AND ZF=0).
+func (a *Assembler) AMD64_JA(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x87)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
+// AMD64_JAE emits: JAE rel32  (0F 83 cd) — jump if above or equal (CF=0).
+func (a *Assembler) AMD64_JAE(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x83)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
+// AMD64_JP emits: JP rel32  (0F 8A cd) — jump if parity (PF=1).
+func (a *Assembler) AMD64_JP(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x8A)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
+// AMD64_JNP emits: JNP rel32  (0F 8B cd) — jump if not parity (PF=0).
+func (a *Assembler) AMD64_JNP(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x8B)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
+// AMD64_JS emits: JS rel32  (0F 88 cd) — jump if sign (SF=1).
+func (a *Assembler) AMD64_JS(l *Label) {
+	pos := a.buf.Pos()
+	a.emitByte(0x0F)
+	a.emitByte(0x88)
+	a.emitUint32(0)
+	if l.offset >= 0 {
+		a.resolveAMD64Rel32(pos, l.offset-pos)
+	} else {
+		l.patchPos = append(l.patchPos, pos)
+	}
+}
+
 // AMD64_SUB_RR emits: SUB r64, r64  (29 /r) — dst -= src.
 // Encoding: REX.W + 29 /r  where ModRM.reg=src, ModRM.r/m=dst (mod=11)
 func (a *Assembler) AMD64_SUB_RR(dst, src int) {
@@ -565,6 +656,59 @@ func (a *Assembler) AMD64_DIVSD(dst, src int) {
 	a.emitByte(modRM(3, regLo(dst), regLo(src)))
 }
 
+// AMD64_COMISD emits: COMISD xmm1, xmm2  (66 0F 2F /r) — compare scalar double, set flags.
+// Sets ZF, PF, CF: ZF=1,PF=0,CF=0 if equal; ZF=0,PF=0,CF=1 if below;
+// ZF=0,PF=0,CF=0 if above; ZF=1,PF=1,CF=1 if unordered (NaN).
+func (a *Assembler) AMD64_COMISD(xmm1, xmm2 int) {
+	a.emitByte(0x66)
+	prefix := rex(false, regHi(xmm1), false, regHi(xmm2))
+	if prefix != 0 {
+		a.emitByte(prefix)
+	}
+	a.emitByte(0x0F)
+	a.emitByte(0x2F)
+	a.emitByte(modRM(3, regLo(xmm1), regLo(xmm2)))
+}
+
+// AMD64_CVTTSD2SI emits: CVTTSD2SI r32, xmm  (F2 0F 2C /r) — truncate float64 → int32.
+// Encoding: F2 + [REX.W] + 0F 2C /r  — REX.W for 64-bit dest; omit for 32-bit.
+func (a *Assembler) AMD64_CVTTSD2SI(dstGP, srcXMM int) {
+	a.emitByte(0xF2)
+	prefix := rex(true, regHi(srcXMM), false, regHi(dstGP))
+	if prefix != 0 {
+		a.emitByte(prefix)
+	}
+	a.emitByte(0x0F)
+	a.emitByte(0x2C)
+	a.emitByte(modRM(3, regLo(srcXMM), regLo(dstGP)))
+}
+
+// AMD64_CVTSI2SD emits: CVTSI2SD xmm, r32  (F2 0F 2A /r) — convert int32 → float64.
+// Encoding: F2 + [REX.W] + 0F 2A /r
+func (a *Assembler) AMD64_CVTSI2SD(dstXMM, srcGP int) {
+	a.emitByte(0xF2)
+	prefix := rex(true, regHi(dstXMM), false, regHi(srcGP))
+	if prefix != 0 {
+		a.emitByte(prefix)
+	}
+	a.emitByte(0x0F)
+	a.emitByte(0x2A)
+	a.emitByte(modRM(3, regLo(dstXMM), regLo(srcGP)))
+}
+
+// AMD64_MOVD_XR emits: MOVD xmm, r32  (66 0F 7E /r) — move r32 to xmm (low 32 bits).
+// Used for moving int32 into xmm before CVTSI2SD alternative.
+func (a *Assembler) AMD64_MOVD_XR(dstXMM, srcGP int) {
+	a.emitByte(0x66)
+	prefix := rex(false, regHi(dstXMM), false, regHi(srcGP))
+	if prefix != 0 {
+		a.emitByte(prefix)
+	}
+	a.emitByte(0x0F)
+	a.emitByte(0x6E)
+	a.emitByte(modRM(3, regLo(dstXMM), regLo(srcGP)))
+}
+
 // ---- Stack alignment ----------------------------------------------------
 
 // AMD64_SUB_RI emits: SUB r64, imm32  (REX.W + 81 /5 id) — r64 -= imm32.
@@ -645,6 +789,24 @@ func (a *Assembler) AMD64_NOT_R(reg int) {
 	}
 	a.emitByte(0xF7)
 	a.emitByte(modRM(3, 2, regLo(reg)))
+}
+
+// AMD64_CQO emits: CQO  (REX.W + 99) — sign-extend RAX into RDX:RAX.
+// Used before IDIV for signed division.
+func (a *Assembler) AMD64_CQO() {
+	a.emitByte(0x48) // REX.W
+	a.emitByte(0x99)
+}
+
+// AMD64_IDIV_RR emits: IDIV r64  (REX.W + F7 /7) — signed divide: RDX:RAX / src.
+// Quotient → RAX, remainder → RDX.
+func (a *Assembler) AMD64_IDIV_RR(src int) {
+	prefix := rex(true, false, false, regHi(src))
+	if prefix != 0 {
+		a.emitByte(prefix)
+	}
+	a.emitByte(0xF7)
+	a.emitByte(modRM(3, 7, regLo(src)))
 }
 
 // AMD64_NEG_R emits: NEG r64  (F7 /3) — two's complement negation of register.
