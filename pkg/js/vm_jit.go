@@ -222,6 +222,11 @@ func GoDeoptimize(desc unsafe.Pointer) {
 			frame.Func.HasJITTier = false
 			frame.Func.DeoptCount = 0
 			frame.Func.CompilingJIT = false
+			// Reset IC vector so the function collects fresh type feedback
+			// during reinterpretation before recompiling.
+			if frame.Func.ICVector != nil {
+				frame.Func.ICVector.Reset()
+			}
 		}
 	}
 }
