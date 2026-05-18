@@ -6,7 +6,6 @@
 package js
 
 import (
-	"fmt"
 	"strings"
 )
 
@@ -921,7 +920,7 @@ func (c *Compiler) compileForOfStatement(stmt *ForOfStatement) {
 				// Nested destructuring in for-of: load nested source from elemReg.
 				c.bf.Emit(OpLdar, uint8(elemReg), 0, 0)
 				if left.ArrayMode {
-					idxStr := c.stringConstant(fmt.Sprintf("%d", idx))
+					idxStr := c.stringConstant(intKey(idx))
 					c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0)
 					slot := c.allocFeedbackSlot()
 					c.bf.Emit(OpLdaKeyedProperty, uint8(elemReg), uint8(slot), 0)
@@ -941,7 +940,7 @@ func (c *Compiler) compileForOfStatement(stmt *ForOfStatement) {
 			}
 			if left.ArrayMode {
 				// Array destructuring: element[idx] → key
-				idxStr := c.stringConstant(fmt.Sprintf("%d", idx))
+				idxStr := c.stringConstant(intKey(idx))
 				c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0) // key → acc
 				keyReg := c.allocReg()
 				c.bf.Emit(OpStar, uint8(keyReg), 0, 0)       // save key
@@ -2188,7 +2187,7 @@ func (c *Compiler) compileArrayExpression(expr *ArrayExpression) {
 			// Load array object into acc.
 			c.bf.Emit(OpLdar, uint8(arrReg), 0, 0)
 			// Set key in acc to the index string.
-			keyIdx := c.stringConstant(fmt.Sprintf("%d", elemIndex))
+			keyIdx := c.stringConstant(intKey(elemIndex))
 			c.bf.Emit(OpLdaConstant, uint8(keyIdx), 0, 0)
 			c.bf.Emit(OpStaKeyedProperty, uint8(arrReg), uint8(valReg), 0)
 			elemIndex++
@@ -2331,7 +2330,7 @@ func (c *Compiler) compileDestructuringAssignment(da *DestructuringAssignment) {
 			// Access the nested source property.
 			if da.ArrayMode {
 				// Array: access by numeric index
-				idxStr := c.stringConstant(fmt.Sprintf("%d", idx))
+				idxStr := c.stringConstant(intKey(idx))
 				c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0)
 				slot := c.allocFeedbackSlot()
 				c.bf.Emit(OpLdaKeyedProperty, uint8(objReg), uint8(slot), 0)
@@ -2363,7 +2362,7 @@ func (c *Compiler) compileDestructuringAssignment(da *DestructuringAssignment) {
 		// Access property: for object mode use named property, for array mode use index.
 		if da.ArrayMode {
 			// Array destructuring: access by numeric index.
-			idxStr := c.stringConstant(fmt.Sprintf("%d", idx))
+			idxStr := c.stringConstant(intKey(idx))
 			c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0)
 			slot := c.allocFeedbackSlot()
 			c.bf.Emit(OpLdaKeyedProperty, uint8(objReg), uint8(slot), 0)
@@ -2424,7 +2423,7 @@ func (c *Compiler) compileDestructuringAssignment(da *DestructuringAssignment) {
 			c.bf.Emit(OpStar, uint8(calleeReg), 0, 0)
 
 			// Arg: restIdx as number
-			restIdxConst := c.stringConstant(fmt.Sprintf("%d", restIdx))
+			restIdxConst := c.stringConstant(intKey(restIdx))
 			c.bf.Emit(OpLdaConstant, uint8(restIdxConst), 0, 0)
 			c.bf.Emit(OpStar, uint8(calleeReg)+1, 0, 0) // arg0 at callee+1
 
@@ -2534,7 +2533,7 @@ func (c *Compiler) compileDestructuredParam(da *DestructuringAssignment, sourceR
 			// Load source and access nested property.
 			c.bf.Emit(OpLdar, uint8(sourceReg), 0, 0)
 			if da.ArrayMode {
-				idxStr := c.stringConstant(fmt.Sprintf("%d", idx))
+				idxStr := c.stringConstant(intKey(idx))
 				c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0)
 				slot := c.allocFeedbackSlot()
 				c.bf.Emit(OpLdaKeyedProperty, uint8(sourceReg), uint8(slot), 0)
@@ -2556,7 +2555,7 @@ func (c *Compiler) compileDestructuredParam(da *DestructuringAssignment, sourceR
 		// Leaf element.
 		c.bf.Emit(OpLdar, uint8(sourceReg), 0, 0)
 		if da.ArrayMode {
-			idxStr := c.stringConstant(fmt.Sprintf("%d", idx))
+			idxStr := c.stringConstant(intKey(idx))
 			c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0)
 			slot := c.allocFeedbackSlot()
 			c.bf.Emit(OpLdaKeyedProperty, uint8(sourceReg), uint8(slot), 0)
@@ -2602,7 +2601,7 @@ func (c *Compiler) compileDestructuredParam(da *DestructuringAssignment, sourceR
 		calleeReg := c.allocReg()
 		c.bf.Emit(OpStar, uint8(calleeReg), 0, 0)
 
-		restIdxConst := c.stringConstant(fmt.Sprintf("%d", restIdx))
+		restIdxConst := c.stringConstant(intKey(restIdx))
 		c.bf.Emit(OpLdaConstant, uint8(restIdxConst), 0, 0)
 		c.bf.Emit(OpStar, uint8(calleeReg)+1, 0, 0)
 
@@ -2826,7 +2825,7 @@ func (c *Compiler) compileTaggedTemplate(tt *TaggedTemplateExpression) {
 	// Populate array with quasi strings (use temp registers).
 	for i, q := range tt.Quasis {
 		c.bf.Emit(OpLdar, uint8(quasiArgReg), 0, 0)
-		idxStr := c.stringConstant(fmt.Sprintf("%d", i))
+		idxStr := c.stringConstant(intKey(i))
 		c.bf.Emit(OpLdaConstant, uint8(idxStr), 0, 0)
 		keyReg := c.allocReg()
 		c.bf.Emit(OpStar, uint8(keyReg), 0, 0)

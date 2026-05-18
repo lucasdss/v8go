@@ -12,8 +12,8 @@
 package jit
 
 import (
-	"fmt"
 	"math"
+	"strconv"
 	"strings"
 
 	"github.com/lucasdss/v8go/pkg/js"
@@ -480,7 +480,7 @@ func sparkplugOpToString(frame *js.VMFrame) {
 // sparkplugOpLdaCaptured loads a captured variable from the closure environment.
 func sparkplugOpLdaCaptured(frame *js.VMFrame, regIdx int) {
 	if frame.ClosureEnv != nil {
-		frame.Acc = frame.ClosureEnv.Get(fmt.Sprintf("%d", regIdx))
+		frame.Acc = frame.ClosureEnv.Get(strconv.Itoa(regIdx))
 	} else {
 		frame.Acc = js.Undefined
 	}
@@ -1121,7 +1121,7 @@ func sparkplugOpArrayGetIndex(frame *js.VMFrame, arrReg int, idxReg int) {
 		idx := frame.Regs[idxReg]
 		if arr.Tag == js.TagObject && arr.ObjVal != nil && idx.Tag == js.TagNumber {
 			intIdx := int(idx.NumVal)
-			propName := fmt.Sprintf("%d", intIdx)
+			propName := strconv.Itoa(intIdx)
 			frame.Acc = arr.ObjVal.Get(propName)
 			return
 		}
@@ -1136,7 +1136,7 @@ func sparkplugOpArraySetIndex(frame *js.VMFrame, arrReg int, idxReg int, valReg 
 		idx := frame.Regs[idxReg]
 		if arr.Tag == js.TagObject && arr.ObjVal != nil && idx.Tag == js.TagNumber {
 			intIdx := int(idx.NumVal)
-			propName := fmt.Sprintf("%d", intIdx)
+			propName := strconv.Itoa(intIdx)
 			arr.ObjVal.Set(propName, frame.Regs[valReg])
 		}
 	}
@@ -1211,7 +1211,7 @@ func sparkplugOpLessEqNumber(frame *js.VMFrame, reg int) {
 // sparkplugOpToStringNumber converts a TagNumber acc to a string.
 func sparkplugOpToStringNumber(frame *js.VMFrame) {
 	if frame.Acc.Tag == js.TagNumber {
-		frame.Acc = js.NewString(fmt.Sprintf("%v", frame.Acc.NumVal))
+		frame.Acc = js.NewString(strconv.FormatFloat(frame.Acc.NumVal, 'g', -1, 64))
 	}
 }
 

@@ -139,7 +139,7 @@ func NewSymbol(description string) JSValue {
 	return JSValue{
 		Tag:    TagSymbol,
 		StrVal: description,
-		SymVal: fmt.Sprintf("Symbol(%d)", c),
+		SymVal: "Symbol(" + strconv.FormatInt(c, 10) + ")",
 	}
 }
 
