@@ -148,21 +148,42 @@ func (vm *VM) freeObj(obj *JSObject) {
 	}
 }
 
+// CallStackFrame represents a single frame in the JavaScript call stack.
+type CallStackFrame struct {
+	Name string
+	File string
+	Line int
+	Col  int
+}
+
 // pushCallName resolves the callee's display name and pushes it onto vm.callStack
 // for Error.stack trace construction. Called from opCallFast/opCall/opCallSpread
-// before calling callMethod.
-func (vm *VM) pushCallName(callee JSValue) {
+// before calling callMethod. frame is the current VM frame (for source position lookup).
+func (vm *VM) pushCallName(callee JSValue, frame *VMFrame) {
+	csFrame := CallStackFrame{}
 	if callee.IsObject() && callee.ObjVal != nil {
 		if callee.ObjVal.Bytecode != nil && callee.ObjVal.Bytecode.Name != "" {
-			vm.callStack = append(vm.callStack, callee.ObjVal.Bytecode.Name)
-			return
-		}
-		if callee.ObjVal.ConstructorName != "" && callee.ObjVal.ConstructorName != "Function" {
-			vm.callStack = append(vm.callStack, callee.ObjVal.ConstructorName)
-			return
+			csFrame.Name = callee.ObjVal.Bytecode.Name
+			csFrame.File = callee.ObjVal.Bytecode.SourceFile
+		} else if callee.ObjVal.ConstructorName != "" && callee.ObjVal.ConstructorName != "Function" {
+			csFrame.Name = callee.ObjVal.ConstructorName
 		}
 	}
-	vm.callStack = append(vm.callStack, "<anonymous>")
+	if csFrame.Name == "" {
+		csFrame.Name = "<anonymous>"
+	}
+	// Look up source position from current VM frame's bytecode PC, if available.
+	if frame != nil && frame.Func != nil {
+		if len(frame.Func.SourcePositions) > frame.PC {
+			pos := frame.Func.SourcePositions[frame.PC]
+			csFrame.Line = pos.Line
+			csFrame.Col = pos.Col
+		}
+		if csFrame.File == "" {
+			csFrame.File = frame.Func.SourceFile
+		}
+	}
+	vm.callStack = append(vm.callStack, csFrame)
 }
 
 // popCallName removes the top entry from vm.callStack.
@@ -309,10 +330,10 @@ type VM struct {
 	// decremented on return.
 	callDepth int
 
-	// callStack tracks function names for Error.stack traces.
+	// callStack tracks stack frames for Error.stack traces.
 	// Pushed in opCallFast/opCall/opCallSpread before callMethod;
 	// popped in opReturn (bytecode) or after callMethod returns (built-ins).
-	callStack []string
+	callStack []CallStackFrame
 
 	// stepCount tracks the total bytecode instructions executed in the current
 	// top-level Run/Execute. Resets at the start of each top-level call.
@@ -1762,7 +1783,7 @@ func (vm *VM) opCallFast(frame *VMFrame, calleeReg, thisReg, argCount int) {
 	}
 	if calleeReg < len(frame.Regs) {
 		callee := frame.Regs[calleeReg]
-		vm.pushCallName(callee)
+		vm.pushCallName(callee, frame)
 		frame.Acc = vm.callMethod(callee, thisObj, args)
 		// Built-in functions (CallFunc) return directly; bytecode functions
 		// go through executeFrame→opReturn which handles the pop.
@@ -1815,7 +1836,7 @@ func opCall(vm *VM, frame *VMFrame, instr Instruction) {
 	}
 	if calleeReg < len(frame.Regs) {
 		callee := frame.Regs[calleeReg]
-		vm.pushCallName(callee)
+		vm.pushCallName(callee, frame)
 		frame.Acc = vm.callMethod(callee, thisObj, args)
 		// Built-in functions (CallFunc) return directly; bytecode functions
 		// go through executeFrame→opReturn which handles the pop.
@@ -1869,7 +1890,7 @@ func opCallSpread(vm *VM, frame *VMFrame, instr Instruction) {
 	}
 	if calleeReg < len(frame.Regs) {
 		callee := frame.Regs[calleeReg]
-		vm.pushCallName(callee)
+		vm.pushCallName(callee, frame)
 		frame.Acc = vm.callMethod(callee, thisObj, args)
 		// Built-in functions (CallFunc) return directly; bytecode functions
 		// go through executeFrame→opReturn which handles the pop.

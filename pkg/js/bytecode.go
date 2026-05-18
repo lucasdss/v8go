@@ -526,6 +526,14 @@ type BytecodeFunction struct {
 	IsDerivedConstructor bool        // true for derived class constructors (this uninitialized until super()) — 1 byte
 	HasRestParam     bool            // true if function has a rest parameter — 1 byte
 	RestParamReg     int             // register index for the rest array (valid only if HasRestParam) — 8 bytes
+	SourceFile       string          // source file name for Error.stack display
+	SourcePositions  []SourcePos     // per-instruction source position (parallel to Instructions)
+}
+
+// SourcePos represents a source code position (line, column).
+type SourcePos struct {
+	Line int
+	Col  int
 }
 
 // NewBytecodeFunction creates an empty compiled function template.
@@ -554,6 +562,24 @@ func (bf *BytecodeFunction) AddConstant(val JSValue) int {
 // Emit appends an instruction.
 func (bf *BytecodeFunction) Emit(op Opcode, a, b, c uint8) {
 	bf.Instructions = append(bf.Instructions, Instruction{Op: op, OperandA: a, OperandB: b, OperandC: c})
+	// Append a zero source position if we're tracking positions.
+	// Callers that have position info should use EmitWithPos instead.
+	if bf.SourcePositions != nil {
+		bf.SourcePositions = append(bf.SourcePositions, SourcePos{})
+	}
+}
+
+// EmitWithPos emits an instruction with explicit source position.
+func (bf *BytecodeFunction) EmitWithPos(op Opcode, a, b, c uint8, line, col int) {
+	bf.Instructions = append(bf.Instructions, Instruction{Op: op, OperandA: a, OperandB: b, OperandC: c})
+	if bf.SourcePositions == nil {
+		bf.SourcePositions = make([]SourcePos, 0, len(bf.Instructions)+64)
+		// Backfill positions for previously emitted instructions.
+		for i := 0; i < len(bf.Instructions)-1; i++ {
+			bf.SourcePositions = append(bf.SourcePositions, SourcePos{})
+		}
+	}
+	bf.SourcePositions = append(bf.SourcePositions, SourcePos{Line: line, Col: col})
 }
 
 // BuildConstantNames pre-computes string versions of all constants

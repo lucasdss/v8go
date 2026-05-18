@@ -788,8 +788,18 @@ func (vm *VM) registerError() {
 		sb.WriteString("Error: ")
 		sb.WriteString(msg)
 		for i := len(vm.callStack) - 1; i >= 0; i-- {
+			frame := vm.callStack[i]
 			sb.WriteString("\n    at ")
-			sb.WriteString(vm.callStack[i])
+			sb.WriteString(frame.Name)
+			if frame.File != "" {
+				sb.WriteString(" (")
+				sb.WriteString(frame.File)
+				sb.WriteString(":")
+				sb.WriteString(strconv.Itoa(frame.Line))
+				sb.WriteString(":")
+				sb.WriteString(strconv.Itoa(frame.Col))
+				sb.WriteString(")")
+			}
 		}
 		err.Set("stack", NewString(sb.String()))
 		return NewObject(err)
@@ -827,11 +837,26 @@ func (vm *VM) registerErrorSubtype(name string, errorProto *JSObject) {
 		err.Prototype = subProto // inherit from subProto → errorProto
 		err.Set("name", NewString(name))
 		err.Set("message", NewString(msg))
-		stackMsg := name
-		if msg != "" {
-			stackMsg += ": " + msg
+		// Build stack trace from vm.callStack (reversed — most recent call first).
+		var sb strings.Builder
+		sb.WriteString(name)
+		sb.WriteString(": ")
+		sb.WriteString(msg)
+		for i := len(vm.callStack) - 1; i >= 0; i-- {
+			frame := vm.callStack[i]
+			sb.WriteString("\n    at ")
+			sb.WriteString(frame.Name)
+			if frame.File != "" {
+				sb.WriteString(" (")
+				sb.WriteString(frame.File)
+				sb.WriteString(":")
+				sb.WriteString(strconv.Itoa(frame.Line))
+				sb.WriteString(":")
+				sb.WriteString(strconv.Itoa(frame.Col))
+				sb.WriteString(")")
+			}
 		}
-		err.Set("stack", NewString(stackMsg+"\n    at <anonymous>:1:1"))
+		err.Set("stack", NewString(sb.String()))
 		return NewObject(err)
 	}
 	vm.globals[name] = NewObject(ctor)

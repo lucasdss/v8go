@@ -23,6 +23,21 @@ type Compiler struct {
 	scopes        []*Scope       // scope stack (innermost at end)
 	nextFeedback int            // next available feedback slot (V8-style per-site)
 	isTopLevel   bool           // true when compiling top-level (global) script, false for function bodies
+	currentLine  int            // current source line (updated during compilation)
+	currentCol   int            // current source column (updated during compilation)
+}
+
+// recordSourcePos records the current source position for the next emitted instruction.
+func (c *Compiler) recordSourcePos() {
+	if c.currentLine > 0 || c.currentCol > 0 {
+		c.bf.SourcePositions = append(c.bf.SourcePositions, SourcePos{Line: c.currentLine, Col: c.currentCol})
+	}
+}
+
+// emitInstruction emits an instruction and records the current source position.
+func (c *Compiler) emitInstruction(op Opcode, a, b, cReg uint8) {
+	c.bf.Emit(op, a, b, cReg)
+	c.recordSourcePos()
 }
 
 // ensureGlobalSlot returns the slot index for a global variable name.
@@ -85,6 +100,11 @@ func (s *Scope) functionScope() *Scope {
 
 // Compile produces a BytecodeFunction from a Program AST.
 func Compile(prog *Program) *BytecodeFunction {
+	return CompileWithSource(prog, "<input>")
+}
+
+// CompileWithSource produces a BytecodeFunction from a Program AST with a known source file name.
+func CompileWithSource(prog *Program, sourceFile string) *BytecodeFunction {
 	globalScope := newScope(nil)
 	c := &Compiler{
 		bf:              NewBytecodeFunction("<main>"),
@@ -137,6 +157,7 @@ func Compile(prog *Program) *BytecodeFunction {
 	// Pre-compute string names to avoid allocs during global var lookup.
 	c.bf.BuildConstantNames()
 
+	c.bf.SourceFile = sourceFile
 	return c.bf
 }
 

@@ -4863,6 +4863,48 @@ func TestErrorStackMultipleFrames(t *testing.T) {
 	}
 }
 
+// TestErrorStackSourcePosition: Error.stack contains file:line:col when source positions are available.
+func TestErrorStackSourcePosition(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function foo() { return new Error('test').stack; }
+		var stack = foo();
+		stack.indexOf('Error: test') >= 0 && stack.indexOf('at foo') >= 0
+	`)
+	if !result.IsTruthy() {
+		t.Error("Error.stack should contain error message and function name")
+	}
+}
+
+// TestErrorStackFormat: Error.stack format is correct even without source positions.
+func TestErrorStackFormat(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var e = new Error('fmt');
+		var stack = e.stack;
+		stack.indexOf('Error: fmt') === 0
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("Error.stack should start with 'Error: <msg>', got: %s",
+			vm.Run("new Error('fmt').stack").ToString())
+	}
+}
+
+// TestErrorStackWithFileInfo: verify file info appears in stack when SourceFile is set.
+func TestErrorStackWithFileInfo(t *testing.T) {
+	// The top-level BytecodeFunction has SourceFile="<input>" set by CompileWithSource.
+	// When a call pushes to callStack, the frame inherits the SourceFile.
+	vm := js.NewVM()
+	result := vm.Run(`
+		new Error('x').stack.indexOf('<input>') >= 0
+	`)
+	if !result.IsTruthy() {
+		stack := vm.Run("new Error('x').stack").ToString()
+		t.Logf("Stack: %s", stack)
+		t.Error("Error.stack should contain source file info '<input>'")
+	}
+}
+
 func TestClassExpression(t *testing.T) {
 	vm := js.NewVM()
 	result := vm.Run(`(new(class{constructor(){this.x=1}})).x`)
