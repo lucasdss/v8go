@@ -959,6 +959,58 @@ func TestInstanceofOperator(t *testing.T) {
 	}
 }
 
+func TestInstanceofCrossRealm(t *testing.T) {
+	// Two VMs: each VM has its own prototype objects.
+	// instanceof should still work correctly within each VM.
+	vm1 := js.NewVM()
+	vm2 := js.NewVM()
+
+	// Within a single VM, instanceof works as expected
+	if !vm1.Run(`[] instanceof Array`).IsTruthy() {
+		t.Error("vm1: [] instanceof Array should be true")
+	}
+	if !vm2.Run(`[] instanceof Array`).IsTruthy() {
+		t.Error("vm2: [] instanceof Array should be true")
+	}
+	if !vm1.Run(`({}) instanceof Object`).IsTruthy() {
+		t.Error("vm1: ({}) instanceof Object should be true")
+	}
+	if !vm2.Run(`({}) instanceof Object`).IsTruthy() {
+		t.Error("vm2: ({}) instanceof Object should be true")
+	}
+}
+
+func TestInstanceofNegative(t *testing.T) {
+	vm := js.NewVM()
+	// Negative instanceof checks
+	if vm.Run(`[] instanceof Object`).IsTruthy() {
+		// Arrays are instances of Object (via prototype chain)
+		// This is expected — skip the false assertion
+	} else {
+		t.Error("[] instanceof Object should be true")
+	}
+	if vm.Run(`({}) instanceof Array`).IsTruthy() {
+		t.Error("({}) instanceof Array should be false")
+	}
+}
+
+func TestInstanceofErrorTypes(t *testing.T) {
+	vm := js.NewVM()
+	// Error subtype instanceof checks
+	if !vm.Run(`new TypeError('x') instanceof Error`).IsTruthy() {
+		t.Error("TypeError should be instanceof Error")
+	}
+	if !vm.Run(`new TypeError('x') instanceof TypeError`).IsTruthy() {
+		t.Error("TypeError should be instanceof TypeError")
+	}
+	if vm.Run(`new Error('x') instanceof TypeError`).IsTruthy() {
+		t.Error("Error should NOT be instanceof TypeError")
+	}
+	if !vm.Run(`new SyntaxError('x') instanceof Error`).IsTruthy() {
+		t.Error("SyntaxError should be instanceof Error")
+	}
+}
+
 // --- ToString and ToBoolean via runtime ---
 
 func TestToStringCoercion(t *testing.T) {

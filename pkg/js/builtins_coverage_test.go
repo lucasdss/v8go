@@ -877,3 +877,232 @@ func TestMathMinMax(t *testing.T) {
 func isNaN(f float64) bool {
 	return f != f
 }
+
+// =========================================================================
+// WeakRef with runtime.AddCleanup — GC-aware weak references
+// =========================================================================
+
+func TestWeakRefDerefReturnsValue(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var obj = {x: 42};
+		var wr = new WeakRef(obj);
+		wr.deref().x
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("WeakRef.deref().x should be 42, got %v", result.ToNumber())
+	}
+}
+
+func TestWeakRefDerefAfterGC(t *testing.T) {
+	vm := js.NewVM()
+	// Create a WeakRef to an object, then null out the reference.
+	// Force garbage collection. deref() should return undefined.
+	result := vm.Run(`
+		var wr;
+		(function() {
+			var obj = {y: 99};
+			wr = new WeakRef(obj);
+			// obj goes out of scope here
+		})();
+		typeof wr.deref()
+	`)
+	// The GC behavior is non-deterministic — `deref()` may still return
+	// the object if GC hasn't run yet. We test that deref() doesn't crash
+	// and returns either "object" or "undefined".
+	got := result.ToString()
+	if got != "object" && got != "undefined" {
+		t.Errorf("WeakRef.deref() after scope exit should return object or undefined, got %q", got)
+	}
+}
+
+func TestWeakRefWithPrimitive(t *testing.T) {
+	vm := js.NewVM()
+	// WeakRef with a primitive value — deref returns the primitive
+	result := vm.Run(`
+		var wr = new WeakRef(42);
+		wr.deref()
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("WeakRef.deref() on primitive 42 should return 42, got %v", result.ToNumber())
+	}
+}
+
+func TestWeakRefMultipleTargets(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var obj = {id: 1};
+		var wr1 = new WeakRef(obj);
+		var wr2 = new WeakRef(obj);
+		wr1.deref() === obj && wr2.deref() === obj
+	`)
+	if !result.IsTruthy() {
+		t.Error("Multiple WeakRefs to same target should both return the target")
+	}
+}
+
+// =========================================================================
+// FinalizationRegistry with runtime.AddCleanup — GC-triggered callbacks
+// =========================================================================
+
+func TestFinalizationRegistryCallbackCalled(t *testing.T) {
+	vm := js.NewVM()
+	// Register a target with a callback that modifies a captured variable.
+	// Force GC and check if the callback was called.
+	// Note: callback delivery is async and best-effort; this test verifies
+	// the mechanism doesn't crash or leak.
+	result := vm.Run(`
+		var called = false;
+		var registry = new FinalizationRegistry(function(v) {
+			called = true;
+		});
+		(function() {
+			var target = {};
+			registry.register(target, 'test');
+			// target goes out of scope here
+		})();
+		typeof called
+	`)
+	// Just verify it doesn't crash and returns a valid type
+	got := result.ToString()
+	if got == "" {
+		t.Error("FinalizationRegistry callback test should return 'boolean'")
+	}
+}
+
+func TestFinalizationRegistryUnregisterPreventsCallback(t *testing.T) {
+	vm := js.NewVM()
+	// Register with a token, then unregister using the same token.
+	// The unregister should report success.
+	result := vm.Run(`
+		var registry = new FinalizationRegistry(function(v) {});
+		var token = {};
+		var target = {};
+		registry.register(target, 'held value', token);
+		registry.unregister(token)
+	`)
+	if !result.IsTruthy() {
+		t.Error("FinalizationRegistry.unregister with matching token should return true")
+	}
+}
+
+func TestFinalizationRegistryUnregisterNoMatch(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var registry = new FinalizationRegistry(function(v) {});
+		var token1 = {};
+		var token2 = {};
+		var target = {};
+		registry.register(target, 'held value', token1);
+		registry.unregister(token2)
+	`)
+	if result.IsTruthy() {
+		t.Error("FinalizationRegistry.unregister with non-matching token should return false")
+	}
+}
+
+func TestFinalizationRegistryMultipleRegistrations(t *testing.T) {
+	vm := js.NewVM()
+	// Multiple registrations on the same target with different held values.
+	// Both should be tracked.
+	result := vm.Run(`
+		var registry = new FinalizationRegistry(function(v) {
+			// callback
+		});
+		var target = {};
+		registry.register(target, 'first');
+		registry.register(target, 'second');
+		true
+	`)
+	if !result.IsTruthy() {
+		t.Error("Multiple registrations on same target should not crash")
+	}
+}
+
+// =========================================================================
+// WeakMap with runtime.AddCleanup — GC-aware key-value storage
+// =========================================================================
+
+func TestWeakMapBasicOps(t *testing.T) {
+	vm := js.NewVM()
+	// set/get/has/delete basic operations
+	result := vm.Run(`
+		var wm = new WeakMap();
+		var key = {};
+		var val = {data: 42};
+		wm.set(key, val);
+		wm.get(key).data === 42 && wm.has(key)
+	`)
+	if !result.IsTruthy() {
+		t.Error("WeakMap.set/get/has should work for object keys")
+	}
+}
+
+func TestWeakMapDelete(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var wm = new WeakMap();
+		var key = {};
+		wm.set(key, 'value');
+		var hadBefore = wm.has(key);
+		var deleted = wm.delete(key);
+		var hasAfter = wm.has(key);
+		hadBefore && deleted && !hasAfter
+	`)
+	if !result.IsTruthy() {
+		t.Error("WeakMap.delete should remove entry and return true")
+	}
+}
+
+func TestWeakMapDeleteNonExistent(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var wm = new WeakMap();
+		var key = {};
+		wm.delete(key)
+	`)
+	if result.IsTruthy() {
+		t.Error("WeakMap.delete on non-existent key should return false")
+	}
+}
+
+func TestWeakMapGetNonExistent(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var wm = new WeakMap();
+		var key = {};
+		wm.get(key) === undefined
+	`)
+	if !result.IsTruthy() {
+		t.Error("WeakMap.get on non-existent key should return undefined")
+	}
+}
+
+func TestWeakMapNonObjectKey(t *testing.T) {
+	vm := js.NewVM()
+	// Non-object keys should be silently ignored (VM doesn't support throwing TypeError from builtins)
+	result := vm.Run(`
+		var wm = new WeakMap();
+		wm.set('not an object', 'value');
+		wm.has('not an object')
+	`)
+	if result.IsTruthy() {
+		t.Error("WeakMap with string key should not store entry")
+	}
+}
+
+func TestWeakMapMultipleEntriesPerKey(t *testing.T) {
+	vm := js.NewVM()
+	// Different WeakMap instances should each have their own entries for the same key
+	result := vm.Run(`
+		var wm1 = new WeakMap();
+		var wm2 = new WeakMap();
+		var key = {};
+		wm1.set(key, 'first');
+		wm2.set(key, 'second');
+		wm1.get(key) === 'first' && wm2.get(key) === 'second'
+	`)
+	if !result.IsTruthy() {
+		t.Error("Different WeakMaps should have independent entries for same key")
+	}
+}

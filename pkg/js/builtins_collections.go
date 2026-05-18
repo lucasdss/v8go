@@ -758,13 +758,20 @@ func createSetIterator(setObj *JSObject, kind string) *JSObject {
 // registerWeakMap registers the WeakMap constructor and prototype.
 // WeakMap keys must be objects; primitives throw TypeError.
 // Methods: get, set, has, delete. No size, iteration, or clear.
+// Uses runtime.AddCleanup for GC-aware weak key semantics.
 func (vm *VM) registerWeakMap() {
+	// Unique instance counter for weak map instances.
+	var weakMapInstanceSeq uint64
+
 	weakMapCtor := NewJSObject()
 	weakMapCtor.ConstructorName = "Function"
 	weakMapCtor.CallFunc = func(this *JSObject, args []JSValue) JSValue {
+		weakMapInstanceSeq++
+		instanceID := fmt.Sprintf("__wm_%d__", weakMapInstanceSeq)
+
 		wm := NewJSObject()
 		wm.ConstructorName = "WeakMap"
-		wm.Set("__weakmap_data__", NewObject(NewJSObject()))
+		wm.Set("__weakmap_instance__", NewString(instanceID))
 		wm.Prototype = weakMapProto()
 		return NewObject(wm)
 	}
@@ -781,12 +788,9 @@ func weakMapProto() *JSObject {
 			return NewObject(this)
 		}
 		// Note: spec requires TypeError for non-object keys.
-		// Current VM doesn't support throwing from builtins; keys are stringified like Map.
-		key := keyString(args[0])
-		data := this.Get("__weakmap_data__")
-		if data.IsObject() && data.ObjVal != nil {
-			data.ObjVal.Set(key, args[1])
-		}
+		// Current VM doesn't support throwing from builtins; non-object keys silently fail.
+		instanceID := this.Get("__weakmap_instance__").ToString()
+		weakMapSet(instanceID, args[0], args[1])
 		return NewObject(this)
 	})))
 
@@ -794,40 +798,24 @@ func weakMapProto() *JSObject {
 		if len(args) == 0 {
 			return Undefined
 		}
-		key := keyString(args[0])
-		data := this.Get("__weakmap_data__")
-		if data.IsObject() && data.ObjVal != nil {
-			return data.ObjVal.Get(key)
-		}
-		return Undefined
+		instanceID := this.Get("__weakmap_instance__").ToString()
+		return weakMapGet(instanceID, args[0])
 	})))
 
 	proto.Set("has", NewObject(builtinFunc("WeakMap.has", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return False
 		}
-		key := keyString(args[0])
-		data := this.Get("__weakmap_data__")
-		if data.IsObject() && data.ObjVal != nil {
-			return NewBoolean(!data.ObjVal.Get(key).IsUndefined())
-		}
-		return False
+		instanceID := this.Get("__weakmap_instance__").ToString()
+		return NewBoolean(weakMapHas(instanceID, args[0]))
 	})))
 
 	proto.Set("delete", NewObject(builtinFunc("WeakMap.delete", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return False
 		}
-		key := keyString(args[0])
-		data := this.Get("__weakmap_data__")
-		had := false
-		if data.IsObject() && data.ObjVal != nil {
-			had = !data.ObjVal.Get(key).IsUndefined()
-			if had {
-				data.ObjVal.Delete(key)
-			}
-		}
-		return NewBoolean(had)
+		instanceID := this.Get("__weakmap_instance__").ToString()
+		return NewBoolean(weakMapDelete(instanceID, args[0]))
 	})))
 
 	return proto

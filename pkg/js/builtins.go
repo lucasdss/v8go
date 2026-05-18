@@ -12,9 +12,11 @@ import (
 	"io"
 	"math"
 	"math/big"
+	"runtime"
 	"strconv"
 	"strings"
 	"sync"
+	"unsafe"
 
 	browserNet "github.com/lucasdss/v8go/pkg/net"
 )
@@ -765,6 +767,7 @@ func (vm *VM) registerXHR() {
 func (vm *VM) registerError() {
 	// Error prototype for instanceof checks.
 	errorProto := NewJSObject()
+	errorProto.ConstructorName = "Error" // override "Object" default
 
 	// Error constructor.
 	errorCtor := NewJSObject()
@@ -808,6 +811,7 @@ func (vm *VM) registerErrorSubtype(name string, errorProto *JSObject) {
 	// This ensures TypeError.prototype !== Error.prototype while still
 	// satisfying new TypeError('x') instanceof Error.
 	subProto := NewJSObject()
+	subProto.ConstructorName = name // "TypeError", "SyntaxError", etc.
 	subProto.Prototype = errorProto
 	subProto.Set("name", NewString(name))
 
@@ -2102,11 +2106,26 @@ func (vm *VM) registerWeakRef() {
 	weakRefCtor.CallFunc = func(this *JSObject, args []JSValue) JSValue {
 		wr := NewJSObject()
 		wr.ConstructorName = "WeakRef"
+		var target JSValue
 		if len(args) > 0 {
-			wr.Set("__target__", args[0])
+			target = args[0]
+		} else {
+			target = Undefined
 		}
+		// Store target in the weak reference table (uses unsafe.Pointer
+		// for objects so Go GC can collect them). Primitive values are
+		// stored directly as they are value types, not heap objects.
+		id := storeWeakRef(target)
+		registerWeakRefCleanup(target, id)
+		// Store the weakRef ID on the object so deref() can look it up.
+		wr.Set("__weakref_id__", NewNumber(float64(id)))
 		wr.Set("deref", vm.createBuiltinFunction("WeakRef.deref", func(thisWR *JSObject, _ []JSValue) JSValue {
-			return thisWR.Get("__target__")
+			idVal := thisWR.Get("__weakref_id__")
+			if idVal.Tag != TagNumber {
+				return Undefined
+			}
+			id := uint64(idVal.NumVal)
+			return derefWeakRef(id)
 		}))
 		return NewObject(wr)
 	}
@@ -2124,12 +2143,57 @@ func (vm *VM) registerFinalizationRegistry() {
 		fr.ConstructorName = "FinalizationRegistry"
 		fr.Set("__cleanup_callback__", args[0])
 
-		fr.Set("register", vm.createBuiltinFunction("FinalizationRegistry.register", func(thisFR *JSObject, args []JSValue) JSValue {
+		fr.Set("register", vm.createBuiltinFunction("FinalizationRegistry.register", func(thisFR *JSObject, regArgs []JSValue) JSValue {
+			// register(target, heldValue [, unregisterToken])
+			if len(regArgs) < 2 {
+				return Undefined
+			}
+			target := regArgs[0]
+			heldValue := regArgs[1]
+			var token JSValue = Undefined
+			if len(regArgs) >= 3 {
+				token = regArgs[2]
+			}
+			callback := thisFR.Get("__cleanup_callback__")
+			entry := finalizationEntry{
+				callback:  callback,
+				heldValue: heldValue,
+				token:     token,
+			}
+			isNew := addFinalizationCleanup(target, []finalizationEntry{entry})
+			if isNew && target.IsObject() && target.ObjVal != nil {
+				key := uintptr(unsafe.Pointer(target.ObjVal))
+				runtime.AddCleanup(target.ObjVal, invokeCleanupCallbacks, key)
+			}
 			return Undefined
 		}))
 
-		fr.Set("unregister", vm.createBuiltinFunction("FinalizationRegistry.unregister", func(thisFR *JSObject, _ []JSValue) JSValue {
-			return True
+		fr.Set("unregister", vm.createBuiltinFunction("FinalizationRegistry.unregister", func(thisFR *JSObject, unregArgs []JSValue) JSValue {
+			if len(unregArgs) == 0 {
+				return False
+			}
+			token := unregArgs[0]
+			// Search all targets for matching token entries and remove them.
+			// Note: this is O(n) in registered entries, matching spec behavior.
+			finalizationMu.Lock()
+			removed := false
+			for key, entries := range finalizationTable {
+				newEntries := make([]finalizationEntry, 0, len(entries))
+				for _, e := range entries {
+					if sameJSValue(e.token, token) {
+						removed = true
+					} else {
+						newEntries = append(newEntries, e)
+					}
+				}
+				if len(newEntries) == 0 {
+					delete(finalizationTable, key)
+				} else {
+					finalizationTable[key] = newEntries
+				}
+			}
+			finalizationMu.Unlock()
+			return NewBoolean(removed)
 		}))
 
 		return NewObject(fr)
