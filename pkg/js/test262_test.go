@@ -7,7 +7,7 @@
 // 1. Locates test262 test files in a specified directory
 // 2. Parses YAML frontmatter for metadata (expected outcome, features, includes)
 // 3. Prepends Test262 harness files (assert.js, sta.js, propertyHelper.js, etc.)
-// 4. Executes each test in the GoV8 VM with proper error detection
+// 4. Executes each test in the V8Go VM with proper error detection
 // 5. Reports pass/fail/skip rates by category
 package js_test
 

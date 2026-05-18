@@ -76,7 +76,7 @@ type VMFrame struct {
 
 }
 
-// VM is the GoV8 virtual machine.
+// VM is the V8Go virtual machine.
 type VM struct {
 	mu sync.RWMutex // protects globals, registry, console, calltrack, events, nextICSlot
 
@@ -133,7 +133,7 @@ type VM struct {
 	jitErrors []error
 }
 
-// NewVM creates a new GoV8 virtual machine.
+// NewVM creates a new V8Go virtual machine.
 func NewVM() *VM {
 	vm := &VM{
 		RealmID:        atomic.AddUint64(&nextRealmID, 1),

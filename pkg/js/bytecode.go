@@ -4,7 +4,7 @@
 // a side-table for constants, and register-based addressing.
 package js
 
-// Opcode enumerates all bytecode instructions in the GoV8 VM.
+// Opcode enumerates all bytecode instructions in the V8Go VM.
 type Opcode uint8
 
 const (

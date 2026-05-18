@@ -340,7 +340,7 @@ func TestEngine_QuerySelectorIdClassAttr(t *testing.T) {
 	}
 }
 
-// ────────────────────── GoV8 engine bridge tests ──────────────────────
+// ────────────────────── V8Go engine bridge tests ──────────────────────
 
 func TestGov8Engine_QuerySelector(t *testing.T) {
 	d := dom.NewDocument()

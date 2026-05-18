@@ -1,4 +1,4 @@
-// Package jit implements TurboFan-style Tier 2 JIT compilation for the GoV8 VM.
+// Package jit implements TurboFan-style Tier 2 JIT compilation for the V8Go VM.
 // This file defines the Static Single Assignment (SSA) intermediate representation
 // used as the compilation IR between bytecode and native code generation.
 package jit

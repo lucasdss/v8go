@@ -1,4 +1,4 @@
-// gov8engine.go — GoV8 engine wrapper implementing the same interface as
+// gov8engine.go — V8Go engine wrapper implementing the same interface as
 // the QuickJS-based Engine, so the browser can swap between them seamlessly.
 package js
 
@@ -11,7 +11,7 @@ import (
 	"github.com/lucasdss/v8go/pkg/dom"
 )
 
-// Gov8Engine wraps the GoV8 custom VM with the same API as the QuickJS Engine,
+// Gov8Engine wraps the V8Go custom VM with the same API as the QuickJS Engine,
 // enabling the browser to use our custom JavaScript engine.
 type Gov8Engine struct {
 	mu                sync.Mutex
@@ -32,7 +32,7 @@ type Gov8Engine struct {
 	lastError         error // last error from DispatchInlineEvent or other async operations
 }
 
-// NewGov8Engine creates a new GoV8 JavaScript engine with browser API bindings.
+// NewGov8Engine creates a new V8Go JavaScript engine with browser API bindings.
 func NewGov8Engine() *Gov8Engine {
 	return &Gov8Engine{}
 }
@@ -393,7 +393,7 @@ func (e *Gov8Engine) SetEventLoop(loop *EventLoop) {
 	e.eventLoop = loop
 }
 
-// Close releases GoV8 resources.
+// Close releases V8Go resources.
 func (e *Gov8Engine) Close() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -441,7 +441,7 @@ func (e *Gov8Engine) CollectGarbage() {
 	}
 }
 
-// ConsoleLogs returns accumulated console output from the GoV8 VM.
+// ConsoleLogs returns accumulated console output from the V8Go VM.
 func (e *Gov8Engine) ConsoleLogs() []string {
 	e.mu.Lock()
 	vm := e.vm
@@ -483,7 +483,7 @@ func (e *Gov8Engine) FireEvent(eventType string, data map[string]JSValue) {
 	e.notifyDOMChange()
 }
 
-// elementToGov8Value converts a DOM Element to a GoV8 JSValue object.
+// elementToGov8Value converts a DOM Element to a V8Go JSValue object.
 func (e *Gov8Engine) elementToGov8Value(elem *dom.Element) JSValue {
 // Mark element as JS-reachable (unified heap).
 // The caller should ensure the engine's heap is available.

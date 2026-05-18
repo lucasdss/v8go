@@ -1,4 +1,4 @@
-// Package jit provides JIT compilation infrastructure for GoV8, including
+// Package jit provides JIT compilation infrastructure for V8Go, including
 // the shadow stack for GC-safe native code execution.
 //
 // When Sparkplug (the baseline JIT) compiles JavaScript bytecode to native

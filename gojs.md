@@ -38,7 +38,7 @@ The AI should follow these steps to extract the "DNA" of V8:
 
 ---
 
-## 3. Implementation Plan for the AI (The "GoV8" Roadmap)
+## 3. Implementation Plan for the AI (The "V8Go" Roadmap)
 
 ### Phase 1: The Foundation (Memory & Types)
 *   **Task:** Define the `Value` type. Use a struct that can represent `String`, `Number`, `Boolean`, `Object`, and `Null/Undefined`.
@@ -116,7 +116,7 @@ The AI should follow these steps to extract the "DNA" of V8:
 
 ---
 
-## 3. Implementation Plan for the AI (The "GoV8" Roadmap)
+## 3. Implementation Plan for the AI (The "V8Go" Roadmap)
 
 ### Phase 1: The Foundation (Memory & Types)
 *   **Task:** Define the `Value` type. Use a struct that can represent `String`, `Number`, `Boolean`, `Object`, and `Null/Undefined`.
