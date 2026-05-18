@@ -232,7 +232,7 @@ const (
 
 // VM is the GoV8 virtual machine.
 type VM struct {
-	mu sync.Mutex // protects globals, funcRegistry, builtins, consoleLog, nextICSlot, listeners, eventQueue, onloadHandler, bytecodeCache
+	mu sync.Mutex // protects globals, funcRegistry, builtins, console, calltrack, events, nextICSlot, bytecodeCache
 
 	// RealmID uniquely identifies this VM's realm for cross-realm instanceof checks.
 	RealmID uint64
@@ -273,23 +273,9 @@ type VM struct {
 	// Tests can call WaitAsync() to wait for all pending async work.
 	asyncWg sync.WaitGroup
 
-	// Event listener storage: maps event type → list of callbacks.
-	// Preallocated at known capacity (4: DOMContentLoaded × 2, load × 2).
-	listeners map[string][]JSValue
-
-	// Event queue for deferred event dispatch.
-	eventQueue []QueuedEvent
-
-	// window.onload handler (set via property setter).
-	onloadHandler JSValue
-
-	// elementByID is a callback set by the browser to look up DOM elements by ID.
-	// Used by DispatchEvent to find the target element and its inline handlers.
-	elementByID func(string) *dom.Element
-
-	// domChangeCallback is invoked when the VM dispatches an inline event handler
-	// that may have mutated the DOM. The browser wires this to trigger a repaint.
-	domChangeCallback func()
+	// events manages DOM event listeners, event queue, window.onload,
+	// element lookup, and DOM mutation callbacks.
+	events *EventSystem
 
 	// moduleRegistry is the ES module registry (nil if no module support).
 	moduleRegistry *ModuleRegistry
@@ -307,10 +293,9 @@ func NewVM() *VM {
 		globals:        NewGlobalStore(),
 		calltrack:      &CallTracker{},
 		console:        NewConsole(),
+		events:         NewEventSystem(),
 		funcRegistry:   make(map[string]*BytecodeFunction),
 		builtins:       make(map[string]func(args []JSValue) JSValue),
-		listeners:      make(map[string][]JSValue, 4),
-		eventQueue:     make([]QueuedEvent, 0, 8),
 		bytecodeCache:      make(map[string]*BytecodeFunction),
 		promiseReactions: make(map[*JSObject][]promiseReaction),
 	}
@@ -3131,14 +3116,11 @@ func jsTypeof(v JSValue) string {
 // --- Event handling ---
 
 // AddEventListener registers a callback for the given event type.
-// Callbacks are stored in the VM's listener map and invoked by FireEvent.
+// Callbacks are stored in the EventSystem and invoked by FireEvent.
 func (vm *VM) AddEventListener(eventType string, callback JSValue) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
-	if vm.listeners == nil {
-		vm.listeners = make(map[string][]JSValue, 4)
-	}
-	vm.listeners[eventType] = append(vm.listeners[eventType], callback)
+	vm.events.AddListener(eventType, callback)
 }
 
 // FireEvent dispatches an event to all registered listeners for eventType.
@@ -3148,13 +3130,8 @@ func (vm *VM) AddEventListener(eventType string, callback JSValue) {
 func (vm *VM) FireEvent(eventType string, data map[string]JSValue) {
 	vm.mu.Lock()
 	// Snapshot listeners to avoid holding lock during callback execution.
-	var callbacks []JSValue
-	if vm.listeners != nil {
-		listCopy := make([]JSValue, len(vm.listeners[eventType]))
-		copy(listCopy, vm.listeners[eventType])
-		callbacks = listCopy
-	}
-	onloadCB := vm.onloadHandler
+	callbacks := vm.events.GetListeners(eventType)
+	onloadCB := vm.events.Onload()
 	vm.mu.Unlock()
 
 	// Fire registered addEventListener callbacks.
@@ -3184,14 +3161,14 @@ func (vm *VM) FireEvent(eventType string, data map[string]JSValue) {
 func (vm *VM) SetOnloadHandler(callback JSValue) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
-	vm.onloadHandler = callback
+	vm.events.SetOnload(callback)
 }
 
 // GetOnloadHandler returns the current window.onload callback.
 func (vm *VM) GetOnloadHandler() JSValue {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
-	return vm.onloadHandler
+	return vm.events.Onload()
 }
 
 // SetElementLookup registers a callback for looking up DOM elements by ID.
@@ -3199,7 +3176,7 @@ func (vm *VM) GetOnloadHandler() JSValue {
 func (vm *VM) SetElementLookup(fn func(string) *dom.Element) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
-	vm.elementByID = fn
+	vm.events.SetElementLookup(fn)
 }
 
 // SetDOMChangeCallback registers a callback invoked when the VM executes an
@@ -3207,7 +3184,7 @@ func (vm *VM) SetElementLookup(fn func(string) *dom.Element) {
 func (vm *VM) SetDOMChangeCallback(fn func()) {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
-	vm.domChangeCallback = fn
+	vm.events.SetDOMChangeCallback(fn)
 }
 
 // DispatchEvent finds an element by targetID, reads its inline event handler
@@ -3215,14 +3192,8 @@ func (vm *VM) SetDOMChangeCallback(fn func()) {
 // code in the VM with a synthetic event object { type, target, preventDefault }.
 func (vm *VM) DispatchEvent(targetID, eventType string, eventData map[string]JSValue) {
 	vm.mu.Lock()
-	lookup := vm.elementByID
+	elem := vm.events.LookupElement(targetID)
 	vm.mu.Unlock()
-
-	if lookup == nil {
-		return
-	}
-
-	elem := lookup(targetID)
 	if elem == nil {
 		return
 	}
@@ -3262,7 +3233,7 @@ func (vm *VM) DispatchEvent(targetID, eventType string, eventData map[string]JSV
 
 	// Trigger DOM change callback after inline handler execution (may have mutated DOM).
 	vm.mu.Lock()
-	cb := vm.domChangeCallback
+	cb := vm.events.DOMChangeCallback()
 	vm.mu.Unlock()
 	if cb != nil {
 		cb()

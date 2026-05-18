@@ -256,7 +256,7 @@ func (vm *VM) registerDOMEvents() {
 		// DispatchEvent already triggers domChangeCallback internally,
 		// but we also fire it here to cover any VM-level mutations.
 		vm.mu.Lock()
-		cb := vm.domChangeCallback
+		cb := vm.events.DOMChangeCallback()
 		vm.mu.Unlock()
 		if cb != nil {
 			cb()
