@@ -367,7 +367,7 @@ func TestGov8Engine_QuerySelector(t *testing.T) {
 		}
 	}, nil, nil)
 
-	err := engine.Execute(`
+	_, err := engine.Execute(`
 		var el = document.querySelector('div.x');
 		console.log(el ? el.id : 'null');
 	`)
@@ -401,7 +401,7 @@ func TestGov8Engine_ElementStyleGetSet(t *testing.T) {
 		}
 	}, nil, nil)
 
-	err := engine.Execute(`
+	_, err := engine.Execute(`
 		var el = document.getElementById('target');
 		if (!el) { console.log('NO_EL'); } else {
 			console.log(el.style.getPropertyValue('color'));
@@ -446,7 +446,7 @@ func TestGov8Engine_ClassList(t *testing.T) {
 		}
 	}, nil, nil)
 
-	err := engine.Execute(`
+	_, err := engine.Execute(`
 		var el = document.getElementById('target');
 		if (!el) { console.log('NO_EL'); } else {
 			console.log(el.classList.contains('foo'));
@@ -487,7 +487,7 @@ func TestGov8Engine_SetGetAttribute(t *testing.T) {
 		}
 	}, nil, nil)
 
-	err := engine.Execute(`
+	_, err := engine.Execute(`
 		var el = document.getElementById('target');
 		if (!el) { console.log('NO_EL'); } else {
 			console.log(el.getAttribute('data-x'));
@@ -528,7 +528,7 @@ func TestGov8Engine_InnerOuterHTML(t *testing.T) {
 		}
 	}, nil, nil)
 
-	err := engine.Execute(`
+	_, err := engine.Execute(`
 		var el = document.getElementById('target');
 		if (!el) { console.log('NO_EL'); } else {
 			console.log(el.innerHTML);
@@ -573,7 +573,7 @@ func TestGov8Engine_ChildrenAndParent(t *testing.T) {
 		}
 	}, nil, nil)
 
-	err := engine.Execute(`
+	_, err := engine.Execute(`
 		var p = document.getElementById('parent');
 		if (!p) { console.log('NO_PARENT'); } else {
 			console.log(p.children.length);

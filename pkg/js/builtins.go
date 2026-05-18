@@ -712,7 +712,15 @@ func (vm *VM) registerXHR() {
 				}
 				defer resp.Body.Close()
 
-				bodyBytes, _ := io.ReadAll(resp.Body)
+				bodyBytes, err := io.ReadAll(resp.Body)
+			if err != nil {
+				vm.console.Log("[XHR] read error: " + err.Error())
+				thisXHR.Set("readyState", NewNumber(4))
+				thisXHR.Set("status", NewNumber(float64(resp.Status)))
+				thisXHR.Set("statusText", NewString(resp.StatusText))
+				thisXHR.Set("responseText", NewString(""))
+				return
+			}
 
 				thisXHR.Set("readyState", NewNumber(4))
 				thisXHR.Set("status", NewNumber(float64(resp.Status)))

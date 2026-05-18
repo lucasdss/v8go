@@ -280,6 +280,7 @@ type Lexer struct {
 	pendingTemplateEnd bool // true when we need to emit TokTemplateEnd next
 	expectRegExp       bool // true when / should start a RegExp literal (after operators/punctuation)
 	lastTokenKind      TokenKind // kind of the last non-comment token emitted
+	errors             []string   // accumulated lexer errors (e.g., invalid numeric literals)
 }
 
 // NewLexer creates a new Lexer for the given source.
@@ -295,6 +296,7 @@ func NewLexer(src string) *Lexer {
 // Tokenize runs the full tokenization and returns all tokens.
 func (l *Lexer) Tokenize() []Token {
 	l.tokens = make([]Token, 0, len(l.src)/4)
+	l.errors = nil // reset errors for each tokenization
 	l.expectRegExp = true // start of program: / can start a regexp
 	l.lastTokenKind = TokEOF
 	for {
@@ -306,6 +308,12 @@ func (l *Lexer) Tokenize() []Token {
 		}
 	}
 	return l.tokens
+}
+
+// Errors returns accumulated lexer errors (invalid numeric literals, etc.).
+// Call after Tokenize() to check for lexer-level issues.
+func (l *Lexer) Errors() []string {
+	return l.errors
 }
 
 // updateRegExpContext tracks whether the next / should be interpreted as a RegExp literal.
@@ -800,7 +808,11 @@ func (l *Lexer) readNumber() Token {
 				break
 			}
 		}
-		n, _ := strconv.ParseInt(numStr.String(), 0, 64)
+		n, err := strconv.ParseInt(numStr.String(), 0, 64)
+		if err != nil {
+			l.errors = append(l.errors, fmt.Sprintf("line %d: invalid hex integer literal %q", l.line, numStr.String()))
+			n = 0
+		}
 		return Token{Kind: TokNumber, NumVal: float64(n), Value: numStr.String(), StartPos: startPos, EndPos: l.pos}
 	}
 
@@ -820,7 +832,11 @@ func (l *Lexer) readNumber() Token {
 				break
 			}
 		}
-		n, _ := strconv.ParseInt(numStr.String(), 0, 64)
+		n, err := strconv.ParseInt(numStr.String(), 0, 64)
+		if err != nil {
+			l.errors = append(l.errors, fmt.Sprintf("line %d: invalid octal integer literal %q", l.line, numStr.String()))
+			n = 0
+		}
 		return Token{Kind: TokNumber, NumVal: float64(n), Value: numStr.String(), StartPos: startPos, EndPos: l.pos}
 	}
 
@@ -840,7 +856,11 @@ func (l *Lexer) readNumber() Token {
 				break
 			}
 		}
-		n, _ := strconv.ParseInt(numStr.String(), 0, 64)
+		n, err := strconv.ParseInt(numStr.String(), 0, 64)
+		if err != nil {
+			l.errors = append(l.errors, fmt.Sprintf("line %d: invalid binary integer literal %q", l.line, numStr.String()))
+			n = 0
+		}
 		return Token{Kind: TokNumber, NumVal: float64(n), Value: numStr.String(), StartPos: startPos, EndPos: l.pos}
 	}
 
@@ -879,7 +899,11 @@ func (l *Lexer) readNumber() Token {
 				}
 			}
 			// Parse as octal integer.
-			n, _ := strconv.ParseInt("0o"+numStr.String(), 0, 64)
+			n, err := strconv.ParseInt("0o"+numStr.String(), 0, 64)
+			if err != nil {
+				l.errors = append(l.errors, fmt.Sprintf("line %d: invalid legacy octal literal %q", l.line, numStr.String()))
+				n = 0
+			}
 			return Token{Kind: TokNumber, NumVal: float64(n), Value: numStr.String(), StartPos: startPos, EndPos: l.pos, IsLegacyOctal: true}
 		}
 	}

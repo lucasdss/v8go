@@ -128,6 +128,9 @@ type VM struct {
 	compiler  JITCompiler
 	patcher   ICPatcher
 	protector ExecProtector
+
+	// jitErrors accumulates JIT compilation errors for diagnostics.
+	jitErrors []error
 }
 
 // NewVM creates a new GoV8 virtual machine.

@@ -28,6 +28,8 @@ type Gov8Engine struct {
 	timeoutID         int
 	timeoutMu         sync.Mutex
 	initialized       bool
+	closed            bool // true after Close(), prevents lazy reinit
+	lastError         error // last error from DispatchInlineEvent or other async operations
 }
 
 // NewGov8Engine creates a new GoV8 JavaScript engine with browser API bindings.
@@ -147,7 +149,15 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 	if vm == nil {
 		return false
 	}
-	_ = vm.Run(handlerCode)
+	result := vm.Run(handlerCode)
+	// Store last error for diagnostics. Undefined result with console errors
+	// indicates a parse/runtime error in the handler code.
+	if result.IsUndefined() {
+		logs := vm.ConsoleLogs()
+		if len(logs) > 0 {
+			e.lastError = fmt.Errorf("inline event handler error: %s", strings.Join(logs, "; "))
+		}
+	}
 
 	// Always trigger repaint after inline event handler (DOM may have changed).
 	e.notifyDOMChange()
@@ -168,6 +178,9 @@ func (e *Gov8Engine) notifyDOMChange() {
 func (e *Gov8Engine) init() {
 	e.mu.Lock()
 	defer e.mu.Unlock()
+	if e.closed {
+		return
+	}
 	if e.initialized {
 		return
 	}
@@ -258,15 +271,16 @@ return NewObject(arr)
 // Expose console functions through the VM's built-in console.
 }
 
-// Execute runs a JavaScript source string and forwards console output.
-func (e *Gov8Engine) Execute(source string) error {
+// Execute runs a JavaScript source string and returns the result value.
+// Returns an error if the engine is closed or the VM encounters a fatal error.
+func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 	e.init()
 
 	// Guard against Close() nilling e.vm between init and use.
 	e.mu.Lock()
 	if e.vm == nil {
 		e.mu.Unlock()
-		return fmt.Errorf("engine closed")
+		return Undefined, fmt.Errorf("engine closed")
 	}
 	e.mu.Unlock()
 
@@ -362,12 +376,12 @@ func (e *Gov8Engine) Execute(source string) error {
 	}
 	e.vm.Unlock()
 
-	_ = e.vm.Run(wrapped)
+	result := e.vm.Run(wrapped)
 
 	// Always trigger repaint after JS execution (DOM may have changed).
 	e.notifyDOMChange()
 
-	return nil // VM handles errors internally
+	return result, nil
 }
 
 // SetEventLoop registers an event loop for setTimeout/setInterval support.
@@ -383,6 +397,15 @@ func (e *Gov8Engine) Close() {
 	defer e.mu.Unlock()
 	e.vm = nil
 	e.initialized = false
+	e.closed = true
+}
+
+// LastError returns the last error encountered during async operations
+// such as DispatchInlineEvent. Returns nil if no error has occurred.
+func (e *Gov8Engine) LastError() error {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	return e.lastError
 }
 
 // SetDOMHeap registers the DOM heap for GC coordination.

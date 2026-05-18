@@ -2,8 +2,14 @@
 package js
 
 import (
+	"fmt"
+	"os"
+	"sync"
 	"unsafe"
 )
+
+// vmJITMu serialises access to vm.jitErrors for concurrent background compilation.
+var vmJITMu sync.Mutex
 
 // maybePromoteTier increments the call count and triggers JIT compilation
 // when thresholds are reached. Sparkplug and TurboFan compilation run in
@@ -18,10 +24,13 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 		go func() {
 			rxAddr, err := vm.compiler.CompileSparkplug(bf)
 			if err != nil {
+				fmt.Fprintf(os.Stderr, "[GoV8] Sparkplug compile error: %v\n", err)
+				vmJITMu.Lock()
+				vm.jitErrors = append(vm.jitErrors, fmt.Errorf("sparkplug: %w", err))
+				vmJITMu.Unlock()
 			} else if rxAddr != 0 {
 				bf.Sparkplug = rxAddr
 				bf.HasJITTier = true
-			} else {
 			}
 		}()
 	case bf.CallCount == Tier1TurboFanThreshold && bf.ICVector != nil && bf.TurboFan == 0 && vm.compiler != nil:
