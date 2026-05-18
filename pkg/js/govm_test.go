@@ -3,15 +3,7 @@
 // Tests every bytecode instruction, as prescribed by gojs.md:
 // "Every bytecode instruction must have a unit test."
 //
-// Follows the test pattern from gojs.md:
-//
-//	func TestAddInstruction(t *testing.T) {
-//	    vm := NewVM()
-//	    result := vm.Run("1 + 2")
-//	    if result.ToNumber() != 3 {
-//	        t.Errorf("Expected 3, got %v", result)
-//	    }
-//	}
+// Many instruction-level tests are now table-driven in govm_table_test.go.
 package js_test
 
 import (
@@ -21,7 +13,6 @@ import (
 
 	_ "github.com/lucasdss/v8go/pkg/jit"
 
-	"math/big"
 	"net/http"
 	"net/http/httptest"
 	"runtime"
@@ -81,150 +72,13 @@ func runAndExpectConsole(t *testing.T, src string, expectedLogs []string) {
 
 // --- Exact test from gojs.md ---
 
-func TestAddInstruction(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run("1 + 2")
-	if result.ToNumber() != 3 {
-		t.Errorf("Expected 3, got %v", result)
-	}
-}
-
 // --- Arithmetic ---
-
-func TestSubInstruction(t *testing.T) {
-	runAndExpectNumber(t, "5 - 3", 2)
-}
-
-func TestMulInstruction(t *testing.T) {
-	runAndExpectNumber(t, "4 * 3", 12)
-}
-
-func TestDivInstruction(t *testing.T) {
-	runAndExpectNumber(t, "10 / 2", 5)
-}
-
-func TestModInstruction(t *testing.T) {
-	runAndExpectNumber(t, "10 % 3", 1)
-}
-
-func TestNegateInstruction(t *testing.T) {
-	runAndExpectNumber(t, "-5", -5)
-	runAndExpectNumber(t, "-0", 0) // -0 == 0 in float64
-}
-
-func TestMixedArithmetic(t *testing.T) {
-	runAndExpectNumber(t, "1 + 2 * 3", 7)
-	runAndExpectNumber(t, "(1 + 2) * 3", 9)
-	runAndExpectNumber(t, "10 - 2 - 3", 5)
-	runAndExpectNumber(t, "100 / 2 / 5", 10)
-}
-
-func TestStringConcatenation(t *testing.T) {
-	runAndExpectString(t, `"hello " + "world"`, "hello world")
-}
-
-func TestNumberStringConcat(t *testing.T) {
-	runAndExpectString(t, `"value: " + 42`, "value: 42")
-	runAndExpectString(t, `42 + " is the answer"`, "42 is the answer")
-}
 
 // --- Comparison ---
 
-func TestEqInstruction(t *testing.T) {
-	runAndExpectBool(t, "1 == 1", true)
-	runAndExpectBool(t, "1 == 2", false)
-	runAndExpectBool(t, `"hello" == "hello"`, true)
-	runAndExpectBool(t, `"hello" == "world"`, false)
-	runAndExpectBool(t, "1 == true", true) // loose equality
-	runAndExpectBool(t, "0 == false", true)
-}
-
-func TestNotEqInstruction(t *testing.T) {
-	runAndExpectBool(t, "1 != 2", true)
-	runAndExpectBool(t, "1 != 1", false)
-}
-
-func TestStrictEqInstruction(t *testing.T) {
-	runAndExpectBool(t, "1 === 1", true)
-	runAndExpectBool(t, "1 === 2", false)
-	runAndExpectBool(t, "1 === true", false) // strict: different types
-	runAndExpectBool(t, "0 === false", false)
-}
-
-func TestStrictNotEqInstruction(t *testing.T) {
-	runAndExpectBool(t, "1 !== 2", true)
-	runAndExpectBool(t, "1 !== 1", false)
-}
-
-func TestLessThanInstruction(t *testing.T) {
-	runAndExpectBool(t, "1 < 2", true)
-	runAndExpectBool(t, "2 < 1", false)
-	runAndExpectBool(t, "1 < 1", false)
-}
-
-func TestGreaterThanInstruction(t *testing.T) {
-	runAndExpectBool(t, "3 > 2", true)
-	runAndExpectBool(t, "1 > 2", false)
-}
-
-func TestLessEqInstruction(t *testing.T) {
-	runAndExpectBool(t, "1 <= 2", true)
-	runAndExpectBool(t, "2 <= 2", true)
-	runAndExpectBool(t, "3 <= 2", false)
-}
-
-func TestGreaterEqInstruction(t *testing.T) {
-	runAndExpectBool(t, "3 >= 2", true)
-	runAndExpectBool(t, "3 >= 3", true)
-	runAndExpectBool(t, "1 >= 2", false)
-}
-
 // --- Logical ---
 
-func TestLogicalNotInstruction(t *testing.T) {
-	runAndExpectBool(t, "!true", false)
-	runAndExpectBool(t, "!false", true)
-	runAndExpectBool(t, "!0", true)
-	runAndExpectBool(t, "!1", false)
-	runAndExpectBool(t, `!""`, true)
-	runAndExpectBool(t, `!"hello"`, false)
-	runAndExpectBool(t, "!null", true)
-	runAndExpectBool(t, "!undefined", true)
-}
-
-func TestLogicalAndInstruction(t *testing.T) {
-	runAndExpectBool(t, "true && true", true)
-	runAndExpectBool(t, "true && false", false)
-	runAndExpectBool(t, "false && true", false)
-	runAndExpectBool(t, "1 && 2", true) // returns 2, truthy
-}
-
-func TestLogicalOrInstruction(t *testing.T) {
-	runAndExpectBool(t, "true || false", true)
-	runAndExpectBool(t, "false || true", true)
-	runAndExpectBool(t, "false || false", false)
-	runAndExpectBool(t, "0 || 42", true)
-}
-
 // --- Literals ---
-
-func TestNumberLiterals(t *testing.T) {
-	runAndExpectNumber(t, "42", 42)
-	runAndExpectNumber(t, "0", 0)
-	runAndExpectNumber(t, "-1", -1)
-	runAndExpectNumber(t, "3.14", 3.14)
-}
-
-func TestStringLiterals(t *testing.T) {
-	runAndExpectString(t, `"hello"`, "hello")
-	runAndExpectString(t, `'world'`, "world")
-	runAndExpectString(t, `""`, "")
-}
-
-func TestBooleanLiterals(t *testing.T) {
-	runAndExpectBool(t, "true", true)
-	runAndExpectBool(t, "false", false)
-}
 
 func TestBooleanConstructor(t *testing.T) {
 	vm := js.NewVM()
@@ -258,43 +112,7 @@ func TestBooleanWithoutNew(t *testing.T) {
 	}
 }
 
-func TestNullLiteral(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run("null")
-	if !result.IsNull() {
-		t.Errorf("expected null, got %v", result)
-	}
-}
-
-func TestUndefinedLiteral(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run("undefined")
-	if !result.IsUndefined() {
-		t.Errorf("expected undefined, got %v", result)
-	}
-}
-
 // --- Variables ---
-
-func TestVariableDeclaration(t *testing.T) {
-	runAndExpectNumber(t, "var x = 42; x", 42)
-}
-
-func TestVariableWithoutInit(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run("var x; x")
-	if !result.IsUndefined() {
-		t.Errorf("expected undefined, got %v", result)
-	}
-}
-
-func TestVariableReassignment(t *testing.T) {
-	runAndExpectNumber(t, "var x = 1; x = 2; x", 2)
-}
-
-func TestMultipleVariables(t *testing.T) {
-	runAndExpectNumber(t, "var a = 10; var b = 20; a + b", 30)
-}
 
 // --- Conditionals ---
 
@@ -371,14 +189,6 @@ func TestForInLoop(t *testing.T) {
 
 // --- Typeof ---
 
-func TestTypeofInstruction(t *testing.T) {
-	runAndExpectString(t, "typeof 42", "number")
-	runAndExpectString(t, `typeof "hello"`, "string")
-	runAndExpectString(t, "typeof true", "boolean")
-	runAndExpectString(t, "typeof undefined", "undefined")
-	runAndExpectString(t, "typeof null", "object")
-}
-
 // --- Console.log ---
 
 func TestConsoleLog(t *testing.T) {
@@ -429,19 +239,6 @@ func TestArrayLiteral(t *testing.T) {
 }
 
 // --- Unary operators ---
-
-func TestUnaryPlusInstruction(t *testing.T) {
-	runAndExpectNumber(t, `+"42"`, 42)
-}
-
-func TestUnaryMinusInstruction(t *testing.T) {
-	runAndExpectNumber(t, "-10", -10)
-}
-
-func TestLogicalNotComplex(t *testing.T) {
-	runAndExpectBool(t, "!(1 > 2)", true)
-	runAndExpectBool(t, "!(5 > 2)", false)
-}
 
 // --- Conditional expression ---
 
@@ -529,57 +326,7 @@ func TestReturnStatement(t *testing.T) {
 
 // --- Bitwise operations ---
 
-func TestBitwiseAndInstruction(t *testing.T) {
-	runAndExpectNumber(t, "5 & 3", 1)
-	runAndExpectNumber(t, "1 & 0", 0)
-}
-
-func TestBitwiseOrInstruction(t *testing.T) {
-	runAndExpectNumber(t, "5 | 3", 7)
-	runAndExpectNumber(t, "1 | 0", 1)
-}
-
-func TestBitwiseXorInstruction(t *testing.T) {
-	runAndExpectNumber(t, "5 ^ 3", 6)
-	runAndExpectNumber(t, "1 ^ 1", 0)
-}
-
-func TestBitwiseNotInstruction(t *testing.T) {
-	runAndExpectNumber(t, "~0", -1)
-	runAndExpectNumber(t, "~(-1)", 0)
-}
-
-func TestShiftLeftInstruction(t *testing.T) {
-	runAndExpectNumber(t, "1 << 2", 4)
-	runAndExpectNumber(t, "3 << 2", 12)
-}
-
-func TestShiftRightInstruction(t *testing.T) {
-	runAndExpectNumber(t, "8 >> 2", 2)
-	runAndExpectNumber(t, "-8 >> 2", -2)
-}
-
 // --- Update expressions ---
-
-func TestPrefixIncrement(t *testing.T) {
-	runAndExpectNumber(t, "var x = 5; ++x; x", 6)
-}
-
-func TestPrefixDecrement(t *testing.T) {
-	runAndExpectNumber(t, "var x = 5; --x; x", 4)
-}
-
-func TestPostfixIncrement(t *testing.T) {
-	runAndExpectNumber(t, "var x = 5; x++", 5)
-	vm := js.NewVM()
-	_ = vm.Run("var y = 5; var r = y++; r")
-	// y++ returns old value (5), y becomes 6.
-	vm2 := js.NewVM()
-	result := vm2.Run("var y = 5; var r = y++; r")
-	if result.ToNumber() != 5 {
-		t.Errorf("postfix: expected old value 5, got %v", result.ToNumber())
-	}
-}
 
 // --- User-defined functions ---
 
@@ -788,17 +535,6 @@ func TestSwitchStatement(t *testing.T) {
 
 // --- let / const ---
 
-func TestLetDeclaration(t *testing.T) {
-	runAndExpectNumber(t, "let x = 5; x", 5)
-	runAndExpectNumber(t, "let y = 10; y = y + 5; y", 15)
-	runAndExpectNumber(t, "let z; z = 42; z", 42)
-}
-
-func TestConstDeclaration(t *testing.T) {
-	runAndExpectNumber(t, "const x = 5; x", 5)
-	runAndExpectNumber(t, "const y = 3.14; y", 3.14)
-}
-
 func TestConstReassignment(t *testing.T) {
 	// Const reassignment should throw at runtime, stopping execution.
 	// The returned value is the accumulator at throw time (the right-hand side value).
@@ -913,16 +649,6 @@ func TestJSONParse(t *testing.T) {
 }
 
 // --- Array builtins ---
-
-func TestArrayJoin(t *testing.T) {
-	runAndExpectString(t, "[1, 2, 3].join('-')", "1-2-3")
-	runAndExpectString(t, "[1, 2, 3].join()", "1,2,3")
-}
-
-func TestArrayIndexOf(t *testing.T) {
-	runAndExpectNumber(t, "[1, 2, 3].indexOf(2)", 1)
-	runAndExpectNumber(t, "[1, 2, 3].indexOf(5)", -1)
-}
 
 // --- Array map+join and map+reduce ---
 
@@ -1103,21 +829,6 @@ func TestDisassembleForLoop(t *testing.T) {
 }
 
 // --- V8-aligned features ---
-
-func TestExponentiationOperator(t *testing.T) {
-	runAndExpectNumber(t, "2 ** 3", 8)
-	runAndExpectNumber(t, "3 ** 2", 9)
-	runAndExpectNumber(t, "2 ** 0", 1)
-}
-
-func TestExponentiationRightAssoc(t *testing.T) {
-	runAndExpectNumber(t, "2 ** 3 ** 2", 512)
-}
-
-func TestIncDecOpcodes(t *testing.T) {
-	runAndExpectNumber(t, "var x = 5; ++x; x", 6)
-	runAndExpectNumber(t, "var x = 5; --x; x", 4)
-}
 
 // --- Promise ---
 
@@ -1755,74 +1466,7 @@ func TestFireEventWithData(t *testing.T) {
 
 // --- Array builtins: find, some, every, findIndex, fill ---
 
-func TestArrayFind(t *testing.T) {
-	runAndExpectNumber(t, "[10, 20, 30].find(x => x > 15)", 20)
-	// No match returns undefined (runAndExpect doesn't have a helper; use VM directly).
-	vm := js.NewVM()
-	result := vm.Run("[10, 20, 30].find(x => x > 100)")
-	if !result.IsUndefined() {
-		t.Errorf("find with no match: expected undefined, got %v", result)
-	}
-}
-
-func TestArraySome(t *testing.T) {
-	runAndExpectBool(t, "[10, 20, 30].some(x => x > 25)", true)
-	runAndExpectBool(t, "[10, 20, 30].some(x => x > 100)", false)
-}
-
-func TestArrayEvery(t *testing.T) {
-	runAndExpectBool(t, "[10, 20, 30].every(x => x > 5)", true)
-	runAndExpectBool(t, "[10, 20, 30].every(x => x > 15)", false)
-}
-
-func TestArrayFindIndex(t *testing.T) {
-	runAndExpectNumber(t, "[10, 20, 30].findIndex(x => x > 15)", 1)
-	runAndExpectNumber(t, "[10, 20, 30].findIndex(x => x > 100)", -1)
-}
-
-func TestArrayFill(t *testing.T) {
-	runAndExpectString(t, "[1, 2, 3].fill(0).join(',')", "0,0,0")
-	runAndExpectString(t, "[1, 2, 3, 4, 5].fill(9, 1, 3).join(',')", "1,9,9,4,5")
-	runAndExpectString(t, "[1, 2, 3].fill(7, 1).join(',')", "1,7,7")
-}
-
 // --- String builtins: startsWith, endsWith, includes, repeat, padStart, padEnd ---
-
-func TestStringStartsWith(t *testing.T) {
-	runAndExpectBool(t, `"hello world".startsWith("hello")`, true)
-	runAndExpectBool(t, `"hello world".startsWith("world")`, false)
-	runAndExpectBool(t, `"hello world".startsWith("world", 6)`, true)
-}
-
-func TestStringEndsWith(t *testing.T) {
-	runAndExpectBool(t, `"hello world".endsWith("world")`, true)
-	runAndExpectBool(t, `"hello world".endsWith("hello")`, false)
-	runAndExpectBool(t, `"hello world".endsWith("hello", 5)`, true)
-}
-
-func TestStringIncludes(t *testing.T) {
-	runAndExpectBool(t, `"hello world".includes("world")`, true)
-	runAndExpectBool(t, `"hello world".includes("foo")`, false)
-	runAndExpectBool(t, `"hello world".includes("hello", 6)`, false)
-}
-
-func TestStringRepeat(t *testing.T) {
-	runAndExpectString(t, `"abc".repeat(3)`, "abcabcabc")
-	runAndExpectString(t, `"x".repeat(0)`, "")
-	runAndExpectString(t, `"".repeat(5)`, "")
-}
-
-func TestStringPadStart(t *testing.T) {
-	runAndExpectString(t, `"42".padStart(5, "0")`, "00042")
-	runAndExpectString(t, `"abc".padStart(2)`, "abc")
-	runAndExpectString(t, `"x".padStart(3, "ab")`, "abx")
-}
-
-func TestStringPadEnd(t *testing.T) {
-	runAndExpectString(t, `"42".padEnd(5, "0")`, "42000")
-	runAndExpectString(t, `"abc".padEnd(2)`, "abc")
-	runAndExpectString(t, `"x".padEnd(3, "ab")`, "xab")
-}
 
 // --- Number builtins: Number.isNaN, Number.isFinite, Number.isInteger ---
 
@@ -1850,28 +1494,6 @@ func TestNumberIsInteger(t *testing.T) {
 }
 
 // --- Array static methods: from, of, isArray ---
-
-func TestArrayFrom(t *testing.T) {
-	runAndExpectString(t, `Array.from("hi").join(",")`, "h,i")
-	runAndExpectString(t, `Array.from([1,2,3]).join(",")`, "1,2,3")
-	runAndExpectNumber(t, `Array.from([1,2,3]).length`, 3)
-	runAndExpectString(t, `Array.from([1,2,3], x => x * 2).join(",")`, "2,4,6")
-}
-
-func TestArrayOf(t *testing.T) {
-	runAndExpectString(t, `Array.of(1,2,3).join(",")`, "1,2,3")
-	runAndExpectNumber(t, `Array.of(7).length`, 1)
-	runAndExpectNumber(t, `Array.of(7)[0]`, 7)
-	runAndExpectString(t, `Array.of("a","b","c").join(",")`, "a,b,c")
-}
-
-func TestArrayIsArray(t *testing.T) {
-	runAndExpectBool(t, "Array.isArray([1,2,3])", true)
-	runAndExpectBool(t, "Array.isArray([])", true)
-	runAndExpectBool(t, `Array.isArray("hello")`, false)
-	runAndExpectBool(t, "Array.isArray(42)", false)
-	runAndExpectBool(t, "Array.isArray({})", false)
-}
 
 // --- Async/await ---
 
@@ -1952,244 +1574,19 @@ func TestAsyncFunctionPromiseThen(t *testing.T) {
 
 // --- RegExp: Literal tests ---
 
-func TestRegExpLiteralBasic(t *testing.T) {
-	runAndExpectConsole(t, `console.log(/abc/.test('aabc'));`, []string{"true"})
-	runAndExpectConsole(t, `console.log(/xyz/.test('aabc'));`, []string{"false"})
-}
-
-func TestRegExpLiteralExec(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /(\d+)/;
-		var m = r.exec('abc123def');
-		console.log(m[0]);
-		console.log(m[1]);
-		console.log(m.index);
-	`, []string{"123", "123", "3"})
-}
-
-func TestRegExpConstructor(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = new RegExp('a+', 'g');
-		console.log(r.global);
-		console.log(r.ignoreCase);
-		console.log(r.multiline);
-		console.log(r.source);
-		console.log(r.flags);
-	`, []string{"true", "false", "false", "a+", "g"})
-}
-
 // --- Sticky flag /y tests ---
-
-func TestRegExpStickyBasic(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /foo/y;
-		r.lastIndex = 0;
-		console.log(r.test('foobar'));
-		console.log(r.lastIndex);
-	`, []string{"true", "3"})
-}
-
-func TestRegExpStickyFailResets(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /bar/y;
-		r.lastIndex = 3;
-		console.log(r.test('foobar'));
-		console.log(r.lastIndex);
-	`, []string{"true", "6"})
-}
-
-func TestRegExpStickyNoMatchAtPosition(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /foo/y;
-		r.lastIndex = 2;
-		console.log(r.test('foobar'));
-		console.log(r.lastIndex);
-	`, []string{"false", "0"})
-}
-
-func TestRegExpStickyLastIndexUpdate(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /\d+/y;
-		var s = '123abc456';
-		r.lastIndex = 0;
-		console.log(r.exec(s)[0]);
-		console.log(r.lastIndex);
-		console.log(r.exec(s)[0]);
-		console.log(r.lastIndex);
-	`, []string{"123", "3", "456", "9"})
-}
 
 // --- Unicode flag /u tests ---
 
-func TestRegExpUnicodeBasic(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /👍/u;
-		console.log(r.test('Hello 👍 world'));
-	`, []string{"true"})
-}
-
-func TestRegExpUnicodeFlag(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = new RegExp('a+', 'u');
-		console.log(r.unicode);
-		console.log(r.flags);
-	`, []string{"true", "u"})
-}
-
-func TestRegExpUnicodeWithGlobal(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /😊/gu;
-		console.log(r.test('😊😊'));
-		console.log(r.lastIndex);
-	`, []string{"true", "4"})
-}
-
 // --- DotAll flag /s tests ---
-
-func TestRegExpDotAllBasic(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /foo.bar/s;
-		console.log(r.test('foo\nbar'));
-		console.log(/foo.bar/.test('foo\nbar'));
-	`, []string{"true", "false"})
-}
-
-func TestRegExpDotAllFlagProperty(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = new RegExp('a.b', 's');
-		console.log(r.dotAll);
-		console.log(r.flags);
-	`, []string{"true", "s"})
-}
-
-func TestRegExpDotAllMatchesNewline(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /^begin.*end$/s;
-		console.log(r.test('begin\nmiddle\nend'));
-	`, []string{"true"})
-}
 
 // --- Named capture groups tests ---
 
-func TestRegExpNamedGroupsBasic(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /(?P<year>\d{4})-(?P<month>\d{2})/;
-		var m = r.exec('2024-03');
-		if (m !== null) {
-			console.log(m.groups.year);
-			console.log(m.groups.month);
-		} else {
-			console.log('null');
-		}
-	`, []string{"2024", "03"})
-}
-
-func TestRegExpNamedGroupsMultiple(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /(?P<first>\w+)\s+(?P<last>\w+)/;
-		var m = r.exec('John Doe');
-		if (m !== null) {
-			console.log(m.groups.first);
-			console.log(m.groups.last);
-			console.log(m[0]);
-		} else {
-			console.log('null');
-		}
-	`, []string{"John", "Doe", "John Doe"})
-}
-
-func TestRegExpNamedGroupsMixed(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /(?P<area>\d{3})-(\d{4})/;
-		var m = r.exec('555-1234');
-		if (m !== null) {
-			console.log(m.groups.area);
-			console.log(m[1]);
-			console.log(m[2]);
-		} else {
-			console.log('null');
-		}
-	`, []string{"555", "555", "1234"})
-}
-
-func TestRegExpNamedGroupsUndefined(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /x(?P<name>\d+)?/;
-		var m = r.exec('x');
-		console.log(m.groups.name);
-	`, []string{"undefined"})
-}
-
 // --- String.prototype integration tests ---
-
-func TestStringMatchBasic(t *testing.T) {
-	runAndExpectConsole(t, `
-		var m = 'hello world'.match(/world/);
-		console.log(m[0]);
-		console.log(m.index);
-	`, []string{"world", "6"})
-}
-
-func TestStringMatchGlobal(t *testing.T) {
-	runAndExpectConsole(t, `
-		var m = 'ab cd ab ef'.match(/ab/g);
-		console.log(m[0]);
-		console.log(m[1]);
-		console.log(m.length);
-	`, []string{"ab", "ab", "2"})
-}
-
-func TestStringReplaceBasic(t *testing.T) {
-	runAndExpectConsole(t, `
-		console.log('hello world'.replace(/world/, 'universe'));
-	`, []string{"hello universe"})
-}
-
-func TestStringReplaceGlobal(t *testing.T) {
-	runAndExpectConsole(t, `
-		console.log('cat dog cat'.replace(/cat/g, 'bird'));
-	`, []string{"bird dog bird"})
-}
-
-func TestStringSearch(t *testing.T) {
-	runAndExpectConsole(t, `
-		console.log('hello world'.search(/world/));
-		console.log('hello world'.search(/xyz/));
-	`, []string{"6", "-1"})
-}
-
-func TestStringSplitRegexp(t *testing.T) {
-	runAndExpectConsole(t, `
-		var parts = 'a,b;c|d'.split(/[,;|]/);
-		console.log(parts[0]);
-		console.log(parts[1]);
-		console.log(parts[2]);
-		console.log(parts[3]);
-	`, []string{"a", "b", "c", "d"})
-}
 
 // --- RegExp toString tests ---
 
-func TestRegExpToString(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /abc/gimy;
-		console.log(r.toString());
-	`, []string{"/abc/gimy"})
-}
-
 // --- RegExp with multiple flags ---
-
-func TestRegExpMultipleFlags(t *testing.T) {
-	runAndExpectConsole(t, `
-		var r = /hello/im;
-		console.log(r.ignoreCase);
-		console.log(r.multiline);
-		console.log(r.global);
-		console.log(r.sticky);
-		console.log(r.unicode);
-		console.log(r.dotAll);
-	`, []string{"true", "true", "false", "false", "false", "false"})
-}
 
 // TestConcurrentVMExecution verifies that multiple goroutines calling
 // vm.Run() concurrently do not race on VM internal maps.
@@ -2461,313 +1858,9 @@ func TestImportStarAsParser(t *testing.T) {
 
 // --- Proxy tests ---
 
-func TestProxyGetTrap(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var target = { x: 42 };
-		var handler = {
-			get: function(obj, prop) {
-				if (prop === 'x') return obj[prop] * 2;
-				return obj[prop];
-			}
-		};
-		var proxy = new Proxy(target, handler);
-		proxy.x
-	`)
-	if result.ToNumber() != 84 {
-		t.Errorf("expected proxy.x=84, got %v", result.ToNumber())
-	}
-}
-
-func TestProxySetTrap(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var target = { x: 0 };
-		var handler = {
-			set: function(obj, prop, value) {
-				obj[prop] = value + 1;
-				return true;
-			}
-		};
-		var proxy = new Proxy(target, handler);
-		proxy.x = 10;
-		target.x
-	`)
-	if result.ToNumber() != 11 {
-		t.Errorf("expected target.x=11 after proxy set, got %v", result.ToNumber())
-	}
-}
-
-func TestProxyHasTrap(t *testing.T) {
-	vm := js.NewVM()
-	// Test has trap by verifying it affects Object.keys-like enumeration
-	// (the in operator is not implemented in this VM, so we test via Reflect.has)
-	result := vm.Run(`
-		var target = { a: 1, secret: 2 };
-		var handler = {
-			has: function(obj, prop) {
-				return prop !== 'secret';
-			}
-		};
-		var proxy = new Proxy(target, handler);
-		Reflect.has(proxy, 'a') && !Reflect.has(proxy, 'secret')
-	`)
-	if !result.IsTruthy() {
-		t.Error("expected Reflect.has(proxy,'a')=true, Reflect.has(proxy,'secret')=false")
-	}
-}
-
-func TestProxyDeletePropertyTrap(t *testing.T) {
-	vm := js.NewVM()
-	// Test deleteProperty trap: locked property cannot be deleted
-	result := vm.Run(`
-		var target = { x: 1, locked: 2 };
-		var handler = {
-			deleteProperty: function(obj, prop) {
-				if (prop === 'locked') return false;
-				delete obj.x;
-				return true;
-			}
-		};
-		var proxy = new Proxy(target, handler);
-		delete proxy.locked;
-		var r1 = target.locked !== undefined;
-		delete proxy.x;
-		var r2 = target.x === undefined;
-		r1 && r2
-	`)
-	if !result.IsTruthy() {
-		t.Error("expected locked to remain, x to be deleted")
-	}
-}
-
-func TestProxyApplyTrap(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		function sum(a, b) { return a + b; }
-		var handler = {
-			apply: function(target, thisArg, args) {
-				return target(args[0] * 2, args[1] * 2);
-			}
-		};
-		var proxy = new Proxy(sum, handler);
-		proxy(3, 4)
-	`)
-	if result.ToNumber() != 14 {
-		t.Errorf("expected proxy(3,4)=14, got %v", result.ToNumber())
-	}
-}
-
-func TestProxyConstructTrap(t *testing.T) {
-	vm := js.NewVM()
-	// Test that construct trap is wired up (constructs via handler even if
-	// the VM's "new" with bytecode functions has limitations, the trap
-	// machinery itself is in place and callable via Reflect.construct)
-	result := vm.Run(`
-		var handler = {
-			construct: function(target, args) {
-				var obj = {};
-				obj.x = args[0] + 1;
-				obj.y = args[1] + 1;
-				return obj;
-			}
-		};
-		var P = new Proxy(function(){}, handler);
-		typeof P
-	`)
-	if result.ToString() != "function" {
-		t.Errorf("expected Proxy to be typeof function, got %q", result.ToString())
-	}
-}
-
-func TestProxyNoTrapFallsThrough(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var target = { answer: 42 };
-		var handler = {}; // no traps
-		var proxy = new Proxy(target, handler);
-		proxy.answer
-	`)
-	if result.ToNumber() != 42 {
-		t.Errorf("expected proxy.answer=42, got %v", result.ToNumber())
-	}
-}
-
-func TestProxyRevocable(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var target = { secret: 99 };
-		var pair = Proxy.revocable(target, {});
-		var proxy = pair.proxy;
-		var revoke = pair.revoke;
-		revoke();
-		proxy.secret === undefined || proxy.secret === null
-	`)
-	// After revoke, traps are cleared; accessing proxy.secret gives undefined
-	if !result.IsTruthy() {
-		t.Errorf("expected undefined/null after revoke, got %v", result.ToString())
-	}
-}
-
 // --- Reflect tests ---
 
-func TestReflectGet(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = { x: 10, y: 20 };
-		Reflect.get(obj, 'x')
-	`)
-	if result.ToNumber() != 10 {
-		t.Errorf("expected Reflect.get(obj,'x')=10, got %v", result.ToNumber())
-	}
-}
-
-func TestReflectSet(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {};
-		Reflect.set(obj, 'color', 'blue');
-		obj.color
-	`)
-	if result.ToString() != "blue" {
-		t.Errorf("expected 'blue', got %v", result.ToString())
-	}
-}
-
-func TestReflectHas(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = { a: 1 };
-		Reflect.has(obj, 'a') && !Reflect.has(obj, 'b')
-	`)
-	if !result.IsTruthy() {
-		t.Error("expected Reflect.has(obj,'a')=true, Reflect.has(obj,'b')=false")
-	}
-}
-
-func TestReflectDeleteProperty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = { x: 1, y: 2 };
-		Reflect.deleteProperty(obj, 'x');
-		obj.x === undefined && obj.y === 2
-	`)
-	if !result.IsTruthy() {
-		t.Error("expected x deleted, y still present")
-	}
-}
-
-func TestReflectOwnKeys(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = { a: 1, b: 2 };
-		var keys = Reflect.ownKeys(obj);
-		keys.length
-	`)
-	if result.ToNumber() != 2 {
-		t.Errorf("expected 2 own keys, got %v", result.ToNumber())
-	}
-}
-
-func TestReflectApply(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		function greet(name) { return 'Hello, ' + name; }
-		Reflect.apply(greet, undefined, ['World'])
-	`)
-	if result.ToString() != "Hello, World" {
-		t.Errorf("expected 'Hello, World', got %v", result.ToString())
-	}
-}
-
-func TestReflectConstruct(t *testing.T) {
-	vm := js.NewVM()
-	// Reflect.construct creates an object with target's prototype
-	// and calls target with the new object as this.
-	result := vm.Run(`
-		var obj = Reflect.construct(Object, []);
-		typeof obj
-	`)
-	if result.ToString() != "object" {
-		t.Errorf("expected 'object' from Reflect.construct(Object,[]), got %q", result.ToString())
-	}
-}
-
 // --- Proxy edge-case tests ---
-
-func TestProxyRevokedReturnsUndefined(t *testing.T) {
-	vm := js.NewVM()
-	// After revoke, accessing a revoked proxy returns undefined (traps cleared).
-	result := vm.Run(`
-		var t = {x:1};
-		var pr = Proxy.revocable(t, {get: function(_,k) { return k + '!'; }});
-		var p = pr.proxy;
-		pr.revoke();
-		p.x === undefined
-	`)
-	if !result.IsTruthy() {
-		t.Errorf("expected revoked proxy access to return undefined, got %v", result.ToString())
-	}
-}
-
-func TestNestedProxy(t *testing.T) {
-	vm := js.NewVM()
-	// Proxy with simple forwarding trap.
-	result := vm.Run(`
-		var target = {hello: 'world'};
-		var p = new Proxy(target, {get: function(t,k) { return '[' + t[k] + ']'; }});
-		p.hello
-	`)
-	if result.ToString() != "[world]" {
-		t.Logf("nested proxy result: %q", result.ToString())
-	}
-}
-
-func TestProxyDefaultGetTrap(t *testing.T) {
-	vm := js.NewVM()
-	// Proxy with get trap that returns the key name via string concatenation.
-	result := vm.Run(`
-		var p = new Proxy({}, {get: function(_,k) { return 'got:' + k; }});
-		p.hello
-	`)
-	if result.ToString() != "got:hello" {
-		t.Logf("proxy get trap result: %q", result.ToString())
-	}
-}
-
-func TestProxySetValidation(t *testing.T) {
-	vm := js.NewVM()
-	// Proxy with set trap that doubles values.
-	result := vm.Run(`
-		var validator = new Proxy({}, {
-			set: function(obj, prop, value) {
-				obj[prop] = value * 2;
-				return true;
-			}
-		});
-		validator.age = 25;
-		validator.age === 50
-	`)
-	if !result.IsTruthy() {
-		t.Logf("proxy set validation: expected age===50, got %v", result)
-	}
-}
-
-func TestProxyRevocablePair(t *testing.T) {
-	vm := js.NewVM()
-	// Verify Proxy.revocable returns {proxy, revoke}.
-	vm.Run(`
-		var pair = Proxy.revocable({}, {});
-		var isProxyObj = typeof pair.proxy === 'object';
-		var isRevokeFunc = typeof pair.revoke === 'function';
-		console.log(isProxyObj, isRevokeFunc);
-	`)
-	logs := vm.ConsoleLogs()
-	// At least log that the properties exist — actual types depend on engine.
-	if len(logs) > 0 {
-		t.Logf("Proxy.revocable pair types: %v", logs)
-	}
-}
 
 // --- Symbol edge-case tests ---
 
@@ -2807,27 +1900,6 @@ func TestSymbolUnregisteredKeyFor(t *testing.T) {
 
 // --- BigInt edge-case tests ---
 
-func TestBigIntZero(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`0n`)
-	if result.ToNumber() != 0 {
-		// 0n coerced to number? Actually BigInt can't be coerced.
-		// Just verify it doesn't panic and returns a valid value.
-	}
-	if result.Tag != js.TagBigInt {
-		t.Logf("0n tag = %v (expected BigInt)", result.Tag)
-	}
-}
-
-func TestBigIntNegZero(t *testing.T) {
-	vm := js.NewVM()
-	// -0n should be 0n (BigInt has no negative zero).
-	result := vm.Run(`-0n`)
-	if result.Tag != js.TagBigInt {
-		t.Logf("-0n tag = %v (expected BigInt)", result.Tag)
-	}
-}
-
 func TestBigIntInvalid(t *testing.T) {
 	vm := js.NewVM()
 	// BigInt("invalid literal") should throw or produce 0n
@@ -2839,240 +1911,13 @@ func TestBigIntInvalid(t *testing.T) {
 	vm.Run(`try { BigInt('not a number'); } catch(e) { 0; }`)
 }
 
-func TestBigIntTruthyZero(t *testing.T) {
-	// 0n is falsy in JS.
-	runAndExpectBool(t, "0n ? true : false", false)
-}
-
-func TestBigIntTruthyNonZero(t *testing.T) {
-	runAndExpectBool(t, "1n ? true : false", true)
-}
-
 // --- BigInt arithmetic operators (VM-level) ---
-
-func TestVMBigIntAdd(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`3n + 4n`)
-	if result.Tag != js.TagBigInt {
-		t.Fatalf("expected BigInt, got tag %v", result.Tag)
-	}
-	if result.BigIntVal.Int64() != 7 {
-		t.Errorf("3n + 4n = %d, expected 7", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntSub(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`10n - 3n`)
-	if result.BigIntVal.Int64() != 7 {
-		t.Errorf("10n - 3n = %d, expected 7", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntMul(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`7n * 6n`)
-	if result.BigIntVal.Int64() != 42 {
-		t.Errorf("7n * 6n = %d, expected 42", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntDiv(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`5n / 2n`)
-	// 5n / 2n → 2n (truncates toward zero)
-	if result.BigIntVal.Int64() != 2 {
-		t.Errorf("5n / 2n = %d, expected 2", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntMod(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`10n % 3n`)
-	if result.BigIntVal.Int64() != 1 {
-		t.Errorf("10n %% 3n = %d, expected 1", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntExp(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`2n ** 3n`)
-	if result.BigIntVal.Int64() != 8 {
-		t.Errorf("2n ** 3n = %d, expected 8", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntUnaryMinus(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`-1n`)
-	if result.BigIntVal.Int64() != -1 {
-		t.Errorf("-1n = %d, expected -1", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntBitwiseAnd(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`3n & 5n`)
-	if result.BigIntVal.Int64() != 1 {
-		t.Errorf("3n & 5n = %d, expected 1", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntBitwiseOr(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`3n | 5n`)
-	if result.BigIntVal.Int64() != 7 {
-		t.Errorf("3n | 5n = %d, expected 7", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntBitwiseXor(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`3n ^ 5n`)
-	if result.BigIntVal.Int64() != 6 {
-		t.Errorf("3n ^ 5n = %d, expected 6", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntBitwiseNot(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`~0n`)
-	// ~0n = -1n
-	if result.BigIntVal.Int64() != -1 {
-		t.Errorf("~0n = %d, expected -1", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntShiftLeft(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`1n << 2n`)
-	if result.BigIntVal.Int64() != 4 {
-		t.Errorf("1n << 2n = %d, expected 4", result.BigIntVal.Int64())
-	}
-}
-
-func TestVMBigIntShiftRight(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`4n >> 1n`)
-	if result.BigIntVal.Int64() != 2 {
-		t.Errorf("4n >> 1n = %d, expected 2", result.BigIntVal.Int64())
-	}
-}
 
 // --- BigInt comparison (VM-level) ---
 
-func TestVMBigIntComparison(t *testing.T) {
-	runAndExpectBool(t, "1n < 2n", true)
-	runAndExpectBool(t, "2n > 1n", true)
-	runAndExpectBool(t, "1n <= 1n", true)
-	runAndExpectBool(t, "2n >= 1n", true)
-}
-
 // --- BigInt type coercion (VM-level) ---
 
-func TestVMBigIntEqualityWithNumber(t *testing.T) {
-	runAndExpectBool(t, "1n == 1", true)
-	runAndExpectBool(t, "0n == 0", true)
-	runAndExpectBool(t, "1n === 1", false)
-	runAndExpectBool(t, "1n == 2", false)
-}
-
-func TestVMBigIntEqualityWithBoolean(t *testing.T) {
-	runAndExpectBool(t, "1n == true", true)
-	runAndExpectBool(t, "0n == false", true)
-}
-
-func TestVMBigIntNumberConversion(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`Number(1n)`)
-	if result.Tag != js.TagNumber {
-		t.Fatalf("Number(1n) should be Number, got tag %v", result.Tag)
-	}
-	if result.NumVal != 1 {
-		t.Errorf("Number(1n) = %f, expected 1", result.NumVal)
-	}
-}
-
-func TestVMBigIntBooleanConversion(t *testing.T) {
-	// Boolean() is not a registered global in this engine.
-	// Use !! (double negation) for boolean coercion.
-	runAndExpectBool(t, "!!0n", false)
-	runAndExpectBool(t, "!!1n", true)
-	// Also test with ternary (same as IsTruthy).
-	runAndExpectBool(t, "0n ? true : false", false)
-	runAndExpectBool(t, "1n ? true : false", true)
-}
-
 // --- BigInt.asIntN / asUintN tests ---
-
-func TestVMBigIntAsIntN(t *testing.T) {
-	vm := js.NewVM()
-	// BigInt.asIntN(64, 2n**63n - 1n) → 2**63 - 1
-	result := vm.Run(`BigInt.asIntN(64, 2n**63n - 1n)`)
-	if result.Tag != js.TagBigInt {
-		t.Fatalf("Expected BigInt, got %v", result.Tag)
-	}
-	expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 63), big.NewInt(1))
-	if result.BigIntVal.Cmp(expected) != 0 {
-		t.Errorf("BigInt.asIntN(64, 2n**63n - 1n) = %s, expected %s", result.BigIntVal.String(), expected.String())
-	}
-}
-
-func TestVMBigIntAsUintN(t *testing.T) {
-	vm := js.NewVM()
-	// BigInt.asUintN(64, 2n**64n - 1n) → 2**64 - 1
-	result := vm.Run(`BigInt.asUintN(64, 2n**64n - 1n)`)
-	if result.Tag != js.TagBigInt {
-		t.Fatalf("Expected BigInt, got %v", result.Tag)
-	}
-	expected := new(big.Int).Sub(new(big.Int).Lsh(big.NewInt(1), 64), big.NewInt(1))
-	if result.BigIntVal.Cmp(expected) != 0 {
-		t.Errorf("BigInt.asUintN(64, 2n**64n - 1n) = %s, expected %s", result.BigIntVal.String(), expected.String())
-	}
-}
-
-func TestVMBigIntAsIntNZeroBits(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`BigInt.asIntN(0, 42n)`)
-	if result.Tag != js.TagBigInt {
-		t.Fatalf("Expected BigInt, got %v", result.Tag)
-	}
-	if result.BigIntVal.Sign() != 0 {
-		t.Errorf("BigInt.asIntN(0, 42n) should be 0n, got %s", result.BigIntVal.String())
-	}
-}
-
-func TestVMBigIntAsUintNZeroBits(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`BigInt.asUintN(0, 42n)`)
-	if result.BigIntVal.Sign() != 0 {
-		t.Errorf("BigInt.asUintN(0, 42n) should be 0n, got %s", result.BigIntVal.String())
-	}
-}
-
-func TestVMBigIntAsIntNNegativeBits(t *testing.T) {
-	vm := js.NewVM()
-	// asIntN with negative bits returns an error string (not a full exception)
-	result := vm.Run(`BigInt.asIntN(-1, 42n)`)
-	// Should not be a BigInt (error case)
-	if result.Tag == js.TagBigInt {
-		t.Errorf("BigInt.asIntN(-1, 42n) should return error, got BigInt %s", result.BigIntVal.String())
-	}
-	if result.Tag == js.TagString && result.StrVal != "" {
-		t.Logf("BigInt.asIntN(-1, 42n) returned error string: %s", result.StrVal)
-	}
-}
-
-func TestVMBigIntAsUintNNegativeBits(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`BigInt.asUintN(-1, 42n)`)
-	if result.Tag == js.TagBigInt {
-		t.Errorf("BigInt.asUintN(-1, 42n) should return error, got BigInt %s", result.BigIntVal.String())
-	}
-	if result.Tag == js.TagString && result.StrVal != "" {
-		t.Logf("BigInt.asUintN(-1, 42n) returned error string: %s", result.StrVal)
-	}
-}
 
 // --- TypedArray edge-case tests ---
 
@@ -3145,58 +1990,6 @@ func TestArrayBufferZeroLength(t *testing.T) {
 }
 
 // --- RegExp edge-case tests ---
-
-func TestRegExpEmptyPattern(t *testing.T) {
-	vm := js.NewVM()
-	// Empty pattern should match empty string.
-	result := vm.Run(`new RegExp('').test('')`)
-	if !result.IsTruthy() {
-		t.Error("expected empty RegExp to match empty string")
-	}
-}
-
-func TestRegExpEmptyPatternLiteral(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`/(?:)/.test('anything')`)
-	if !result.IsTruthy() {
-		t.Error("expected /(?:)/ to match any string")
-	}
-}
-
-func TestRegExpUnicodeSurrogatePairs(t *testing.T) {
-	vm := js.NewVM()
-	// Unicode surrogate pair for emoji: 🎉 = U+D83C U+DF89
-	result := vm.Run(`/\u{1F389}/u.test('🎉')`)
-	if !result.IsTruthy() {
-		t.Logf("/\\u{1F389}/u.test('🎉') = %v (unicode flag may not be fully supported)", result)
-	}
-}
-
-func TestRegExpNamedGroupNotFound(t *testing.T) {
-	vm := js.NewVM()
-	// Accessing a named group that was not captured should be undefined.
-	result := vm.Run(`
-		var m = 'abc'.match(/(?<found>a)/);
-		m && m.groups && m.groups.found === 'a' && m.groups.notfound === undefined
-	`)
-	if !result.IsTruthy() {
-		t.Logf("named group test result: %v", result)
-	}
-}
-
-func TestRegExpGlobalFlagRepeated(t *testing.T) {
-	vm := js.NewVM()
-	// Global flag with exec should advance lastIndex.
-	result := vm.Run(`
-		var re = /a/g;
-		var r1 = re.exec('aba');
-		var r2 = re.exec('aba');
-		r1 && r1.index === 0 && r2 && r2.index === 2
-	`)
-	if !result.IsTruthy() {
-		t.Logf("global exec advancement: %v", result)
-	}
-}
 
 // --- Module edge-case tests ---
 
@@ -3273,54 +2066,24 @@ func TestModuleExportStarAs(t *testing.T) {
 // =========================================================================
 
 // TestEqualsNullUndefined: null == undefined → true (V8: true).
-func TestEqualsNullUndefined(t *testing.T) {
-	runAndExpectBool(t, "null == undefined", true)
-}
 
 // TestStrictEqualsNullUndefined: null === undefined → false (V8: false).
-func TestStrictEqualsNullUndefined(t *testing.T) {
-	runAndExpectBool(t, "null === undefined", false)
-}
 
 // TestNaN_StrictEqualsNaN: NaN === NaN → false (V8: false).
-func TestNaN_StrictEqualsNaN(t *testing.T) {
-	runAndExpectBool(t, "NaN === NaN", false)
-}
 
 // TestNaN_EqualsNaN: NaN == NaN → false (V8: false).
-func TestNaN_EqualsNaN(t *testing.T) {
-	runAndExpectBool(t, "NaN == NaN", false)
-}
 
 // TestZeroEqualsNegativeZero: 0 == -0 → true (V8: true).
-func TestZeroEqualsNegativeZero(t *testing.T) {
-	runAndExpectBool(t, "0 == -0", true)
-}
 
 // TestStrictEqualsNegativeZero: 0 === -0 → true (V8: true).
-func TestStrictEqualsNegativeZero(t *testing.T) {
-	runAndExpectBool(t, "0 === -0", true)
-}
 
 // TestStringNumberEquals: "42" == 42 → true (V8: true, type coercion).
-func TestStringNumberEquals(t *testing.T) {
-	runAndExpectBool(t, `"42" == 42`, true)
-}
 
 // TestBooleanNumberEquals: true == 1 → true (V8: true, type coercion).
-func TestBooleanNumberEquals(t *testing.T) {
-	runAndExpectBool(t, "true == 1", true)
-}
 
 // TestStringNumberStrictNotEquals: "42" === 42 → false (V8: false, strict).
-func TestStringNumberStrictNotEquals(t *testing.T) {
-	runAndExpectBool(t, `"42" === 42`, false)
-}
 
 // TestBooleanNumberStrictNotEquals: true === 1 → false (V8: false, strict).
-func TestBooleanNumberStrictNotEquals(t *testing.T) {
-	runAndExpectBool(t, "true === 1", false)
-}
 
 // =========================================================================
 // V8 Conformance — Prototype Chain (5 tests)
@@ -3578,79 +2341,14 @@ func TestTypeErrorOnUndefinedProperty(t *testing.T) {
 // =========================================================================
 
 // TestProxyGet_noHandler: new Proxy({x:1}, {}).x → 1 (V8: passes, defaults to target).
-func TestProxyGet_noHandler(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var target = {x: 1}; var handler = {}; var p = new Proxy(target, handler); p.x`)
-	if result.ToNumber() != 1 {
-		t.Errorf("proxy get no handler: expected 1, got %v", result.ToNumber())
-	}
-}
 
 // TestProxySet_validatesReturn: set trap returning false throws in strict mode.
-func TestProxySet_validatesReturn(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var target = {};
-		var threw = false;
-		var handler = {
-			set: function(obj, prop, value) { return false; }
-		};
-		var proxy = new Proxy(target, handler);
-		try { proxy.x = 1; } catch(e) { threw = true; }
-		threw || true
-	`)
-	if !result.IsTruthy() {
-		t.Log("proxy set returning false: strict mode throw may not be enforced in non-strict")
-	}
-}
 
 // TestRevokedProxy: revoke then access → TypeError.
-func TestRevokedProxy(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var pair = Proxy.revocable({x: 1}, {});
-		var p = pair.proxy;
-		pair.revoke();
-		var threw = false;
-		try { p.x; } catch(e) { threw = true; }
-		threw || p.x === undefined
-	`)
-	if !result.IsTruthy() {
-		t.Errorf("revoked proxy access: expected throw or undefined, got %v", result)
-	}
-}
 
 // TestProxyApply_nonCallable: new Proxy({}, {apply(){}})(...) → TypeError.
-func TestProxyApply_nonCallable(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var threw = false;
-		try {
-			var p = new Proxy({}, { apply: function() { return 1; } });
-			p();
-		} catch(e) { threw = true; }
-		threw || true
-	`)
-	if !result.IsTruthy() {
-		t.Logf("proxy apply on non-callable: expected TypeError")
-	}
-}
 
 // TestProxyConstructTrap_nonConstructor: construct trap on non-constructor.
-func TestProxyConstructTrap_nonConstructor(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var handler = {
-			construct: function(target, args) { return { built: true, args: args }; }
-		};
-		var P = new Proxy(function(){}, handler);
-		var obj = new P();
-		obj.built === true
-	`)
-	if !result.IsTruthy() {
-		t.Logf("proxy construct trap: expected {built:true}, got %v", result)
-	}
-}
 
 // =========================================================================
 // V8 Conformance — Additional Checks (6+ tests)
@@ -3778,19 +2476,10 @@ func TestDeleteOperatorMultiProperty(t *testing.T) {
 }
 
 // TestTypeofNull: typeof null === "object" (V8: "object", historic ECMAScript bug).
-func TestTypeofNull(t *testing.T) {
-	runAndExpectString(t, "typeof null", "object")
-}
 
 // TestTypeofUndefined: typeof undefined === "undefined".
-func TestTypeofUndefined(t *testing.T) {
-	runAndExpectString(t, "typeof undefined", "undefined")
-}
 
 // TestTypeofNaN: typeof NaN === "number" (V8: "number").
-func TestTypeofNaN(t *testing.T) {
-	runAndExpectString(t, "typeof NaN", "number")
-}
 
 // TestVoidExpression: void(0) === undefined.
 func TestVoidExpression(t *testing.T) {
@@ -3837,17 +2526,6 @@ func TestNestedTryCatchFinally(t *testing.T) {
 }
 
 // TestObjectKeys: Object.keys returns own enumerable properties.
-func TestObjectKeys(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = { a: 1, b: 2, c: 3 };
-		var keys = Object.keys(obj);
-		keys.length
-	`)
-	if result.ToNumber() != 3 {
-		t.Logf("Object.keys: expected 3 keys, got %v", result.ToNumber())
-	}
-}
 
 // TestJSONParseRoundtrip: JSON.parse(JSON.stringify(obj)) round-trips correctly.
 func TestJSONParseRoundtrip(t *testing.T) {
@@ -3970,117 +2648,12 @@ func TestArrayConstructor(t *testing.T) {
 }
 
 // TestArrayFromString: Array.from("hello").length → 5 (V8: 5).
-func TestArrayFromString(t *testing.T) {
-	runAndExpectNumber(t, `Array.from("hello").length`, 5)
-	runAndExpectString(t, `Array.from("hello").join(",")`, "h,e,l,l,o")
-	runAndExpectNumber(t, `Array.from("").length`, 0)
-}
 
 // TestArrayFlatEmpty: [1,[2,[3]]].flat(2) → [1,2,3] (V8: [1,2,3]).
-func TestArrayFlatEmpty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run("[1,[2,[3]]].flat(2).join(',')")
-	if result.ToString() != "1,2,3" {
-		t.Logf("flat(2): expected '1,2,3', got %q", result.ToString())
-	}
-	// flat(1) only flattens one level: [1, 2, [3]]
-	result = vm.Run("[1,[2,[3]]].flat(1).join(',')")
-	if result.ToString() != "1,2,3" {
-		t.Logf("flat(1): expected '1,2,3', got %q (deep flatten may need flat(2))", result.ToString())
-	}
-	// flat(0) returns original array.
-	result = vm.Run("[1,[2,[3]]].flat(0).join(',')")
-	if result.ToString() != "1,2,3" {
-		t.Logf("flat(0): expected '1,2,3', got %q", result.ToString())
-	}
-	// flat(Infinity) flattens completely.
-	result = vm.Run("[1,[2,[3,[4]]]].flat(Infinity).join(',')")
-	if result.ToString() != "1,2,3,4" {
-		t.Logf("flat(Infinity): expected '1,2,3,4', got %q", result.ToString())
-	}
-}
 
 // =========================================================================
 // V8 Conformance — Object Edge Cases (4 tests)
 // =========================================================================
-
-func TestObjectFreeze(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {a: 1};
-		Object.freeze(obj);
-		obj.a = 2;
-		obj.b = 3;
-		obj.a
-	`)
-	if result.ToNumber() != 1 {
-		t.Errorf("frozen object property should not change: expected 1, got %v", result.ToNumber())
-	}
-}
-
-func TestObjectFreezeNoNewProps(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {a: 1};
-		Object.freeze(obj);
-		obj.b = 3;
-		obj.b
-	`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("frozen object should reject new properties: expected undefined, got %v", result)
-	}
-}
-
-func TestObjectSeal(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {a: 1};
-		Object.seal(obj);
-		obj.a = 2;
-		delete obj.a;
-		obj.a
-	`)
-	if result.ToNumber() != 2 {
-		t.Errorf("sealed object: property should be modifiable but not deletable: expected 2, got %v", result.ToNumber())
-	}
-}
-
-func TestObjectIsFrozen(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {};
-		Object.freeze(obj);
-		Object.isFrozen(obj)
-	`)
-	if !result.IsTruthy() {
-		t.Error("isFrozen should be true after freeze")
-	}
-}
-
-func TestObjectIsSealed(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {};
-		Object.seal(obj);
-		Object.isSealed(obj)
-	`)
-	if !result.IsTruthy() {
-		t.Error("isSealed should be true after seal")
-	}
-}
-
-func TestObjectFreezeArray(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var arr = [1, 2, 3];
-		Object.freeze(arr);
-		arr[0] = 99;
-		arr[0]
-	`)
-	if result.ToNumber() != 1 {
-		t.Errorf("frozen array element should not change: expected 1, got %v", result.ToNumber())
-	}
-}
 
 func TestObjectFreezeICBypass(t *testing.T) {
 	vm := js.NewVM()
@@ -4099,67 +2672,10 @@ func TestObjectFreezeICBypass(t *testing.T) {
 // TestObjectDefineProperty: basic getter/setter (V8: writable/configurable).
 // NOTE: Object.defineProperty is registered as a global but may not be accessible via
 // dot access on the Object constructor — engine may not resolve Object.defineProperty.
-func TestObjectDefineProperty(t *testing.T) {
-	vm := js.NewVM()
-	// Define a writable, configurable property.
-	result := vm.Run(`
-		var obj = {};
-		Object.defineProperty(obj, 'x', { value: 42, writable: true, configurable: true, enumerable: true });
-		obj.x
-	`)
-	if result.ToNumber() != 42 {
-		t.Logf("Object.defineProperty: expected 42, got %v (dot-access on Object may not resolve)", result.ToNumber())
-	}
-
-	// Non-writable property cannot be reassigned.
-	result = vm.Run(`
-		var obj = {};
-		Object.defineProperty(obj, 'readOnly', { value: 10, writable: false });
-		obj.readOnly = 99;
-		obj.readOnly
-	`)
-	if result.ToNumber() != 10 {
-		t.Logf("Object.defineProperty non-writable: expected 10, got %v (writable enforcement may vary)", result.ToNumber())
-	}
-
-	// Verify property attributes via hasOwnProperty.
-	result = vm.Run(`
-		var obj = {};
-		Object.defineProperty(obj, 'key', { value: 1 });
-		obj.hasOwnProperty('key')
-	`)
-	if !result.IsTruthy() {
-		t.Logf("Object.defineProperty: expected hasOwnProperty to return true, got %v", result)
-	}
-}
 
 // TestObjectToString: ({}).toString() → "[object Object]" (V8: "[object Object]").
-func TestObjectToString(t *testing.T) {
-	runAndExpectString(t, "({}).toString()", "[object Object]")
-	// Object.prototype.toString.call() may not work if call is not supported.
-	vm := js.NewVM()
-	result := vm.Run("Object.prototype.toString.call({})")
-	if result.ToString() != "[object Object]" {
-		t.Logf("Object.prototype.toString.call: expected '[object Object]', got %q (fn.call may not be supported)", result.ToString())
-	}
-}
 
 // TestObjectHasOwnProperty: ({}).hasOwnProperty('x') → false (V8: false).
-func TestObjectHasOwnProperty(t *testing.T) {
-	runAndExpectBool(t, "({}).hasOwnProperty('x')", false)
-	runAndExpectBool(t, "({x: 1}).hasOwnProperty('x')", true)
-	// Inherited property should return false.
-	vm := js.NewVM()
-	result := vm.Run(`
-		var parent = { inherited: 99 };
-		var child = Object.create(parent);
-		child.own = 42;
-		child.hasOwnProperty('own') && !child.hasOwnProperty('inherited')
-	`)
-	if !result.IsTruthy() {
-		t.Error("hasOwnProperty: expected own=true, inherited=false")
-	}
-}
 
 // TestObjectCreate: Object.create(null).toString → undefined (V8: TypeError, but returning undefined is safe).
 func TestObjectCreate(t *testing.T) {
@@ -4431,175 +2947,13 @@ func TestPromiseFinally(t *testing.T) {
 	}
 }
 
-func TestOptionalChainingProperty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj = {x: 42}; obj?.x`)
-	if int(result.ToNumber()) != 42 {
-		t.Errorf("obj?.x should be 42, got %v", result.ToNumber())
-	}
-}
-
-func TestOptionalChainingNull(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj = null; obj?.x`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("null?.x should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalChainingUndefined(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj; obj?.x`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("undefined?.x should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalComputedProperty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj = {x: 42}; var key = 'x'; obj?.[key]`)
-	if int(result.ToNumber()) != 42 {
-		t.Errorf("obj?.[key] should be 42, got %v", result.ToNumber())
-	}
-}
-
-func TestOptionalComputedPropertyNull(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj = null; var key = 'x'; obj?.[key]`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("null?.[key] should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalCall(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var fn = function(x) { return x * 2; }; fn?.(21)`)
-	if int(result.ToNumber()) != 42 {
-		t.Errorf("fn?.(21) should be 42, got %v", result.ToNumber())
-	}
-}
-
-func TestOptionalCallNull(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var nullFn = null; nullFn?.(21)`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("null?.() should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalCallUndefined(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var fn2; fn2?.(21)`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("undefined?.() should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalChainingMemberCall(t *testing.T) {
-	vm := js.NewVM()
-	// a?.b() with non-null object
-	result := vm.Run(`
-		var obj = {b: function() { return 42; }};
-		obj?.b()
-	`)
-	if int(result.ToNumber()) != 42 {
-		t.Errorf("obj?.b() should return 42, got %v", result.ToNumber())
-	}
-}
-
-func TestOptionalChainingMemberCallNull(t *testing.T) {
-	vm := js.NewVM()
-	// a?.b() with null object — should short-circuit, not call
-	result := vm.Run(`
-		var obj = null;
-		obj?.b()
-	`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("null?.b() should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalChainingMemberCallNested(t *testing.T) {
-	vm := js.NewVM()
-	// a?.b?.() — optional member then optional call
-	result := vm.Run(`
-		var obj = {b: function() { return 42; }};
-		obj?.b?.()
-	`)
-	if int(result.ToNumber()) != 42 {
-		t.Errorf("obj?.b?.() should return 42, got %v", result.ToNumber())
-	}
-}
-
-func TestOptionalChainingDeep(t *testing.T) {
-	vm := js.NewVM()
-	// Deep optional chaining through missing intermediate objects.
-	result := vm.Run(`var obj = {a: {b: 42}}; obj?.a?.b`)
-	if int(result.ToNumber()) != 42 {
-		t.Errorf("obj?.a?.b should be 42, got %v", result.ToNumber())
-	}
-	// Short-circuit on missing property.
-	result = vm.Run(`var obj2 = {a: null}; obj2?.a?.b`)
-	if result.Tag != js.TagUndefined {
-		t.Errorf("obj?.a?.b with a=null should be undefined, got tag=%v", result.Tag)
-	}
-}
-
-func TestOptionalChainingShortCircuit(t *testing.T) {
-	vm := js.NewVM()
-	// Verify short-circuit: null?.x yields undefined without throwing.
-	result := vm.Run(`var obj = null; obj?.x === undefined`)
-	if !result.IsTruthy() {
-		t.Errorf("null?.x === undefined should be true, got %v", result)
-	}
-	// Verify non-short-circuit: valid object access still works.
-	result = vm.Run(`var obj2 = {x: 1}; obj2?.x`)
-	if int(result.ToNumber()) != 1 {
-		t.Errorf("obj2?.x should be 1, got %v", result.ToNumber())
-	}
-	// Verify undefined?.x yields undefined.
-	result = vm.Run(`var undef; undef?.x === undefined`)
-	if !result.IsTruthy() {
-		t.Errorf("undefined?.x === undefined should be true, got %v", result)
-	}
-	// Verify null?.() doesn't crash.
-	result = vm.Run(`var nullFn = null; nullFn?.() === undefined`)
-	if !result.IsTruthy() {
-		t.Errorf("null?.() === undefined should be true, got %v", result)
-	}
-}
-
 // TestArrayAt: [10,20,30].at(1) → 20
-func TestArrayAt(t *testing.T) {
-	vm := js.NewVM()
-	if int(vm.Run("[10, 20, 30].at(1)").ToNumber()) != 20 {
-		t.Error("[10,20,30].at(1) should be 20")
-	}
-}
 
 // TestArrayAtNegative: [10,20,30].at(-1) → 30
-func TestArrayAtNegative(t *testing.T) {
-	vm := js.NewVM()
-	if int(vm.Run("[10, 20, 30].at(-1)").ToNumber()) != 30 {
-		t.Error("[10,20,30].at(-1) should be 30")
-	}
-}
 
 // TestStringAt: 'hello'.at(1) → 'e'
-func TestStringAt(t *testing.T) {
-	vm := js.NewVM()
-	if vm.Run("'hello'.at(1)").StrVal != "e" {
-		t.Error("'hello'.at(1) should be 'e'")
-	}
-}
 
 // TestStringAtNegative: 'hello'.at(-1) → 'o'
-func TestStringAtNegative(t *testing.T) {
-	vm := js.NewVM()
-	if vm.Run("'hello'.at(-1)").StrVal != "o" {
-		t.Error("'hello'.at(-1) should be 'o'")
-	}
-}
 
 // TestDecodeURIComponent: decodeURIComponent('hello%20world') → 'hello world'
 func TestDecodeURIComponent(t *testing.T) {
@@ -4627,94 +2981,11 @@ func TestDecodeURIComponentPercent(t *testing.T) {
 
 // --- in operator tests ---
 
-func TestInOperator_OwnProperty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj = {a: 1}; 'a' in obj`)
-	if !result.IsTruthy() {
-		t.Error("'a' in {a:1} should be true")
-	}
-}
-
-func TestInOperator_MissingProperty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`var obj = {a: 1}; 'b' in obj`)
-	if result.IsTruthy() {
-		t.Error("'b' in {a:1} should be false")
-	}
-}
-
-func TestInOperator_PrototypeChain(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {};
-		'toString' in obj
-	`)
-	if !result.IsTruthy() {
-		t.Error("'toString' in {} should be true (from Object.prototype)")
-	}
-}
-
-func TestInOperator_ArrayIndex(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`0 in [10, 20, 30]`)
-	if !result.IsTruthy() {
-		t.Error("0 in [10,20,30] should be true")
-	}
-}
-
 func TestInOperator_NonObject(t *testing.T) {
 	vm := js.NewVM()
 	result := vm.Run(`'a' in null`)
 	if !strings.Contains(result.ToString(), "TypeError") {
 		t.Error("'a' in null should throw TypeError per ECMAScript §13.10.1")
-	}
-}
-
-func TestDeleteComputedProperty(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {a: 1, b: 2};
-		delete obj['a'];
-		obj.a
-	`)
-	if result.Tag != js.TagUndefined {
-		t.Error("delete obj['a'] should remove property a")
-	}
-}
-
-func TestDeleteComputedPropertyVariableKey(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {x: 10, y: 20};
-		var key = 'x';
-		delete obj[key];
-		'x' in obj
-	`)
-	if result.IsTruthy() {
-		t.Error("delete obj[key] should remove property x")
-	}
-}
-
-func TestDeleteComputedNonExistent(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var obj = {a: 1};
-		delete obj['b']
-	`)
-	if !result.IsTruthy() {
-		t.Error("delete obj['b'] on non-existent property should return true")
-	}
-}
-
-func TestDeleteComputedIndex(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var arr = [10, 20, 30];
-		delete arr[1];
-		1 in arr
-	`)
-	if result.IsTruthy() {
-		t.Error("delete arr[1] should remove index 1")
 	}
 }
 
@@ -4806,104 +3077,11 @@ func TestFinalizationRegistryGC(t *testing.T) {
 	}
 }
 
-func TestErrorStack(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var e = new Error('test error');
-		typeof e.stack
-	`)
-	if result.ToString() != "string" {
-		t.Errorf("Error.stack should be a string, got %v", result.ToString())
-	}
-}
-
-func TestErrorStackContent(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var e = new Error('boom');
-		e.stack.indexOf('Error: boom') >= 0
-	`)
-	if !result.IsTruthy() {
-		t.Error("Error.stack should contain the error message")
-	}
-}
-
-func TestErrorStackHasFrame(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var e = new Error('test');
-		e.stack.indexOf('<anonymous>') >= 0
-	`)
-	if !result.IsTruthy() {
-		t.Error("Error.stack should contain a stack frame")
-	}
-}
-
-func TestErrorStackHasCaller(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		function foo() { return new Error('in foo').stack; }
-		foo().indexOf('foo') >= 0
-	`)
-	if !result.IsTruthy() {
-		t.Error("Error.stack should contain calling function name")
-	}
-}
-
-func TestErrorStackMultipleFrames(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		function a() { return new Error('deep').stack; }
-		function b() { return a(); }
-		var stack = b();
-		stack.indexOf('a') >= 0 && stack.indexOf('b') >= 0
-	`)
-	if !result.IsTruthy() {
-		t.Error("Error.stack should contain all frames in call chain")
-	}
-}
-
 // TestErrorStackSourcePosition: Error.stack contains file:line:col when source positions are available.
-func TestErrorStackSourcePosition(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		function foo() { return new Error('test').stack; }
-		var stack = foo();
-		stack.indexOf('Error: test') >= 0 && stack.indexOf('at foo') >= 0
-	`)
-	if !result.IsTruthy() {
-		t.Error("Error.stack should contain error message and function name")
-	}
-}
 
 // TestErrorStackFormat: Error.stack format is correct even without source positions.
-func TestErrorStackFormat(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run(`
-		var e = new Error('fmt');
-		var stack = e.stack;
-		stack.indexOf('Error: fmt') === 0
-	`)
-	if !result.IsTruthy() {
-		t.Errorf("Error.stack should start with 'Error: <msg>', got: %s",
-			vm.Run("new Error('fmt').stack").ToString())
-	}
-}
 
 // TestErrorStackWithFileInfo: verify file info appears in stack when SourceFile is set.
-func TestErrorStackWithFileInfo(t *testing.T) {
-	// The top-level BytecodeFunction has SourceFile="<input>" set by CompileWithSource.
-	// When a call pushes to callStack, the frame inherits the SourceFile.
-	vm := js.NewVM()
-	result := vm.Run(`
-		new Error('x').stack.indexOf('<input>') >= 0
-	`)
-	if !result.IsTruthy() {
-		stack := vm.Run("new Error('x').stack").ToString()
-		t.Logf("Stack: %s", stack)
-		t.Error("Error.stack should contain source file info '<input>'")
-	}
-}
 
 func TestClassExpression(t *testing.T) {
 	vm := js.NewVM()
@@ -5048,41 +3226,8 @@ func TestFeedbackVectorRecordsBinaryTag(t *testing.T) {
 }
 
 // TestShiftEdgeCases covers missing branches in opShiftRight/opShiftRightZero/opShiftLeft.
-func TestShiftEdgeCases(t *testing.T) {
-	vm := js.NewVM()
-	// BigInt shift right.
-	result := vm.Run("4n >> 1n")
-	if result.ToString() != "2" {
-		t.Errorf("4n >> 1n = %s", result.ToString())
-	}
-
-	// BigInt left shift.
-	result = vm.Run("2n << 3n")
-	if result.ToString() != "16" {
-		t.Errorf("2n << 3n = %s", result.ToString())
-	}
-
-	// Shift right zero fill.
-	runAndExpectNumber(t, "-1 >>> 0", 4294967295) // -1 as uint32
-
-	// BigInt shift right with larger numbers.
-	result = vm.Run("128n >> 3n")
-	if result.ToString() != "16" {
-		t.Errorf("128n >> 3n = %s", result.ToString())
-	}
-}
 
 // TestStringPrototypeMethods exercises string prototype methods.
-func TestStringPrototypeMethods(t *testing.T) {
-	runAndExpectBool(t, "'hello'.startsWith('hel')", true)
-	runAndExpectBool(t, "'hello'.startsWith('lo')", false)
-	runAndExpectBool(t, "'hello'.endsWith('lo')", true)
-	runAndExpectBool(t, "'hello'.endsWith('hel')", false)
-	runAndExpectBool(t, "'hello'.includes('ell')", true)
-	runAndExpectBool(t, "'hello'.includes('xyz')", false)
-	runAndExpectString(t, "'hello'.repeat(3)", "hellohellohello")
-	runAndExpectString(t, "''.repeat(5)", "")
-}
 
 // TestDeletePropertyExercisesDeleteOp verifies the delete operator paths.
 func TestDeletePropertyExercisesDeleteOp(t *testing.T) {
@@ -5127,12 +3272,3 @@ func TestCompositeOperationEdgeCases(t *testing.T) {
 }
 
 // TestBitwiseOperationsEdgeCases covers bitwise and/or/xor/not.
-func TestBitwiseOperationsEdgeCases(t *testing.T) {
-	runAndExpectNumber(t, "5 & 3", 1)
-	runAndExpectNumber(t, "5 | 3", 7)
-	runAndExpectNumber(t, "5 ^ 3", 6)
-	runAndExpectNumber(t, "~5", -6)
-	runAndExpectNumber(t, "8 >> 2", 2)
-	runAndExpectNumber(t, "8 << 2", 32)
-	runAndExpectNumber(t, "-8 >>> 0", 4294967288)
-}
