@@ -35,7 +35,7 @@ import (
 )
 
 func main() {
-    result := gov8.Evaluate("2 + 2")
+    result := v8go.Evaluate("2 + 2")
     fmt.Println(result) // 4
 }
 ```
@@ -43,7 +43,7 @@ func main() {
 ## Using the Engine
 
 ```go
-engine := gov8.NewEngine()
+engine := v8go.NewEngine()
 engine.Evaluate(`
     function fibonacci(n) {
         if (n <= 1) return n;
@@ -249,7 +249,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 |---------|-------|-------------|
 | `pkg/js/` | 31,000 | Bytecode VM, parser, compiler, builtins, Hidden Classes, Inline Caching, feedback vectors |
 | `pkg/jit/` | 12,000 | Sparkplug (Tier 1), TurboFan (Tier 2), ARM64/AMD64 assembler, deoptimization, shadow stack, GC bridge |
-| `pkg/gov8/` | 55 | Public API: `Evaluate()`, `NewEngine()`, `Version()` |
+| `gov8.go` | 55 | Public API: `Evaluate()`, `NewEngine()`, `Version()` |
 | `pkg/dom/` | 2,500 | DOM bindings: `document.getElementById`, `element.style`, `classList`, event handling |
 | `pkg/net/` | 1,500 | Browser networking: `fetch()`, `XMLHttpRequest`, URL parsing |
 | `pkg/parser/` | 3,000 | HTML tokenizer + tree builder, CSS parser |

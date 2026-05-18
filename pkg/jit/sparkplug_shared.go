@@ -8,7 +8,7 @@ import (
 	"github.com/lucasdss/v8go/pkg/js"
 )
 
-// Sparkplug is GoV8's baseline JIT compiler.
+// Sparkplug is V8Go's baseline JIT compiler.
 const (
 	// PrologueSize is the number of bytes in the generated prologue.
 	PrologueSize = 64

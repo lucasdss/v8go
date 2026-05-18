@@ -1,7 +1,7 @@
-// disasm.go — Bytecode disassembler for GoV8.
+// disasm.go — Bytecode disassembler for V8Go.
 //
 // Implements the "Loop-to-Spec" cycle from gojs.md Section 4:
-// enables comparison of GoV8 bytecode against V8 Ignition --print-bytecode output.
+// enables comparison of V8Go bytecode against V8 Ignition --print-bytecode output.
 package js
 
 import (

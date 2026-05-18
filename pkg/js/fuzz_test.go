@@ -1,4 +1,4 @@
-// fuzz_test.go — Fuzzing tests for the GoV8 JS engine.
+// fuzz_test.go — Fuzzing tests for the V8Go JS engine.
 //
 // Per gojs.md Section 5: feed the parser random strings to ensure
 // the engine doesn't panic on malformed JavaScript.

@@ -24,7 +24,7 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 		go func() {
 			rxAddr, err := vm.compiler.CompileSparkplug(bf)
 			if err != nil {
-				fmt.Fprintf(os.Stderr, "[GoV8] Sparkplug compile error: %v\n", err)
+				fmt.Fprintf(os.Stderr, "[V8Go] Sparkplug compile error: %v\n", err)
 				vmJITMu.Lock()
 				vm.jitErrors = append(vm.jitErrors, fmt.Errorf("sparkplug: %w", err))
 				vmJITMu.Unlock()

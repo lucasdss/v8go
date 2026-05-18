@@ -1,11 +1,11 @@
-// Package gov8 provides a clean, V8-inspired public API for the GoV8 JS engine.
+// Package v8go provides a clean, V8-inspired public API for the V8Go JS engine.
 //
 // This package wraps the internal js engine and exposes only what users need:
 // a simple Evaluate() function and a Configurable Engine for advanced use.
 //
 // Usage:
 //
-//	result := gov8.Evaluate("1 + 2")
+//	result := v8go.Evaluate("1 + 2")
 //	fmt.Println(result) // 3
 package v8go
 
@@ -48,7 +48,7 @@ func Evaluate(src string) js.JSValue {
 	return vm.Run(src)
 }
 
-// Version returns the GoV8 engine version.
+// Version returns the V8Go engine version.
 func Version() string {
-	return "GoV8/1.0 (V8-compatible JavaScript engine in Go)"
+	return "V8Go/1.0 (V8-compatible JavaScript engine in Go)"
 }

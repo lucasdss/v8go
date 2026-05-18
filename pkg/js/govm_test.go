@@ -1,4 +1,4 @@
-// govm_test.go — Unit tests for the GoV8 custom JavaScript engine.
+// govm_test.go — Unit tests for the V8Go custom JavaScript engine.
 //
 // Tests every bytecode instruction, as prescribed by gojs.md:
 // "Every bytecode instruction must have a unit test."
@@ -3739,7 +3739,7 @@ func TestEvalNonStringObject(t *testing.T) {
 }
 
 // TestEvalInStrictMode: eval("var x=1") in strict mode doesn't leak.
-// NOTE: eval() is now implemented in GoV8 via indirect eval (global scope).
+// NOTE: eval() is now implemented in V8Go via indirect eval (global scope).
 func TestEvalInStrictMode(t *testing.T) {
 	vm := js.NewVM()
 	result := vm.Run(`"use strict"; var xx = 1; eval("xx + 41")`)

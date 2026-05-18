@@ -47,7 +47,7 @@ V8 uses a generational, mostly concurrent garbage collector.
 ### Part 2: AI Implementation Plan (Golang)
 
 **System Prompt Instruction for the Implementing AI:**
-*"You are an expert systems programmer tasked with building 'GoV8', a clean-room implementation of the V8 JavaScript engine written in Go. You must adapt V8's C++ paradigms to idiomatic, high-performance Go, handling the constraints of Go's own Garbage Collector and memory model. Execute the following plan sequentially."*
+*"You are an expert systems programmer tasked with building 'V8Go', a clean-room implementation of the V8 JavaScript engine written in Go. You must adapt V8's C++ paradigms to idiomatic, high-performance Go, handling the constraints of Go's own Garbage Collector and memory model. Execute the following plan sequentially."*
 
 #### Phase 1: Core Types, Memory, and Tagging
 
@@ -144,4 +144,4 @@ V8 uses a generational, mostly concurrent garbage collector.
 
 
 2. **Go/JS Interop:**
-* *Directive:* Create an API similar to V8's C++ API (e.g., `v8.NewFunctionTemplate()`) allowing Go developers to bind native Go functions to JavaScript, seamlessly converting between Go `string`/`int` and GoV8 `JSValue`.
+* *Directive:* Create an API similar to V8's C++ API (e.g., `v8.NewFunctionTemplate()`) allowing Go developers to bind native Go functions to JavaScript, seamlessly converting between Go `string`/`int` and V8Go `JSValue`.

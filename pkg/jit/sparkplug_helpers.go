@@ -19,7 +19,7 @@ import (
 	"github.com/lucasdss/v8go/pkg/js"
 )
 
-// Sparkplug is GoV8's baseline JIT compiler. It translates bytecode to
+// Sparkplug is V8Go's baseline JIT compiler. It translates bytecode to
 // native machine code for fast execution. The shadow stack integration
 // points: prologue setup and epilogue teardown are defined here.
 //

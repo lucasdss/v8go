@@ -1,4 +1,4 @@
-// Package js — GoV8: custom JavaScript engine implementation.
+// Package js — V8Go: custom JavaScript engine implementation.
 //
 // value.go — JSValue: the fundamental type representing all JavaScript values.
 // Uses a tagged union approach compatible with Go's GC rather than V8's Smi pointer tagging.
