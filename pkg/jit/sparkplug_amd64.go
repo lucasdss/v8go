@@ -1027,7 +1027,13 @@ func emitAMD64BitwiseFast(as *Assembler, instr *js.Instruction, op int, deoptStu
 	as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
 	as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Lhs.NumVal
 	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
+	// Check for CVTTSD2SI overflow (INT64_MIN sentinel for values >= 2^63).
+	as.AMD64_MOV_RI(REG_R8, 0x8000000000000000)
+	as.AMD64_CMP_RR(REG_R9, REG_R8)
+	as.AMD64_JE(slowPath)
 	as.AMD64_CVTTSD2SI(REG_R11, REG_X1)
+	as.AMD64_CMP_RR(REG_R11, REG_R8)
+	as.AMD64_JE(slowPath)
 
 	// Mask to 32 bits (JS ToInt32/ToUint32 semantics).
 	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
@@ -1079,6 +1085,10 @@ func emitAMD64BitwiseNot(as *Assembler, instr *js.Instruction, deoptStub *Label)
 	// Convert float64 → int64 → NOT → float64.
 	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
 	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
+	// Check for CVTTSD2SI overflow (INT64_MIN sentinel for values >= 2^63).
+	as.AMD64_MOV_RI(REG_R8, 0x8000000000000000)
+	as.AMD64_CMP_RR(REG_R9, REG_R8)
+	as.AMD64_JE(slowPath)
 
 	// Mask to 32 bits (JS ToInt32 semantics).
 	as.AMD64_MOV_RI(REG_R11, 0xFFFFFFFF)
@@ -1129,7 +1139,13 @@ func emitAMD64ShiftFast(as *Assembler, instr *js.Instruction, op int, deoptStub 
 	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Regs[lhs].NumVal (LHS = value)
 	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS = shift count)
 	as.AMD64_CVTTSD2SI(REG_R9, REG_X0) // R9 = int64(LHS value)
+	// Check for CVTTSD2SI overflow (INT64_MIN sentinel for values >= 2^63).
+	as.AMD64_MOV_RI(REG_R8, 0x8000000000000000)
+	as.AMD64_CMP_RR(REG_R9, REG_R8)
+	as.AMD64_JE(slowPath)
 	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(RHS shift count)
+	as.AMD64_CMP_RR(REG_R11, REG_R8)
+	as.AMD64_JE(slowPath)
 
 	// Mask value to 32 bits (JS ToInt32 semantics).
 	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
@@ -1253,7 +1269,7 @@ func emitAMD64LogicalAnd(as *Assembler, instr *js.Instruction, deoptStub *Label)
 	as.AMD64_AND_RR(REG_R10, REG_R9)
 	as.AMD64_MOV_RI(REG_R9, 0x0300)
 	as.AMD64_CMP_RR(REG_R10, REG_R9)
-	as.AMD64_JNE(loadRhs) // not number but truthy → load rhs
+	as.AMD64_JNE(checkBool) // not number → check if boolean
 
 	// Check if NumVal == 0.0 or NaN.
 	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
@@ -1263,6 +1279,15 @@ func emitAMD64LogicalAnd(as *Assembler, instr *js.Instruction, deoptStub *Label)
 	as.AMD64_JE(done)  // 0.0 → falsy → keep acc
 	as.AMD64_JP(done)  // NaN → falsy → keep acc
 	// Non-zero number → truthy → load rhs.
+	as.AMD64_JMP(loadRhs)
+
+	// Check if boolean (TagBoolean = 0x0200). Boolean false already handled above.
+	as.AMD64_Bind(checkBool)
+	as.AMD64_MOV_RI(REG_R9, 0x0200)
+	as.AMD64_CMP_RR(REG_R10, REG_R9) // R10 = masked tag
+	as.AMD64_JE(loadRhs)              // boolean true → truthy → load rhs
+	// String, Object, or other type → deopt for correct falsiness evaluation.
+	as.AMD64_JMP(deoptStub)
 
 	// Load rhs.
 	as.AMD64_Bind(loadRhs)
@@ -1284,6 +1309,7 @@ func emitAMD64LogicalAnd(as *Assembler, instr *js.Instruction, deoptStub *Label)
 func emitAMD64LogicalOr(as *Assembler, instr *js.Instruction, deoptStub *Label) {
 	rhs := int(instr.OperandA)
 	rhsSlot := rhs * jsValueSize
+	slowPath := NewLabel()
 	loadRhs := NewLabel()
 	done := NewLabel()
 
@@ -1314,7 +1340,7 @@ func emitAMD64LogicalOr(as *Assembler, instr *js.Instruction, deoptStub *Label) 
 	as.AMD64_AND_RR(REG_R10, REG_R9)
 	as.AMD64_MOV_RI(REG_R9, 0x0300)
 	as.AMD64_CMP_RR(REG_R10, REG_R9)
-	as.AMD64_JNE(done) // not number → truthy → keep acc
+	as.AMD64_JNE(slowPath) // not number → deopt (strings, objects need runtime falsiness)
 
 	// Check if NumVal == 0.0 or NaN.
 	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
@@ -1333,6 +1359,11 @@ func emitAMD64LogicalOr(as *Assembler, instr *js.Instruction, deoptStub *Label) 
 		as.AMD64_MOV_LOAD(REG_RCX, REG_R15, int8(rhsSlot+i))
 		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+i))
 	}
+	as.AMD64_JMP(done)
+
+	// slowPath: reached when value type needs runtime falsiness check (string, object, etc.)
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
 
 	as.AMD64_Bind(done)
 }
@@ -1492,16 +1523,34 @@ func emitAMD64ModFast(as *Assembler, instr *js.Instruction, deoptStub *Label) {
 
 	// Convert to int64 and do integer modulo.
 	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)  // R9 = int64(LHS) = dividend
+	// Check for CVTTSD2SI overflow (INT64_MIN sentinel for values >= 2^63).
+	as.AMD64_MOV_RI(REG_R8, 0x8000000000000000)
+	as.AMD64_CMP_RR(REG_R9, REG_R8)
+	as.AMD64_JE(slowPath)
 	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(RHS) = divisor
+	as.AMD64_CMP_RR(REG_R11, REG_R8)
+	as.AMD64_JE(slowPath)
 
 	// Sign-extend RAX for IDIV.
 	as.AMD64_MOV_RR(REG_RAX, REG_R9) // RAX = dividend (LHS)
+	// Guard against INT64_MIN / -1 which causes #DE hardware exception.
+	// INT64_MIN % -1 == 0 in JS semantics.
+	as.AMD64_MOV_RI(REG_RCX, math.MaxUint64) // RCX = -1 (all bits set)
+	as.AMD64_CMP_RR(REG_R11, REG_RCX)        // divisor == -1?
+	noOverflow := NewLabel()
+	as.AMD64_JNE(noOverflow)
+	as.AMD64_XOR_RR(REG_R9, REG_R9)           // result = 0
+	as.AMD64_XOR_RR(REG_RDX, REG_RDX)         // remainder = 0
+	idivDone := NewLabel()
+	as.AMD64_JMP(idivDone)
+	as.AMD64_Bind(noOverflow)
 	// CQO: sign-extend RAX → RDX:RAX
 	as.AMD64_CQO()
 	// IDIV: RAX = RDX:RAX / divisor; RDX = remainder
 	as.AMD64_IDIV_RR(REG_R11)        // RDX = LHS % RHS
 	// Remainder in RDX.
 	as.AMD64_MOV_RR(REG_R9, REG_RDX)
+	as.AMD64_Bind(idivDone)
 
 	as.AMD64_CVTSI2SD(REG_X3, REG_R9)
 	as.AMD64_MOVQ_RX(REG_R9, REG_X3)
