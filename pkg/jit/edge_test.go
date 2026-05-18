@@ -335,10 +335,10 @@ func TestShadowStackFullCapacity(t *testing.T) {
 	if ss.Len() != 4 {
 		t.Errorf("expected len 4, got %d", ss.Len())
 	}
-	// Push at capacity — should be silently dropped.
+	// Push at capacity — should trigger dynamic growth.
 	ss.Push(unsafe.Pointer(&e))
-	if ss.Len() != 4 {
-		t.Errorf("expected len still 4 after overflow push, got %d", ss.Len())
+	if ss.Len() != 5 {
+		t.Errorf("expected len 5 after growth push, got %d", ss.Len())
 	}
 }
 

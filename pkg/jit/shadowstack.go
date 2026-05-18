@@ -44,14 +44,17 @@ func NewShadowStack(capacity int) *ShadowStack {
 }
 
 // Push adds a pointer to the shadow stack. The GC will see this pointer.
-// If the shadow stack is full, the pointer is silently dropped — capacity
-// should be sized to avoid this. The caller must ensure p is a valid
-// heap-allocated Go pointer (typically *JSObject).
+// If the shadow stack is full, capacity is doubled to accommodate growth.
+// The caller must ensure p is a valid heap-allocated Go pointer (typically *JSObject).
 func (s *ShadowStack) Push(p unsafe.Pointer) {
-	if s.top < len(s.refs) {
-		s.refs[s.top] = p
-		s.top++
+	if s.top >= len(s.refs) {
+		// Double capacity to avoid repeated reallocations.
+		newStack := make([]unsafe.Pointer, len(s.refs)*2)
+		copy(newStack, s.refs)
+		s.refs = newStack
 	}
+	s.refs[s.top] = p
+	s.top++
 }
 
 // Pop removes the topmost pointer from the shadow stack. Used when a JIT

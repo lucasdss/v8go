@@ -54,10 +54,10 @@ func TestShadowStackOverflow(t *testing.T) {
 	var a, b, c int
 	ss.Push(unsafe.Pointer(&a))
 	ss.Push(unsafe.Pointer(&b))
-	ss.Push(unsafe.Pointer(&c)) // should be silently dropped
+	ss.Push(unsafe.Pointer(&c)) // should trigger dynamic growth
 
-	if ss.Len() != 2 {
-		t.Errorf("overflow len=%d, want 2", ss.Len())
+	if ss.Len() != 3 {
+		t.Errorf("overflow len=%d, want 3", ss.Len())
 	}
 }
 
