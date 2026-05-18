@@ -40,13 +40,23 @@ func CompileTurboFan(bf *js.BytecodeFunction) (*CodeBuf, error) {
 	// Phase 2: Type specialization using IC feedback.
 	specializeTypes(g)
 
-	// Phase 3: Inline monomorphic call sites.
+	// Phase 3: JSValue escape analysis and elimination.
+	escapeInfo := analyzeEscape(g)
+	eliminateNonEscaping(g, escapeInfo)
+
+	// Phase 4: Single-basic-block redundant load elimination.
+	eliminateRedundantLoads(g)
+
+	// Phase 5: Inline monomorphic call sites.
 	inlineMonomorphicCalls(g)
 
-	// Phase 4: Linear-scan register allocation.
+	// Phase 6: Inline polymorphic call sites (guard chains).
+	inlinePolymorphicCalls(g)
+
+	// Phase 7: Linear-scan register allocation.
 	ra := allocateRegisters(g)
 
-	// Phase 5: Lower SSA to ARM64 machine code.
+	// Phase 8: Lower SSA to ARM64 machine code.
 	buf, err := lowerSSAToARM64(g, ra)
 	if err != nil {
 		return nil, fmt.Errorf("turbofan: lowering failed: %w", err)
