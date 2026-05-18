@@ -14,7 +14,11 @@ import (
 // allocFrameBufSize is the number of pre-allocated VMFrame slots in the
 // Allocator's frame buffer. 64 slots covers typical call depth without heap
 // allocation.
-const allocFrameBufSize = 64
+const (
+	allocFrameBufSize = 64
+	allocRegBufSize   = 256 * 8
+	allocObjBufSize   = 64
+)
 
 // Allocator pre-allocates buffers for frames, registers, and objects to
 // minimize GC pressure during bytecode execution. All allocation methods
@@ -39,8 +43,8 @@ type Allocator struct {
 func NewAllocator() *Allocator {
 	a := &Allocator{
 		frameBuf: make([]VMFrame, allocFrameBufSize),
-		regBuf:   make([]JSValue, 256*8),
-		objBuf:   make([]JSObject, 64),
+		regBuf:   make([]JSValue, allocRegBufSize),
+		objBuf:   make([]JSObject, allocObjBufSize),
 	}
 	a.objPool = sync.Pool{
 		New: func() interface{} { return &JSObject{} },

@@ -5,6 +5,9 @@
 // resolved fast-path access (direct array indexing instead of hash lookup).
 package js
 
+// globalsInitCap is the initial capacity for global slots and map entries.
+const globalsInitCap = 64
+
 // GlobalStore holds global variables with a slot-based fast path.
 // Slot indices are assigned at compile time (see assignGlobalSlots).
 // Direct array indexing: globalSlots[slot] = value (no hash lookup).
@@ -27,7 +30,7 @@ type GlobalStore struct {
 func NewGlobalStore() *GlobalStore {
 	return &GlobalStore{
 		M:     make(map[string]JSValue, 128),
-		slots: make([]JSValue, 0, 64),
+		slots: make([]JSValue, 0, globalsInitCap),
 	}
 }
 

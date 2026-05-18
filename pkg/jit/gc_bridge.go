@@ -49,6 +49,10 @@ type Region struct {
 // unbounded growth from code cache churn.
 const MaxRegions = 1024
 
+// gcBinarySearchThreshold is the minimum number of regions at which
+// findRegion switches from linear scan to binary search.
+const gcBinarySearchThreshold = 16
+
 var (
 	regionMu              sync.RWMutex
 	registeredRegionSlice []Region
@@ -89,7 +93,7 @@ func UnregisterRegion(start, end uintptr) {
 // Uses binary search when there are many regions (>16), linear scan otherwise.
 // Must be called with regionMu held (read lock sufficient).
 func findRegion(pc uintptr) *Region {
-	if len(registeredRegionSlice) <= 16 {
+	if len(registeredRegionSlice) <= gcBinarySearchThreshold {
 		for i := range registeredRegionSlice {
 			if pc >= registeredRegionSlice[i].Start && pc < registeredRegionSlice[i].End {
 				return &registeredRegionSlice[i]

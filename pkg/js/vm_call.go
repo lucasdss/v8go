@@ -1,6 +1,11 @@
 // vm_call.go — Function call handlers and helpers.
 package js
 
+// stackArgArraySize is the threshold for stack-allocated argument arrays.
+// arg counts ≤ this value use a fixed-size array on the stack; larger counts
+// allocate on the heap.
+const stackArgArraySize = 8
+
 // CallStackFrame represents a single frame in the JavaScript call stack.
 type CallStackFrame struct {
 	Name string
@@ -52,8 +57,8 @@ func boxString(s JSValue) *JSObject {
 func unpackArgs(frame *VMFrame, calleeReg int, argCount int) []JSValue {
 	var args []JSValue
 	if argCount > 0 {
-		if argCount <= 8 {
-			var arr [8]JSValue
+		if argCount <= stackArgArraySize {
+			var arr [stackArgArraySize]JSValue
 			args = arr[:argCount]
 		} else {
 			args = make([]JSValue, argCount)
