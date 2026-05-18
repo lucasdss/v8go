@@ -29,10 +29,10 @@ func (vm *VM) registerObject() {
 	// Set Object.prototype for instanceof checks.
 	objectCtor.Set("prototype", NewObject(ObjectPrototype))
 
-	vm.globals["Object"] = NewObject(objectCtor)
+	vm.globals.M["Object"] = NewObject(objectCtor)
 
 	// Object.defineProperty(obj, prop, descriptor)
-	vm.globals["Object.defineProperty"] = vm.createBuiltinFunction("defineProperty", func(this *JSObject, ts []JSValue) JSValue {
+	vm.globals.M["Object.defineProperty"] = vm.createBuiltinFunction("defineProperty", func(this *JSObject, ts []JSValue) JSValue {
 		_ = this
 		if len(ts) < 3 || !ts[0].IsObject() || ts[0].ObjVal == nil {
 			return Undefined

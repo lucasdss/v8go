@@ -346,7 +346,7 @@ func (vm *VM) tagAllPrototypes() {
 	// cause false cross-realm positives.
 	// Instead, iterate globals and tag only per-VM prototypes (those created
 	// during RegisterBuiltins — error prototypes, constructor prototypes, etc.).
-	for _, val := range vm.globals {
+	for _, val := range vm.globals.M {
 		if val.IsObject() && val.ObjVal != nil {
 			protoVal := val.ObjVal.Get("prototype")
 			if protoVal.IsObject() && protoVal.ObjVal != nil {
@@ -2353,10 +2353,10 @@ func opLdaGlobalSlot(vm *VM, frame *VMFrame, instr Instruction) {
 	// Fast path: direct array lookup, but verify the slot name matches.
 	// Different compilation units may assign different slot indices for the
 	// same name, so we must check the slot name to avoid reading stale values.
-	if slot < len(vm.globalSlots) && vm.globalSlotsSet[slot] &&
-		slot < len(vm.globalSlotNames) && slot < len(frame.Func.GlobalSlots) &&
-		vm.globalSlotNames[slot] == frame.Func.GlobalSlots[slot] {
-		frame.Acc = vm.globalSlots[slot]
+	if slot < vm.globals.SlotCount() && vm.globals.HasSlot(slot) &&
+		slot < len(frame.Func.GlobalSlots) &&
+		vm.globals.SlotNameMatches(slot, frame.Func.GlobalSlots[slot]) {
+		frame.Acc = vm.globals.GetSlot(slot)
 		// Update GlobalVals cache for JIT fast-path reads.
 		if slot < len(frame.Func.GlobalVals) {
 			frame.Func.GlobalVals[slot] = frame.Acc
@@ -2366,16 +2366,10 @@ func opLdaGlobalSlot(vm *VM, frame *VMFrame, instr Instruction) {
 	// Fallback: name-based lookup for builtins, funcRegistry, and globals map.
 	if slot < len(frame.Func.GlobalSlots) {
 		name := frame.Func.GlobalSlots[slot]
-		if val, ok := vm.globals[name]; ok {
-			// Cache in slot for subsequent fast-path reads, and record
-			// the name so SetGlobal can update this slot too.
-			if slot < len(vm.globalSlots) {
-				vm.globalSlots[slot] = val
-				vm.globalSlotsSet[slot] = true
-				if slot < len(vm.globalSlotNames) {
-					vm.globalSlotNames[slot] = name
-				}
-			}
+		if val, ok := vm.globals.Lookup(name); ok {
+			// Cache in slot for subsequent fast-path reads.
+			vm.globals.EnsureSlots(slot + 1)
+			vm.globals.SetSlotWithName(slot, val, name)
 			// Update GlobalVals cache for JIT fast-path reads.
 			if slot < len(frame.Func.GlobalVals) {
 				frame.Func.GlobalVals[slot] = val
@@ -2405,16 +2399,15 @@ func opLdaGlobalSlot(vm *VM, frame *VMFrame, instr Instruction) {
 
 func opStaGlobalSlot(vm *VM, frame *VMFrame, instr Instruction) {
 	slot := int(instr.OperandA)
-	if slot >= len(vm.globalSlots) {
+	if slot >= vm.globals.SlotCount() {
 		vm.ensureGlobalSlots(slot+16, frame.Func)
 	}
-	vm.globalSlots[slot] = frame.Acc
-	vm.globalSlotsSet[slot] = true
 	// Record the name at this slot for SetGlobal write-through.
 	if slot < len(frame.Func.GlobalSlots) {
 		name := frame.Func.GlobalSlots[slot]
-		vm.globalSlotNames[slot] = name
-		vm.globals[name] = frame.Acc
+		vm.globals.SetSlotWithName(slot, frame.Acc, name)
+	} else {
+		vm.globals.SetSlot(slot, frame.Acc)
 	}
 	// Update the function's GlobalVals cache for JIT fast-path reads.
 	if slot < len(frame.Func.GlobalVals) {
@@ -3266,7 +3259,7 @@ func (vm *VM) DispatchEvent(targetID, eventType string, eventData map[string]JSV
 
 	// Store event object as a global for handler code to access.
 	vm.mu.Lock()
-	vm.globals["__event__"] = NewObject(eventObj)
+	vm.globals.Set("__event__", NewObject(eventObj))
 	vm.mu.Unlock()
 
 	// Run the handler code in the VM.

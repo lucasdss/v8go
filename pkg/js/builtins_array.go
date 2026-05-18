@@ -529,5 +529,5 @@ func (vm *VM) registerArray() {
 	// Set prototype on Array constructor for instanceof checks.
 	arrayCtor.Set("prototype", NewObject(arrayProto))
 
-	vm.globals["Array"] = NewObject(arrayCtor)
+	vm.globals.M["Array"] = NewObject(arrayCtor)
 }

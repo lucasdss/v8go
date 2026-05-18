@@ -55,14 +55,14 @@ func (e *Gov8Engine) SetConsoleLogger(fn, warnFn, errFn func(args ...any)) {
 // SetLocation updates window.location seen by JavaScript.
 func (e *Gov8Engine) SetLocation(url string) {
 	e.init()
-	e.vm.globals["__location__"] = NewString(url)
+	e.vm.globals.M["__location__"] = NewString(url)
 }
 
 // SetDocumentBinder provides document.getElementById lookup.
 func (e *Gov8Engine) SetDocumentBinder(title string, lookup func(id string) any) {
 	e.init()
 	e.documentLookup = lookup
-	e.vm.globals["__docTitle__"] = NewString(title)
+	e.vm.globals.M["__docTitle__"] = NewString(title)
 }
 
 // SetDOMChangeCallback registers a callback invoked when JS mutates the DOM.
@@ -103,7 +103,7 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 
 	// Ensure the document object is available as a global so handler code
 	// can use document.getElementById and other DOM APIs.
-	if _, hasDoc := e.vm.globals["document"]; !hasDoc {
+	if _, hasDoc := e.vm.globals.M["document"]; !hasDoc {
 		docObj := NewJSObject()
 		docObj.Set("getElementById", NewObject(builtinFunc("getElementById", func(this *JSObject, args []JSValue) JSValue {
 			return e.vm.builtins["__goGetElementById"](args)
@@ -117,7 +117,7 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 		docObj.Set("querySelectorAll", NewObject(builtinFunc("querySelectorAll", func(this *JSObject, args []JSValue) JSValue {
 			return e.vm.builtins["__goQuerySelectorAll"](args)
 		})))
-		e.vm.globals["document"] = NewObject(docObj)
+		e.vm.globals.M["document"] = NewObject(docObj)
 	}
 
 	// Build synthetic event object.
@@ -137,7 +137,7 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 		return Undefined
 	})))
 
-	e.vm.globals["__event__"] = NewObject(eventObj)
+	e.vm.globals.M["__event__"] = NewObject(eventObj)
 
 	// Release lock before running handler code — the handler may trigger
 	// notifyDOMChange which also acquires the lock.

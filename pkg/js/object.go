@@ -421,7 +421,7 @@ func callBytecodeFunction(bf *BytecodeFunction, args []JSValue) JSValue {
 	// Create a minimal VM to execute the bytecode properly.
 	vm := &VM{
 		alloc:      NewAllocator(),
-		globals:    make(map[string]JSValue),
+		globals:    NewGlobalStore(),
 		builtins:   make(map[string]func(args []JSValue) JSValue),
 		consoleLog: make([]string, 0),
 	}

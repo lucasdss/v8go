@@ -20,7 +20,7 @@ func (vm *VM) registerMap() {
 		return NewObject(m)
 	}
 
-	vm.globals["Map"] = NewObject(mapCtor)
+	vm.globals.M["Map"] = NewObject(mapCtor)
 }
 
 func mapProto() *JSObject {
@@ -324,7 +324,7 @@ func (vm *VM) registerSet() {
 		return NewObject(s)
 	}
 
-	vm.globals["Set"] = NewObject(setCtor)
+	vm.globals.M["Set"] = NewObject(setCtor)
 }
 
 // --- Helpers for Set methods (TC39 proposal) ---
@@ -776,7 +776,7 @@ func (vm *VM) registerWeakMap() {
 		return NewObject(wm)
 	}
 
-	vm.globals["WeakMap"] = NewObject(weakMapCtor)
+	vm.globals.M["WeakMap"] = NewObject(weakMapCtor)
 }
 
 func weakMapProto() *JSObject {
@@ -835,7 +835,7 @@ func (vm *VM) registerWeakSet() {
 		return NewObject(ws)
 	}
 
-	vm.globals["WeakSet"] = NewObject(weakSetCtor)
+	vm.globals.M["WeakSet"] = NewObject(weakSetCtor)
 }
 
 func weakSetProto() *JSObject {

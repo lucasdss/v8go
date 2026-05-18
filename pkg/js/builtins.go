@@ -308,7 +308,7 @@ func (vm *VM) registerConsole() {
 		return Undefined
 	}))
 
-	vm.globals["console"] = NewObject(consoleObj)
+	vm.globals.M["console"] = NewObject(consoleObj)
 }
 
 
@@ -351,24 +351,14 @@ func (vm *VM) createBuiltinWithFallback(name string, defaultFn func(this *JSObje
 
 // GetGlobal returns the value of a global variable by name.
 func (vm *VM) GetGlobal(name string) JSValue {
-	if val, ok := vm.globals[name]; ok {
-		return val
-	}
-	return Undefined
+	return vm.globals.Get(name)
 }
 
 // SetGlobal sets a global variable on the VM.
 // Used by the module registry to inject import bindings before module execution.
 // Also updates the slot cache so that OpLdaGlobalSlot fast-path reads the correct value.
 func (vm *VM) SetGlobal(name string, val JSValue) {
-	vm.globals[name] = val
-	// Update any slot that maps to this name.
-	for slot, slotName := range vm.globalSlotNames {
-		if slotName == name {
-			vm.globalSlots[slot] = val
-			vm.globalSlotsSet[slot] = true
-		}
-	}
+	vm.globals.Set(name, val)
 }
 
 // RunAsync runs fn in a new goroutine. The VM's asyncWg tracks the goroutine
@@ -399,15 +389,15 @@ func (vm *VM) ClearConsoleLogs() {
 
 func (vm *VM) registerGlobalFunctions() {
 	// NaN and Infinity globals
-	vm.globals["NaN"] = NewNumber(math.NaN())
-	vm.globals["Infinity"] = NewNumber(math.Inf(1))
-	vm.globals["undefined"] = Undefined
+	vm.globals.M["NaN"] = NewNumber(math.NaN())
+	vm.globals.M["Infinity"] = NewNumber(math.Inf(1))
+	vm.globals.M["undefined"] = Undefined
 
 	// globalThis — returns the global object.
-	vm.globals["globalThis"] = vm.globalObject()
+	vm.globals.M["globalThis"] = vm.globalObject()
 
 	// parseInt(string, radix) — parses a string to integer in given radix.
-	vm.globals["parseInt"] = vm.createBuiltinFunction("parseInt", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["parseInt"] = vm.createBuiltinFunction("parseInt", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return NewNumber(math.NaN())
 		}
@@ -437,7 +427,7 @@ func (vm *VM) registerGlobalFunctions() {
 	})
 
 	// parseFloat(string) — parses a string to float.
-	vm.globals["parseFloat"] = vm.createBuiltinFunction("parseFloat", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["parseFloat"] = vm.createBuiltinFunction("parseFloat", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return NewNumber(math.NaN())
 		}
@@ -475,7 +465,7 @@ func (vm *VM) registerGlobalFunctions() {
 	})
 
 	// isNaN(value) — returns true if ToNumber(value) is NaN.
-	vm.globals["isNaN"] = vm.createBuiltinFunction("isNaN", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["isNaN"] = vm.createBuiltinFunction("isNaN", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return True
 		}
@@ -483,7 +473,7 @@ func (vm *VM) registerGlobalFunctions() {
 	})
 
 	// isFinite(value) — returns true if value is a finite number.
-	vm.globals["isFinite"] = vm.createBuiltinFunction("isFinite", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["isFinite"] = vm.createBuiltinFunction("isFinite", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return False
 		}
@@ -492,7 +482,7 @@ func (vm *VM) registerGlobalFunctions() {
 	})
 
 	// encodeURIComponent(string) — percent-encodes a string.
-	vm.globals["encodeURIComponent"] = vm.createBuiltinFunction("encodeURIComponent", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["encodeURIComponent"] = vm.createBuiltinFunction("encodeURIComponent", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return NewString("undefined")
 		}
@@ -500,7 +490,7 @@ func (vm *VM) registerGlobalFunctions() {
 	})
 
 	// decodeURIComponent(string) — percent-decodes a URI component.
-	vm.globals["decodeURIComponent"] = vm.createBuiltinFunction("decodeURIComponent", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["decodeURIComponent"] = vm.createBuiltinFunction("decodeURIComponent", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return NewString("undefined")
 		}
@@ -508,7 +498,7 @@ func (vm *VM) registerGlobalFunctions() {
 	})
 
 	// --- fetch(url, options) ---
-	vm.globals["fetch"] = vm.createBuiltinFunction("fetch", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["fetch"] = vm.createBuiltinFunction("fetch", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return vm.NewPromise(func(resolve, reject func(JSValue)) {
 				reject(NewString("TypeError: fetch requires at least 1 argument"))
@@ -759,7 +749,7 @@ func (vm *VM) registerXHR() {
 		return NewObject(xhr)
 	}
 
-	vm.globals["XMLHttpRequest"] = NewObject(xhrCtor)
+	vm.globals.M["XMLHttpRequest"] = NewObject(xhrCtor)
 }
 
 
@@ -804,7 +794,7 @@ func (vm *VM) registerError() {
 		return NewObject(err)
 	}
 
-	vm.globals["Error"] = NewObject(errorCtor)
+	vm.globals.M["Error"] = NewObject(errorCtor)
 
 	vm.registerErrorSubtype("TypeError", errorProto)
 	vm.registerErrorSubtype("SyntaxError", errorProto)
@@ -858,7 +848,7 @@ func (vm *VM) registerErrorSubtype(name string, errorProto *JSObject) {
 		err.Set("stack", NewString(sb.String()))
 		return NewObject(err)
 	}
-	vm.globals[name] = NewObject(ctor)
+	vm.globals.M[name] = NewObject(ctor)
 }
 
 func (vm *VM) registerFunctionProto() {
@@ -1023,7 +1013,7 @@ func (vm *VM) registerSymbol() {
 	symCtor.Set("split", NewSymbol("Symbol.split"))
 	symCtor.Set("unscopables", NewSymbol("Symbol.unscopables"))
 
-	vm.globals["Symbol"] = NewObject(symCtor)
+	vm.globals.M["Symbol"] = NewObject(symCtor)
 }
 
 // --- RegExp built-in ---
@@ -1093,7 +1083,7 @@ func (vm *VM) registerArrayBuffer() {
 	}
 	arrayBufferCtor.Set("prototype", NewObject(ArrayBufferPrototype))
 
-	vm.globals["ArrayBuffer"] = NewObject(arrayBufferCtor)
+	vm.globals.M["ArrayBuffer"] = NewObject(arrayBufferCtor)
 }
 
 func newArrayBuffer(byteLength int) *JSObject {
@@ -1223,7 +1213,7 @@ func (vm *VM) registerDataView() {
 	}
 	dataViewCtor.Set("prototype", NewObject(DataViewPrototype))
 
-	vm.globals["DataView"] = NewObject(dataViewCtor)
+	vm.globals.M["DataView"] = NewObject(dataViewCtor)
 }
 
 func newDataView(bytes []byte, byteOffset, byteLength int) *JSObject {
@@ -1472,7 +1462,7 @@ func (vm *VM) registerTypedArrays() {
 	}
 
 	for _, t := range types {
-		vm.globals[t.name] = NewObject(makeTypedArrayCtor(t.name, t.kind))
+		vm.globals.M[t.name] = NewObject(makeTypedArrayCtor(t.name, t.kind))
 	}
 }
 
@@ -1737,7 +1727,7 @@ func (vm *VM) registerBigInt() {
 		return JSValue{Tag: TagBigInt, BigIntVal: val}
 	}))
 
-	vm.globals["BigInt"] = NewObject(bigIntCtor)
+	vm.globals.M["BigInt"] = NewObject(bigIntCtor)
 }
 
 // registerDate registers the Date constructor, static methods, and prototype.
@@ -1958,7 +1948,7 @@ func (vm *VM) registerProxy() {
 		return NewObject(result)
 	}))
 
-	vm.globals["Proxy"] = NewObject(proxyCtor)
+	vm.globals.M["Proxy"] = NewObject(proxyCtor)
 }
 
 // registerReflect registers the Reflect built-in object with static methods
@@ -2094,11 +2084,11 @@ func (vm *VM) registerReflect() {
 		return NewObject(newObj)
 	}))
 
-	vm.globals["Reflect"] = NewObject(reflectObj)
+	vm.globals.M["Reflect"] = NewObject(reflectObj)
 }
 
 func (vm *VM) registerEval() {
-	vm.globals["eval"] = vm.createBuiltinFunction("eval", func(this *JSObject, args []JSValue) JSValue {
+	vm.globals.M["eval"] = vm.createBuiltinFunction("eval", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return Undefined
 		}
@@ -2153,7 +2143,7 @@ func (vm *VM) registerWeakRef() {
 		}))
 		return NewObject(wr)
 	}
-	vm.globals["WeakRef"] = NewObject(weakRefCtor)
+	vm.globals.M["WeakRef"] = NewObject(weakRefCtor)
 }
 
 func (vm *VM) registerFinalizationRegistry() {
@@ -2228,5 +2218,5 @@ func (vm *VM) registerFinalizationRegistry() {
 
 		return NewObject(fr)
 	}
-	vm.globals["FinalizationRegistry"] = NewObject(frCtor)
+	vm.globals.M["FinalizationRegistry"] = NewObject(frCtor)
 }

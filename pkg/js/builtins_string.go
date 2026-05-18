@@ -425,5 +425,5 @@ func (vm *VM) registerString() {
 	// Store for autoboxing.
 	StringPrototype = stringProto
 
-	vm.globals["String"] = NewObject(stringCtor)
+	vm.globals.M["String"] = NewObject(stringCtor)
 }

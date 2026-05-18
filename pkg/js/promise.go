@@ -174,14 +174,14 @@ func (vm *VM) registerPromise() {
 
 		if len(args) > 0 && args[0].IsObject() && args[0].ObjVal != nil && args[0].ObjVal.isCallable() {
 			cb := args[0]
-			onFulfilled = func(v JSValue) JSValue { return vm.callMethod(cb, vm.globalThis.ObjVal, []JSValue{v}) }
+			onFulfilled = func(v JSValue) JSValue { return vm.callMethod(cb, vm.globals.GlobalThis().ObjVal, []JSValue{v}) }
 		} else {
 			onFulfilled = func(v JSValue) JSValue { return v }
 		}
 
 		if len(args) > 1 && args[1].IsObject() && args[1].ObjVal != nil && args[1].ObjVal.isCallable() {
 			cb := args[1]
-			onRejected = func(v JSValue) JSValue { return vm.callMethod(cb, vm.globalThis.ObjVal, []JSValue{v}) }
+			onRejected = func(v JSValue) JSValue { return vm.callMethod(cb, vm.globals.GlobalThis().ObjVal, []JSValue{v}) }
 		} else {
 			onRejected = func(v JSValue) JSValue { return v }
 		}
@@ -463,7 +463,7 @@ func (vm *VM) registerPromise() {
 
 	promiseCtor.Prototype = promiseProto
 	PromisePrototype = promiseProto
-	vm.globals["Promise"] = NewObject(promiseCtor)
+	vm.globals.M["Promise"] = NewObject(promiseCtor)
 }
 
 func makePromiseCallback(fn func(JSValue)) *JSObject {

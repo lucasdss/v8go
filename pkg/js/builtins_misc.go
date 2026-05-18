@@ -74,7 +74,7 @@ func (vm *VM) registerMath() {
 		return NewNumber(minVal)
 	}))
 
-	vm.globals["Math"] = NewObject(mathObj)
+	vm.globals.M["Math"] = NewObject(mathObj)
 }
 
 
@@ -118,7 +118,7 @@ func (vm *VM) registerNumber() {
 		return NewBoolean(!math.IsNaN(n) && !math.IsInf(n, 0) && n == math.Trunc(n))
 	}))
 
-	vm.globals["Number"] = NewObject(numberCtor)
+	vm.globals.M["Number"] = NewObject(numberCtor)
 }
 
 func (vm *VM) registerJSON() {
@@ -147,7 +147,7 @@ func (vm *VM) registerJSON() {
 		return NewString(result)
 	}))
 
-	vm.globals["JSON"] = NewObject(jsonObj)
+	vm.globals.M["JSON"] = NewObject(jsonObj)
 }
 
 // --- JSON node type (safe deserialization) ---
@@ -729,7 +729,7 @@ func (vm *VM) registerBoolean() {
 	})
 
 	boolCtor.ObjVal.Set("prototype", NewObject(boolProto))
-	vm.globals["Boolean"] = boolCtor
+	vm.globals.M["Boolean"] = boolCtor
 }
 
 func (vm *VM) registerRegExp() {
@@ -927,7 +927,7 @@ func (vm *VM) registerRegExp() {
 	}))
 
 	regExpCtor.Set("prototype", NewObject(regExpProto))
-	vm.globals["RegExp"] = NewObject(regExpCtor)
+	vm.globals.M["RegExp"] = NewObject(regExpCtor)
 }
 
 // doReplace performs replacement pattern substitution (handles $&, $1, etc.).
@@ -1202,7 +1202,7 @@ func (vm *VM) registerDate() {
 	}))
 
 	dateCtor.ObjVal.Set("prototype", NewObject(dateProto))
-	vm.globals["Date"] = dateCtor
+	vm.globals.M["Date"] = dateCtor
 }
 
 // parseDateString parses common date formats: ISO 8601, RFC 3339, date-only.
