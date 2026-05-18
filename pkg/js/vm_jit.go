@@ -4,12 +4,16 @@ package js
 import (
 	"fmt"
 	"os"
+	"runtime"
 	"sync"
 	"unsafe"
 )
 
 // vmJITMu serialises access to vm.jitErrors for concurrent background compilation.
 var vmJITMu sync.Mutex
+
+// jitCompileSem bounds concurrent JIT compilation goroutines to GOMAXPROCS.
+var jitCompileSem = make(chan struct{}, runtime.GOMAXPROCS(0))
 
 // maybePromoteTier increments the call count and triggers JIT compilation
 // when thresholds are reached. Sparkplug and TurboFan compilation run in
@@ -21,7 +25,16 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 	bf.CallCount++
 	switch {
 	case bf.CallCount == Tier0SparkplugThreshold && bf.Sparkplug == 0 && vm.compiler != nil:
+		if bf.CompilingJIT {
+			return // already being compiled
+		}
+		bf.CompilingJIT = true
 		go func() {
+			jitCompileSem <- struct{}{}
+			defer func() {
+				<-jitCompileSem
+				bf.CompilingJIT = false
+			}()
 			rxAddr, err := vm.compiler.CompileSparkplug(bf)
 			if err != nil {
 				fmt.Fprintf(os.Stderr, "[V8Go] Sparkplug compile error: %v\n", err)
@@ -34,7 +47,16 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 			}
 		}()
 	case bf.CallCount == Tier1TurboFanThreshold && bf.ICVector != nil && bf.TurboFan == 0 && vm.compiler != nil:
+		if bf.CompilingJIT {
+			return // already being compiled
+		}
+		bf.CompilingJIT = true
 		go func() {
+			jitCompileSem <- struct{}{}
+			defer func() {
+				<-jitCompileSem
+				bf.CompilingJIT = false
+			}()
 			rxAddr, err := vm.compiler.CompileTurboFan(bf)
 			if err == nil && rxAddr != 0 {
 				bf.TurboFan = rxAddr
