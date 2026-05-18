@@ -3003,28 +3003,24 @@ func optimizeBytecode(instructions []Instruction) []Instruction {
 		}
 
 		// LdaGlobal X + LdaGlobal X → LdaGlobal X + Dup 0
-		// DISABLED: unsafe across loop boundaries when acc isn't the global's value.
-		/*
+		// Only safe when pc+1 is not a backward jump target (loop entry point).
 		if hasNext && curr.Op == OpLdaGlobal && next.Op == OpLdaGlobal &&
-			curr.OperandA == next.OperandA {
+			curr.OperandA == next.OperandA && !isBackwardJumpTarget(instructions, i+1) {
 			out = append(out, curr)
 			out = append(out, Instruction{Op: OpDup, OperandA: 0})
 			i++ // skip the second LdaGlobal
 			continue
 		}
-		*/
 
 		// StaGlobal X + LdaGlobal X → StaGlobal X + Dup 0
-		// DISABLED: unsafe across loop boundaries when acc isn't the global's value.
-		/*
+		// Only safe when pc+1 is not a backward jump target (loop entry point).
 		if hasNext && curr.Op == OpStaGlobal && next.Op == OpLdaGlobal &&
-			curr.OperandA == next.OperandA {
+			curr.OperandA == next.OperandA && !isBackwardJumpTarget(instructions, i+1) {
 			out = append(out, curr)
 			out = append(out, Instruction{Op: OpDup, OperandA: 0})
 			i++ // skip the LdaGlobal
 			continue
 		}
-		*/
 
 		// ToNumber + ToString → skip both (no-op chain)
 		if hasNext && curr.Op == OpToNumber && next.Op == OpToString {
@@ -3056,6 +3052,23 @@ func optimizeBytecode(instructions []Instruction) []Instruction {
 		out = append(out, curr)
 	}
 	return out
+}
+
+// isBackwardJumpTarget returns true if pc is the target of any backward branch
+// (a jump where the target index is less than the jump instruction's index).
+// This is used by the peephole optimizer to avoid eliminating instructions
+// that serve as loop entry points.
+func isBackwardJumpTarget(instrs []Instruction, pc int) bool {
+	for i, instr := range instrs {
+		switch instr.Op {
+		case OpJump, OpJumpIfFalse, OpJumpIfTrue,
+			OpJumpIfToBooleanTrue, OpJumpIfToBooleanFalse:
+			if int(instr.OperandA) == pc && int(instr.OperandA) < i {
+				return true
+			}
+		}
+	}
+	return false
 }
 
 // eliminateDeadCode removes unreachable instructions after unconditional
