@@ -11,7 +11,6 @@
 package js
 
 import (
-	"fmt"
 	"math"
 	"math/big"
 	"strings"
@@ -32,48 +31,14 @@ var (
 	globalPrototypeRealm   = make(map[*JSObject]uint64)
 )
 
-// frameBufSize is the number of pre-allocated VMFrame slots in the VM's
-// frame buffer. 64 slots covers typical call depth without heap allocation.
-const frameBufSize = 64
-
-// allocFrame obtains a VMFrame from the VM's pre-allocated buffer (bump allocator,
-// no heap alloc for typical call depth). Falls back to heap allocation if the
-// buffer is exhausted. Must be paired with vm.freeFrame.
+// allocFrame obtains a VMFrame from the Allocator's pre-allocated buffer.
 func (vm *VM) allocFrame() *VMFrame {
-	if vm.frameUsed < len(vm.frameBuf) {
-		f := &vm.frameBuf[vm.frameUsed]
-		vm.frameUsed++
-		*f = VMFrame{} // zero out stale fields
-		return f
-	}
-	// Buffer exhausted — rare deep call stacks fall back to heap.
-	return &VMFrame{}
+	return vm.alloc.AllocFrame()
 }
 
-// freeFrame releases a VMFrame. For buffer-allocated frames, rewinds the
-// bump allocator (frames are LIFO: child frames always freed before parents).
-// Heap-allocated frames are left for GC.
+// freeFrame releases a VMFrame back to the Allocator.
 func (vm *VM) freeFrame(f *VMFrame) {
-	// Don't pool frames with GeneratorState (they outlive the call).
-	if f.GenState != nil {
-		return
-	}
-	// If no pre-allocated buffer, frame was heap-allocated — nothing to do.
-	if len(vm.frameBuf) == 0 {
-		return
-	}
-	// Check if f is within our pre-allocated buffer.
-	frameSize := int(unsafe.Sizeof(VMFrame{}))
-	fPtr := uintptr(unsafe.Pointer(f))
-	bufBase := uintptr(unsafe.Pointer(&vm.frameBuf[0]))
-	bufEnd := bufBase + uintptr(len(vm.frameBuf))*uintptr(frameSize)
-	if fPtr >= bufBase && fPtr < bufEnd {
-		// Buffer-allocated: rewind bump allocator if this was the top frame.
-		offset := int((fPtr - bufBase) / uintptr(frameSize))
-		if offset+1 == vm.frameUsed {
-			vm.frameUsed = offset
-		}
-	}
+	vm.alloc.FreeFrame(f)
 }
 
 // equalFold performs case-insensitive string comparison without allocation.
@@ -81,71 +46,24 @@ func equalFold(a, b string) bool {
 	return len(a) == len(b) && strings.EqualFold(a, b)
 }
 
-// allocRegs obtains a []JSValue slice of at least n elements from the VM's
-// pre-allocated register buffer (bump allocator, no heap alloc for n ≤ 256).
-// Falls back to make() for large register files.
+// allocRegs obtains a []JSValue slice from the Allocator's register buffer.
 func (vm *VM) allocRegs(n int) []JSValue {
-	if n <= 256 && vm.regUsed+n <= len(vm.regBuf) {
-		start := vm.regUsed
-		vm.regUsed += n
-		regs := vm.regBuf[start:vm.regUsed]
-		// Zero out to avoid stale values.
-		for i := range regs {
-			regs[i] = JSValue{}
-		}
-		return regs
-	}
-	return make([]JSValue, n)
+	return vm.alloc.AllocRegs(n)
 }
 
-// freeRegs releases a register slice. For buffer-allocated slices, rewinds
-// the bump allocator (registers are LIFO: child freed before parent).
-// Heap-allocated slices are left for GC.
+// freeRegs releases a register slice back to the Allocator.
 func (vm *VM) freeRegs(regs []JSValue) {
-	if len(regs) == 0 || len(vm.regBuf) == 0 {
-		return
-	}
-	// Check if regs is within our pre-allocated buffer.
-	regPtr := uintptr(unsafe.Pointer(&regs[0]))
-	bufBase := uintptr(unsafe.Pointer(&vm.regBuf[0]))
-	elemSize := unsafe.Sizeof(JSValue{})
-	bufEnd := bufBase + uintptr(len(vm.regBuf))*elemSize
-	if regPtr >= bufBase && regPtr < bufEnd {
-		offset := int((regPtr - bufBase) / elemSize)
-		if offset+len(regs) == vm.regUsed {
-			vm.regUsed = offset
-		}
-	}
+	vm.alloc.FreeRegs(regs)
 }
 
-// allocObj obtains a *JSObject from the VM's pre-allocated object buffer
-// (bump allocator, no heap alloc for first 64 objects per execute call).
-// Falls back to new(JSObject) when the buffer is exhausted.
+// allocObj obtains a *JSObject from the Allocator.
 func (vm *VM) allocObj() *JSObject {
-	if vm.objUsed < len(vm.objBuf) {
-		obj := &vm.objBuf[vm.objUsed]
-		vm.objUsed++
-		*obj = JSObject{}
-		return obj
-	}
-	return &JSObject{}
+	return vm.alloc.AllocObj()
 }
 
-// freeObj releases the most recently allocated object if it was buffer-allocated.
+// freeObj releases a JSObject back to the Allocator.
 func (vm *VM) freeObj(obj *JSObject) {
-	if len(vm.objBuf) == 0 || vm.objUsed == 0 {
-		return
-	}
-	objPtr := uintptr(unsafe.Pointer(obj))
-	bufBase := uintptr(unsafe.Pointer(&vm.objBuf[0]))
-	elemSize := unsafe.Sizeof(JSObject{})
-	bufEnd := bufBase + uintptr(len(vm.objBuf))*elemSize
-	if objPtr >= bufBase && objPtr < bufEnd {
-		offset := int((objPtr - bufBase) / elemSize)
-		if offset+1 == vm.objUsed {
-			vm.objUsed = offset
-		}
-	}
+	vm.alloc.FreeObj(obj)
 }
 
 // CallStackFrame represents a single frame in the JavaScript call stack.
@@ -339,23 +257,8 @@ type VM struct {
 	// top-level Run/Execute. Resets at the start of each top-level call.
 	stepCount int
 
-	// frameBuf is a pre-allocated buffer of VMFrame slots used as a bump
-	// allocator to avoid heap allocations for typical call depths.
-	// frameUsed tracks the next free slot (bump pointer).
-	frameBuf  []VMFrame
-	frameUsed int
-
-	// regBuf is a pre-allocated JSValue buffer for register slices.
-	// Allocated once per VM; register slices under 256 elements are carved
-	// from this buffer via bump-allocation (LIFO: child regs freed before parent).
-	regBuf  []JSValue
-	regUsed int
-
-	// objBuf is a pre-allocated JSObject buffer used as a bump allocator
-	// to avoid heap allocations for typical object creation during execution.
-	// Reset at the start of each top-level execute() call (objUsed = 0).
-	objBuf  []JSObject
-	objUsed int
+	// alloc is the bump allocator for frames, registers, and objects.
+	alloc *Allocator
 
 	// Global object holds global variables.
 	globals map[string]JSValue
@@ -421,11 +324,9 @@ type VM struct {
 func NewVM() *VM {
 	vm := &VM{
 		RealmID:        atomic.AddUint64(&nextRealmID, 1),
+		alloc:          NewAllocator(),
 		globals:        make(map[string]JSValue, 128),
 		globalSlots:    make([]JSValue, 0, 64),
-		frameBuf:       make([]VMFrame, frameBufSize),
-		regBuf:         make([]JSValue, 256*8), // 8 slots of 256 regs for nested calls
-		objBuf:         make([]JSObject, 64),   // bump allocator for up to 64 objects per execute
 		consoleLog:     make([]string, 0),
 		funcRegistry:   make(map[string]*BytecodeFunction),
 		builtins:       make(map[string]func(args []JSValue) JSValue),
@@ -1875,7 +1776,7 @@ func opCallSpread(vm *VM, frame *VMFrame, instr Instruction) {
 			lengthVal := spreadVal.ObjVal.Get("length")
 			arrLen := int(lengthVal.ToNumber())
 			for i := 0; i < arrLen; i++ {
-				elem := spreadVal.ObjVal.Get(fmt.Sprintf("%d", i))
+				elem := spreadVal.ObjVal.Get(intKey(i))
 				args = append(args, elem)
 			}
 		}
@@ -1996,7 +1897,7 @@ func opCreateClosure(vm *VM, frame *VMFrame, instr Instruction) {
 		closure.Set("length", NewNumber(float64(frame.Acc.ObjVal.Bytecode.NumParams)))
 		env := NewJSObject()
 		for i, val := range frame.Regs {
-			env.Set(fmt.Sprintf("%d", i), val)
+			env.Set(intKey(i), val)
 		}
 		closure.Set("__env__", NewObject(env))
 		frame.Acc = NewObject(closure)
@@ -2008,7 +1909,7 @@ func opCreateClosure(vm *VM, frame *VMFrame, instr Instruction) {
 func opLdaCaptured(vm *VM, frame *VMFrame, instr Instruction) {
 	if frame.ClosureEnv != nil {
 		regIdx := int(instr.OperandA)
-		frame.Acc = frame.ClosureEnv.Get(fmt.Sprintf("%d", regIdx))
+		frame.Acc = frame.ClosureEnv.Get(intKey(regIdx))
 	} else {
 		frame.Acc = Undefined
 	}
@@ -2243,7 +2144,7 @@ func (vm *VM) makeGeneratorNext(genObj *JSObject, gs *GeneratorState) JSValue {
 		argsVal := genObj.Get("__args__")
 		if argsVal.IsObject() && argsVal.ObjVal != nil {
 			for i := 0; i < bytecodeFn.NumParams && i < len(regs); i++ {
-				argKey := fmt.Sprintf("%d", i)
+				argKey := intKey(i)
 				regs[i] = argsVal.ObjVal.Get(argKey)
 			}
 		}
@@ -2602,9 +2503,9 @@ func (vm *VM) ensureGlobalSlots(n int, bf *BytecodeFunction) {
 }
 
 func (vm *VM) execute(bf *BytecodeFunction) JSValue {
-	// Reset step counter and object bump allocator for this top-level execution.
+	// Reset step counter and allocator bump pointers for this top-level execution.
 	vm.stepCount = 0
-	vm.objUsed = 0
+	vm.alloc.Reset()
 	// Ensure global slot array is large enough for this function's globals.
 	if len(bf.GlobalSlots) > 0 {
 		vm.ensureGlobalSlots(len(bf.GlobalSlots), bf)
@@ -2903,7 +2804,7 @@ func (vm *VM) callMethod(callee JSValue, thisObj *JSObject, args []JSValue) JSVa
 				restArray.growProperties(len(restArgs))
 				restArray.Set("length", NewNumber(float64(len(restArgs))))
 				for j, a := range restArgs {
-					restArray.Set(fmt.Sprintf("%d", j), a)
+					restArray.Set(intKey(j), a)
 				}
 				if restReg < len(newFrame.Regs) {
 					newFrame.Regs[restReg] = NewObject(restArray)
@@ -2942,7 +2843,7 @@ func (vm *VM) createGeneratorObject(bf *BytecodeFunction, thisObj *JSObject, arg
 	argsArr := NewJSObject()
 	argsArr.ConstructorName = "Array"
 	for i, arg := range args {
-		argsArr.Set(fmt.Sprintf("%d", i), arg)
+		argsArr.Set(intKey(i), arg)
 	}
 	genObj.Set("__args__", NewObject(argsArr))
 

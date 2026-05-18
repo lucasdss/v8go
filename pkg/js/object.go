@@ -7,17 +7,11 @@ package js
 
 import (
 	"fmt"
-	"sync"
 )
 
 // inlinePropsMax is the maximum number of properties stored inline.
 // Objects with ≤4 properties (95%+ of all objects) avoid heap allocation.
 const inlinePropsMax = 4
-
-// objectPool provides reusable JSObject structs to reduce GC pressure.
-var objectPool = sync.Pool{
-	New: func() interface{} { return &JSObject{} },
-}
 
 // JSObject is the runtime representation of a JavaScript object.
 // Fields ordered by size for optimal alignment (largest first).
@@ -171,20 +165,15 @@ func (obj *JSObject) growProperties(n int) {
 	copy(obj.Properties, obj.inlineProps[:obj.inlineCount])
 }
 
-// NewJSObject returns a pooled JSObject with zero initialization.
+// NewJSObject allocates a new JSObject with default initialization.
+// For hot paths during bytecode execution, use Allocator.AllocObj() instead
+// to benefit from bump allocation and sync.Pool reuse.
 func NewJSObject() *JSObject {
-	obj := objectPool.Get().(*JSObject)
-	*obj = JSObject{}
+	obj := &JSObject{}
 	obj.Shape = EmptyShape
 	obj.Prototype = ObjectPrototype
 	obj.ConstructorName = "Object"
 	return obj
-}
-
-// FreeJSObject returns a JSObject to the pool, releasing its heap properties.
-func FreeJSObject(obj *JSObject) {
-	obj.Properties = nil // release backing array
-	objectPool.Put(obj)
 }
 
 // NewJSObjectWithShape creates an object with the given Shape.
@@ -431,6 +420,7 @@ func (obj *JSObject) Call(this *JSObject, args []JSValue) JSValue {
 func callBytecodeFunction(bf *BytecodeFunction, args []JSValue) JSValue {
 	// Create a minimal VM to execute the bytecode properly.
 	vm := &VM{
+		alloc:      NewAllocator(),
 		globals:    make(map[string]JSValue),
 		builtins:   make(map[string]func(args []JSValue) JSValue),
 		consoleLog: make([]string, 0),
