@@ -15,7 +15,7 @@
 
 ## Design Decisions
 
-1. **W^X**: Use true dual-mapping (memfd_create/shm_open + two mmap calls). Eliminate CGO dependency on pthread_jit_write_protect_np. Platform parity for ARM64 i-cache flush on Linux.
+1. **W^X**: True dual-mapping on Linux (memfd_create + dual mmap), pure Go. Darwin uses single MAP_JIT mapping with CGO pthread_jit_write_protect_np (MAP_JIT incompatible with file-backed shared mappings). ARM64 i-cache flush on Linux via DC CVAU + IC IVAU assembly.
 
 2. **WeakRef**: Use `runtime.AddCleanup` to detect target collection. `deref()` returns `undefined` after GC collects target.
 
@@ -29,9 +29,9 @@
 
 ## ECMAScript Compatibility Boundaries
 
-- WeakMap, WeakRef, FinalizationRegistry: Limited by Go GC architecture. Spec-compliant ephemeron semantics are not achievable in pure Go.
-- Error.stack: Currently without source position. Stack traces show function names only, plus static `<anonymous>:1:1` placeholder.
-- Instanceof: Per-VM prototype tree. Cross-realm comparison may produce incorrect results.
+- WeakMap, WeakRef, FinalizationRegistry: Limited by Go GC architecture. Spec-compliant ephemeron semantics are not achievable in pure Go. Use `runtime.AddCleanup` for best-effort weak behavior.
+- Error.stack: Source positions (file:line:col) tracked via parser AST positions and compiler instruction emission. JIT frame tracking is planned (Level 2).
+- Instanceof: RealmID tracking with shared prototype exclusion. Cross-realm comparisons use ConstructorName fallback when prototypes differ across VM instances.
 
 ## VM Sub-Modules (Phase 7)
 
@@ -73,3 +73,18 @@
 - **vm_generator.go** — Generator and async function execution.
 - **vm_exceptions.go** — Error creation and exception throwing helpers.
 - **vm_events.go** — DOM event dispatch handlers.
+
+## Performance Optimizations (Phase 11)
+
+- **RWMutex** — VM uses `sync.RWMutex` instead of `sync.Mutex`. Read paths (global variable access, event reads) use `RLock`. Write paths use `Lock`.
+- **String Interning** — 16-shard FNV-32a hashed maps with per-shard mutexes. Replaces single global `stringInternMu` to reduce contention.
+- **intKeys Pool** — Precomputed `[1024]string` slice ("0" through "1023"). Replaces `fmt.Sprintf("%d")` in array builtins for zero-allocation property key access.
+- **JIT Throttling** — `CompilingJIT` atomic flag per function prevents duplicate compilation. Global semaphore limits concurrent compilations to `GOMAXPROCS`.
+- **Deopt Counter** — `DeoptCount` tracks consecutive deoptimizations. After 5 deopts, JIT tiers are reset (Sparkplug, TurboFan, HasJITTier cleared) and the function is reinterpreted with fresh type feedback.
+- **Shadow Stack** — Dynamic capacity doubling on overflow. Previously silently dropped pointers (use-after-free risk).
+- **Peephole Optimizer** — Re-enabled LdaGlobal+Dup and StaGlobal+Dup patterns with backward-branch guard. Added LdaZero+Ldar dead code elimination. Star+Ldar and Ldar+Star excluded as unsafe (require register liveness analysis).
+
+## Removed Components
+
+- **QuickJS** (formerly `pkg/js/engine.go`, `jsengine.go`, `eventloop.go`, `worker.go`, `scheduler.go`) — Removed entirely. Was a browser comparison engine with heavy CGO dependency (qjs, wazero). V8Go is the sole engine.
+- **setTimeout/EventLoop** — Stub implementations only (`setTimeout`/`setInterval` return 0). Full event loop support can be built externally.
