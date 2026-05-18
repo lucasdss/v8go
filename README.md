@@ -136,35 +136,23 @@ V8Go passes **100% of the self-contained Test262 benchmark (58/58)** covering al
 
 ### WeakMap / WeakRef / FinalizationRegistry
 
-WeakMap is implemented by embedding references to values into keys. As long as the key is reachable, all values associated with it remain reachable and cannot be garbage collected, even after the WeakMap is gone. This is a limitation of the Go runtime — Go's GC has no mechanism for ephemeron tables or weak references.
+WeakMap, WeakRef, and FinalizationRegistry use `runtime.AddCleanup` (Go 1.24+) to detect when targets are collected.
 
-```javascript
-var m = new WeakMap();
-var key = {};
-var value = {/* large object */};
-m.set(key, value);
-value = undefined;
-m = undefined;    // value NOT garbage-collectable yet
-key = undefined;  // NOW it becomes collectable
-```
-
-WeakRef and FinalizationRegistry use `runtime.AddCleanup` (Go 1.24+) to detect when targets are collected. WeakRef.deref() returns `undefined` after the target is GC'd, and FinalizationRegistry callbacks fire asynchronously when targets are collected.
-
-**FinalizationRegistry VM lifetime:** VMs with outstanding FinalizationRegistry targets will not be garbage collected until all registered targets are collected. The cleanup callbacks capture the VM for execution context. To avoid leaking VMs, call `finalizationRegistry.unregister()` for all targets before discarding the VM.
-
-**WeakRef value retention:** Stored WeakRef entries hold a pre-extracted copy of the target value so that `deref()` can return it without a race-prone unsafe.Pointer conversion. The GC-triggered cleanup marks the entry dead and clears the stored value so the target can be collected.
+- **WeakRef.deref()** returns `undefined` after the target is GC'd. Entries hold a pre-extracted value copy to avoid race conditions with unsafe.Pointer conversion.
+- **WeakMap** stores entries keyed by Go object pointer. When a key is GC'd, all its entries are removed. **Ephemeron limitation:** if a value references its own key, the key won't be collected — this is a fundamental Go GC constraint.
+- **FinalizationRegistry** callbacks fire asynchronously when registered targets are collected. Best-effort only — no ordering guarantee, and callbacks are lost if the registry itself is collected first. **VM lifetime:** VMs with outstanding targets won't be GC'd until all targets are collected (callbacks capture the VM). Call `unregister()` before discarding the VM.
 
 ### Error.stack
 
-Stack traces show `at <anonymous>:1:1` — a static placeholder. Real call stack tracking exists in the JIT tier but is not yet wired into Error construction. This is a cosmetic limitation with no impact on execution correctness.
+Stack traces now include source positions: `at funcName (<file>:<line>:<col>)`. The parser records positions for all AST nodes, and the compiler emits per-instruction source positions. Only the interpreter tier populates the stack currently; JIT frame tracking is planned.
 
 ### AMD64 JIT
 
-The AMD64 assembler is a skeleton (50+ instructions) with no Sparkplug integration. JIT compilation is ARM64-only. All JavaScript executes correctly on AMD64 via the interpreter.
+The AMD64 Sparkplug JIT has **28 fast-path opcode handlers** (comparison, bitwise, shift, logical, type, math, control flow) plus 35 deopt-to-interpreter stubs. The assembler has 60+ instructions. Remaining 122 handlers are planned. All JavaScript executes correctly — non-native ops deopt to the interpreter.
 
 ### Instanceof with cross-realm objects
 
-`instanceof` works within the same VM but may produce incorrect results when comparing objects from different VM instances. Each VM has its own set of prototypes.
+Each VM gets a unique `RealmID`. Cross-realm `instanceof` falls back to `ConstructorName` matching when prototypes differ across VM instances. Shared package-level prototypes (Object, Array, etc.) are excluded from per-VM tagging to avoid false cross-realm detection.
 
 ## FAQ
 
@@ -219,10 +207,10 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 
 | Metric | Value |
 |--------|-------|
-| **Total lines** | 64,000+ (140 Go files) |
+| **Total lines** | 65,000+ (155 Go files) |
 | **pkg/jit coverage** | **84.5%** (exceeds 80% gate) |
 | **pkg/js coverage** | 75.8% |
-| **Tests** | 1,700+ across 7 packages |
+| **Tests** | 2,050+ across 8 packages |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
 | **Static analysis** | clean (go vet, gosec ≤12 pre-existing) |
@@ -247,7 +235,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | **Deoptimization** | FrameDescription + DeoptInputData | Deoptimizer + TranslationArrays |
 | **GC** | Go GC (safe, managed) + Shadow Stack | Orinoco generational GC |
 | **Memory model** | Go managed heap, no pointer arithmetic | Raw pointers, Smi tagging, pointer compression |
-| **W^X** | mmap + pthread_jit_write_protect_np | RWX pages + W^X on macOS |
+| **W^X** | Dual-mapped: memfd_create + RW/RX mappings (Linux), MAP_JIT + pthread_jit (Darwin) | RWX pages + W^X on macOS |
 | **Peak speed** | ~25% of V8 (estimate) | Baseline |
 | **Safety** | Go memory safety, no use-after-free | V8 sandbox, CFI, W^X hardening |
 | **Portability** | Go cross-compile (GOOS/GOARCH) | Platform-specific builds |
@@ -270,9 +258,26 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 - All major ES2022+ features implemented and tested
 - Sparkplug JIT active on ARM64 with 185/185 ops native
+- Sparkplug JIT on AMD64 with 28 fast-path handlers + 35 deopt stubs
 - TurboFan SSA pipeline complete with 82 ops lowered
 - Deoptimization wired and tested
-- AMD64 assembler skeleton (50+ instructions), no Sparkplug integration yet
+- W^X dual-mapping on Linux, MAP_JIT on Darwin
+- Error.stack with source file:line:col positions
+- Active development: TurboFan inlining, polymorphic IC, remaining AMD64 op coverage
+
+## Architecture
+
+The codebase follows a modular structure with dependency injection at the seams:
+
+| Component | Files | Description |
+|-----------|-------|-------------|
+| **VM core** | `vm.go` (204 lines) | VM struct, constructors, call stack helpers |
+| **Interpreter** | `vm_exec.go`, `vm_ops_*.go` | Bytecode execution loop, 197 opcode handlers |
+| **JIT** | `vm_jit.go`, `pkg/jit/` | Sparkplug/TurboFan compilation and native execution |
+| **Object model** | `object.go`, `mixins` | JSValue tagged union, JSObject with pointer mixins |
+| **Sub-modules** | `alloc.go`, `globals.go`, `calltrack.go`, `events.go`, `registry.go` | Extracted from VM: bump allocator, scope storage, call tracking, event system, function registry |
+| **Weak references** | `weak.go` | WeakRef/WeakMap/FinalizationRegistry via `runtime.AddCleanup` |
+| **JIT interface** | `jit.go`, `pkg/jit/backend.go` | JITCompiler/ICPatcher/ExecProtector interfaces with DI |
 - Active development: TurboFan inlining, polymorphic IC, remaining op native coverage
 
 ## License
