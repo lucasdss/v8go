@@ -232,7 +232,7 @@ const (
 
 // VM is the GoV8 virtual machine.
 type VM struct {
-	mu sync.Mutex // protects globals, funcRegistry, builtins, console, calltrack, events, nextICSlot, bytecodeCache
+	mu sync.Mutex // protects globals, registry, console, calltrack, events, nextICSlot
 
 	// RealmID uniquely identifies this VM's realm for cross-realm instanceof checks.
 	RealmID uint64
@@ -277,6 +277,11 @@ type VM struct {
 	// promiseReactions stores queued .then()/.catch() callbacks for
 	// pending promises. Keyed by the promise object; drained on settle.
 	promiseReactions map[*JSObject][]promiseReaction
+
+	// JIT backend interfaces (injected at construction, nil for pure interpreter).
+	compiler  JITCompiler
+	patcher   ICPatcher
+	protector ExecProtector
 }
 
 // NewVM creates a new GoV8 virtual machine.
@@ -297,6 +302,20 @@ func NewVM() *VM {
 	vm.globals.SetGlobalThis(globalThis)
 	vm.RegisterBuiltins()
 	vm.tagAllPrototypes()
+	return vm
+}
+
+// NewVMWithJIT creates a VM with JIT compilation support injected via
+// interfaces. The same backend value can be passed for all three interfaces
+// if it implements JITCompiler, ICPatcher, and ExecProtector.
+//
+// Pass nil for any interface to disable that JIT capability. For a pure
+// interpreter VM without any JIT overhead, use NewVM().
+func NewVMWithJIT(compiler JITCompiler, patcher ICPatcher, protector ExecProtector) *VM {
+	vm := NewVM()
+	vm.compiler = compiler
+	vm.patcher = patcher
+	vm.protector = protector
 	return vm
 }
 
@@ -403,36 +422,6 @@ func (vm *VM) Execute(bf *BytecodeFunction) JSValue {
 	return vm.execute(bf)
 }
 
-// SparkplugCompiler is a plugin hook set by the jit package during init().
-// It bridges jit.SparkplugCompile to the VM, avoiding import cycles since
-// pkg/js does not import pkg/jit. When non-nil, it compiles a
-// BytecodeFunction into native code and returns the executable address.
-var SparkplugCompiler func(bf *BytecodeFunction) (rxAddr uintptr, err error)
-
-// PatchICSlotHook is a plugin hook set by the jit package to avoid import
-// cycles. When non-nil, it patches a JIT IC slot with monomorphic feedback.
-var PatchICSlotHook func(sparkplug uintptr, slotIdx int, shapePtr unsafe.Pointer, offset int)
-
-// PatchICSlotStoreHook is a plugin hook for patching store IC slots.
-var PatchICSlotStoreHook func(sparkplug uintptr, slotIdx int, shapePtr unsafe.Pointer, offset int)
-
-// PatchPolyICSlotHook patches a polymorphic IC slot (2-4 shapes).
-var PatchPolyICSlotHook func(sparkplug uintptr, slotIdx int, shapes []unsafe.Pointer, offsets []int)
-
-// PatchMegaICSlotHook patches a megamorphic IC slot (permanent slow path).
-var PatchMegaICSlotHook func(sparkplug uintptr, slotIdx int)
-
-// JITProtectHook is called before/after executing JIT code to manage per-thread
-// W^X protection on macOS. Set by the jit package.
-var JITProtectHook func(enabled bool)
-
-
-// TurboFanCompiler is the hook for the TurboFan optimizing JIT compiler.
-// Set by pkg/jit during init() to avoid import cycles. When non-nil, it
-// compiles a BytecodeFunction into optimized native code and returns the
-// executable address.
-var TurboFanCompiler func(bf *BytecodeFunction) (rxAddr uintptr, err error)
-
 // maybePromoteTier increments the call count and triggers JIT compilation
 // when thresholds are reached. Sparkplug and TurboFan compilation run in
 // background goroutines to avoid blocking the interpreter.
@@ -442,9 +431,9 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 	}
 	bf.CallCount++
 	switch {
-	case bf.CallCount == Tier0SparkplugThreshold && bf.Sparkplug == 0 && SparkplugCompiler != nil:
+	case bf.CallCount == Tier0SparkplugThreshold && bf.Sparkplug == 0 && vm.compiler != nil:
 		go func() {
-			rxAddr, err := SparkplugCompiler(bf)
+			rxAddr, err := vm.compiler.CompileSparkplug(bf)
 			if err != nil {
 			} else if rxAddr != 0 {
 				bf.Sparkplug = rxAddr
@@ -452,9 +441,9 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 			} else {
 			}
 		}()
-	case bf.CallCount == Tier1TurboFanThreshold && bf.ICVector != nil && bf.TurboFan == 0 && TurboFanCompiler != nil:
+	case bf.CallCount == Tier1TurboFanThreshold && bf.ICVector != nil && bf.TurboFan == 0 && vm.compiler != nil:
 		go func() {
-			rxAddr, err := TurboFanCompiler(bf)
+			rxAddr, err := vm.compiler.CompileTurboFan(bf)
 			if err == nil && rxAddr != 0 {
 				bf.TurboFan = rxAddr
 				bf.HasJITTier = true
@@ -1340,16 +1329,16 @@ func opIn(vm *VM, frame *VMFrame, instr Instruction) {
 
 // patchPolyICIfNeeded patches the JIT IC slot if the state has transitioned to
 // polymorphic and Sparkplug code is available. No-op otherwise.
-// Guard: PolyCount must be ≥ 2 (monomorphic slots use PatchICSlotHook).
-func patchPolyICIfNeeded(frame *VMFrame, slotIdx int, slot *ICSlot) {
+// Guard: PolyCount must be ≥ 2 (monomorphic slots use vm.patcher.PatchMonomorphic).
+func (vm *VM) patchPolyICIfNeeded(frame *VMFrame, slotIdx int, slot *ICSlot) {
 	if frame == nil || frame.Func == nil {
 		return
 	}
-	if frame.Func.Sparkplug == 0 || slot.State != ICPolymorphic || slot.Patched || PatchPolyICSlotHook == nil {
+	if frame.Func.Sparkplug == 0 || slot.State != ICPolymorphic || slot.Patched || vm.patcher == nil {
 		return
 	}
 	if slot.PolyCount >= 2 {
-		PatchPolyICSlotHook(frame.Func.Sparkplug, slotIdx, slot.PolyShapes[:slot.PolyCount], slot.PolyOffsets[:slot.PolyCount])
+		vm.patcher.PatchPolymorphic(frame.Func.Sparkplug, slotIdx, slot.PolyShapes[:slot.PolyCount], slot.PolyOffsets[:slot.PolyCount])
 		slot.Patched = true
 	}
 }
@@ -1370,8 +1359,8 @@ func opLdaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 					frame.Acc = obj.propAt(slot.Offset)
 					slot.HitCount++
 					// Patch JIT IC slot once when Sparkplug code becomes available.
-					if !vm.DisableJIT && frame.Func.Sparkplug != 0 && PatchICSlotHook != nil && !slot.Patched {
-						PatchICSlotHook(frame.Func.Sparkplug, slotIdx, unsafe.Pointer(obj.Shape), slot.Offset)
+					if !vm.DisableJIT && frame.Func.Sparkplug != 0 && vm.patcher != nil && !slot.Patched {
+						vm.patcher.PatchMonomorphic(frame.Func.Sparkplug, slotIdx, unsafe.Pointer(obj.Shape), slot.Offset)
 						slot.Patched = true
 					}
 					return
@@ -1385,10 +1374,10 @@ func opLdaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 			}
 			// Poly/mega patching: if state just became polymorphic or megamorphic,
 			// patch the JIT IC slot accordingly.
-			patchPolyICIfNeeded(frame, slotIdx, slot)
+			vm.patchPolyICIfNeeded(frame, slotIdx, slot)
 			if !vm.DisableJIT && frame.Func.Sparkplug != 0 && slot.State == ICMegamorphic && !slot.Patched {
-				if PatchMegaICSlotHook != nil {
-					PatchMegaICSlotHook(frame.Func.Sparkplug, slotIdx)
+				if vm.patcher != nil {
+					vm.patcher.PatchMegamorphic(frame.Func.Sparkplug, slotIdx)
 					slot.Patched = true
 				}
 			}
@@ -1410,7 +1399,7 @@ func opLdaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 		// Patch the JIT IC slot with sequential shape guards.
 		slots := frame.Func.ICVector.Slots
 		if slotIdx < len(slots) {
-			patchPolyICIfNeeded(frame, slotIdx, &slots[slotIdx])
+			vm.patchPolyICIfNeeded(frame, slotIdx, &slots[slotIdx])
 		}
 	} else if frame.Acc.IsObject() && frame.Acc.ObjVal != nil {
 		frame.Acc = frame.Acc.ObjVal.Get(propName)
@@ -2543,9 +2532,9 @@ func (vm *VM) executeTurboFan(frame *VMFrame) {
 	}
 	bf := frame.Func
 	// Toggle per-thread JIT protection: enable exec (true), restore write (false).
-	if JITProtectHook != nil {
-		JITProtectHook(true)
-		defer JITProtectHook(false)
+	if vm.protector != nil {
+		vm.protector.EnableExec()
+		defer vm.protector.DisableExec()
 	}
 	frame.InTurboFan = true
 	// Construct a Go function value from the raw code address (same pattern
@@ -2580,9 +2569,9 @@ func (vm *VM) executeSparkplug(frame *VMFrame) {
 	}
 	bf := frame.Func
 	// Toggle per-thread JIT protection: enable exec (true), restore write (false).
-	if JITProtectHook != nil {
-		JITProtectHook(true)
-		defer JITProtectHook(false)
+	if vm.protector != nil {
+		vm.protector.EnableExec()
+		defer vm.protector.DisableExec()
 	}
 	// Construct a Go function value from the raw code address.
 	type funcval struct {

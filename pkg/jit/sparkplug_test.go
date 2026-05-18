@@ -143,19 +143,15 @@ func TestDeoptOnTypeChange(t *testing.T) {
 // BenchmarkSparkplugAdd measures JIT-compiled add performance by persisting
 // the VM across iterations. Define f once so its call count accumulates;
 // warming up to 200 calls triggers Sparkplug compilation at threshold 100.
-// TurboFan is disabled during the benchmark to avoid the tier-2 compiler
-// (which is still under development) from activating at 1000 calls.
+// TurboFan threshold is 1000 calls, so it won't activate during this benchmark.
 func BenchmarkSparkplugAdd(b *testing.B) {
-	vm := js.NewVM()
+	backend := NewBackend()
+	vm := js.NewVMWithJIT(backend, backend, backend)
 	vm.Run("function f(a,b){return a+b}")
 	// Warm up to 200 calls (triggers Sparkplug at threshold 100).
 	for i := 0; i < 200; i++ {
 		vm.Run("f(1,2)")
 	}
-	// Disable TurboFan so the benchmark measures Sparkplug performance only.
-	prevTurboFan := js.TurboFanCompiler
-	js.TurboFanCompiler = nil
-	defer func() { js.TurboFanCompiler = prevTurboFan }()
 
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {

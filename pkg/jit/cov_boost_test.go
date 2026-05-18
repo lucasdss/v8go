@@ -561,14 +561,11 @@ func TestCodeBufRWAddr(t *testing.T) {
 }
 
 // ============================================================================
-// Turbofan init() hook test — exercises the TurboFan compiler hook.
+// Turbofan init() hook test — exercises the TurboFan compiler via the backend.
 // ============================================================================
 
 func TestTurboFanInitHook(t *testing.T) {
-	// Make sure the init hook is registered.
-	if js.TurboFanCompiler == nil {
-		t.Fatal("js.TurboFanCompiler not registered (init() not run)")
-	}
+	backend := NewBackend()
 
 	// Test with a valid function.
 	bf := &js.BytecodeFunction{
@@ -580,7 +577,7 @@ func TestTurboFanInitHook(t *testing.T) {
 		},
 		Constants: []js.JSValue{},
 	}
-	rxAddr, err := js.TurboFanCompiler(bf)
+	rxAddr, err := backend.CompileTurboFan(bf)
 	if err != nil {
 		t.Fatalf("TurboFanCompiler hook failed: %v", err)
 	}
@@ -590,10 +587,8 @@ func TestTurboFanInitHook(t *testing.T) {
 }
 
 func TestTurboFanInitHookNil(t *testing.T) {
-	if js.TurboFanCompiler == nil {
-		t.Fatal("js.TurboFanCompiler not registered")
-	}
-	_, err := js.TurboFanCompiler(nil)
+	backend := NewBackend()
+	_, err := backend.CompileTurboFan(nil)
 	if err == nil {
 		t.Error("expected error for nil function")
 	}

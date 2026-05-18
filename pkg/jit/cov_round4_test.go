@@ -3087,7 +3087,7 @@ func TestTurboFanInitR4(t *testing.T) {
 			{Op: js.OpReturn},
 		},
 	}
-	rxAddr, err := js.TurboFanCompiler(bf)
+	rxAddr, err := NewBackend().CompileTurboFan(bf)
 	if err != nil {
 		t.Logf("TurboFanCompiler: %v (expected — may fail without full optimization)", err)
 	}

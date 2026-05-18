@@ -1805,8 +1805,4 @@ func init() {
 		}
 		return code.RXAddr(), nil
 	}
-
-	js.SparkplugCompiler = func(bf *js.BytecodeFunction) (uintptr, error) {
-		return SparkplugCompile(bf)
-	}
 }

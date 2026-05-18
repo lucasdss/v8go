@@ -9,8 +9,7 @@ import (
 )
 
 func init() {
-	// Register SparkplugCompile in the jit API, then bridge to the VM's
-	// plugin hook to avoid pkg/js ↔ pkg/jit import cycles.
+	// Register SparkplugCompile in the jit API.
 	SparkplugCompile = func(bf interface{}) (uintptr, error) {
 		code, err := CompileSparkplug(bf.(*js.BytecodeFunction))
 		if err != nil {
@@ -20,12 +19,6 @@ func init() {
 			return 0, nil
 		}
 		return code.RXAddr(), nil
-	}
-
-	// Bridge to VM plugin hook. Calls through SparkplugCompile so the
-	// implementation stays DRY.
-	js.SparkplugCompiler = func(bf *js.BytecodeFunction) (uintptr, error) {
-		return SparkplugCompile(bf)
 	}
 }
 

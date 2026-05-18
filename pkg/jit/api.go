@@ -17,12 +17,3 @@ type SparkplugCompileFunc func(bf interface{}) (uintptr, error)
 // JIT compilation. The VM reads this function pointer to trigger
 // compilation when hot function thresholds are reached.
 var SparkplugCompile SparkplugCompileFunc
-
-// TurboFanCompileFunc compiles bytecode to optimized native ARM64 code
-// using SSA-based optimizations. Parameter uses interface{} for the
-// same import-cycle-breaking reason as SparkplugCompileFunc.
-type TurboFanCompileFunc func(bf interface{}) (uintptr, error)
-
-// TurboFanCompile is set by turbofan.go init() to provide optimizing
-// JIT compilation. Reserved for Tier 2 compilation integration.
-var TurboFanCompile TurboFanCompileFunc

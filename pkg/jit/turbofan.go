@@ -54,18 +54,3 @@ func CompileTurboFan(bf *js.BytecodeFunction) (*CodeBuf, error) {
 
 	return buf, nil
 }
-
-func init() {
-	// Register the TurboFan compiler hook with the VM to avoid import cycles.
-	js.TurboFanCompiler = func(bf *js.BytecodeFunction) (uintptr, error) {
-		code, err := CompileTurboFan(bf)
-		if err != nil {
-			return 0, err
-		}
-		if code == nil {
-			return 0, fmt.Errorf("turbofan: nil code buffer")
-		}
-		code.Commit() // flush I-cache on platforms that need it
-		return code.RXAddr(), nil
-	}
-}

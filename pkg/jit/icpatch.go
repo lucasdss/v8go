@@ -185,15 +185,3 @@ func PatchICSlotStore(buf *CodeBuf, slotOffset int, shapePtr uintptr, propOffset
 func PatchICSlotStoreAt(rxAddr uintptr, slotIdx int, shapePtr unsafe.Pointer, propOffset int) {
 	patchICSlotCommon(rxAddr, slotIdx, shapePtr, propOffset, PatchICSlotStore)
 }
-
-func init() {
-	// Register the IC patch hook with the VM to avoid import cycles.
-	js.PatchICSlotHook = PatchICSlotAt
-	js.PatchICSlotStoreHook = PatchICSlotStoreAt
-	js.PatchPolyICSlotHook = PatchPolymorphicICSlotAt
-	js.PatchMegaICSlotHook = PatchMegamorphicICSlotAt
-	// On Darwin, jitWriteProtect toggles pthread_jit_write_protect_np
-	// which is required for MAP_JIT page execution on Apple Silicon.
-	// On Linux with true dual-mapping, this is a no-op.
-	js.JITProtectHook = jitWriteProtect
-}
