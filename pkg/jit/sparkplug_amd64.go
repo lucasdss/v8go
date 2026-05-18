@@ -363,14 +363,33 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpForInSetup, js.OpForInNext:
 		as.AMD64_JMP(deoptStub) // TODO: native
 
-	// --- Global slot ops (deopt) ---
-	case js.OpLdaGlobalSlot, js.OpStaGlobalSlot:
-		as.AMD64_JMP(deoptStub) // TODO: native
+	// --- Global slot ops ---
+	case js.OpLdaGlobalSlot:
+		emitAMD64LdaGlobalSlot(as, instr)
+	case js.OpStaGlobalSlot:
+		emitAMD64StaGlobalSlot(as, instr)
+
+	// --- Delete ops ---
+	case js.OpDelete:
+		emitAMD64DeleteProperty(as, instr, deoptStub)
+	case js.OpDeleteKeyed:
+		emitAMD64DeleteKeyed(as, instr, deoptStub)
+
+	// --- Operator ops ---
+	case js.OpInstanceof:
+		emitAMD64Instanceof(as, instr, deoptStub)
+	case js.OpIn:
+		emitAMD64In(as, instr, deoptStub)
+
+	// --- Global variable ops ---
+	case js.OpLdaGlobal:
+		emitAMD64LdaGlobal(as, instr, deoptStub)
+	case js.OpStaGlobal:
+		emitAMD64StaGlobal(as, instr, deoptStub)
 
 	// --- Misc ops (deopt) ---
-	case js.OpExp, js.OpDelete, js.OpDeleteKeyed,
-		js.OpInstanceof, js.OpIn, js.OpCreateRegExp,
-		js.OpLdaCaptured, js.OpLdaGlobal, js.OpStaGlobal,
+	case js.OpExp, js.OpCreateRegExp,
+		js.OpLdaCaptured,
 		js.OpLdaLocal, js.OpStaLocal, js.OpLdaThis,
 		js.OpThrowConstAssignment, js.OpSetPrototype,
 		js.OpCheckConstructor, js.OpYield, js.OpYieldDelegate,
@@ -1755,31 +1774,158 @@ func emitAMD64JumpIfNotNullish(as *Assembler, instr *js.Instruction, labels map[
 	as.AMD64_JMP(l)
 }
 
-// --- emitAMD64LdaNamedProperty: property load (deopt to interpreter) ---
+// --- emitAMD64LdaNamedProperty: load obj[propName] → Acc (IC-backed) ---
+//
+// Fast path: guard obj is object, then call Go IC helper which uses FeedbackVector.
+// On miss (non-object or nil obj), deoptimize to interpreter.
 func emitAMD64LdaNamedProperty(as *Assembler, instr *js.Instruction, bf *js.BytecodeFunction, icSlotOffsets []int, deoptStub *Label) {
-	_ = instr
+	propIdx := int(instr.OperandA)
+	_ = propIdx
+	slotIdx := int(instr.OperandC)
 	_ = bf
 	_ = icSlotOffsets
-	as.AMD64_JMP(deoptStub) // TODO: implement IC sled
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Guard: Acc must be an object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(accTagAlign))
+	as.AMD64_MOV_RI(REG_R13, uint64(js.TagObject)|0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: Acc.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpLdaNamedPropertySlow(frame, propIdx, slotIdx).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpLdaNamedPropertySlow)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
 }
 
-// --- emitAMD64StaNamedProperty: property store (deopt to interpreter) ---
+// --- emitAMD64StaNamedProperty: store val → obj[propName] (IC-backed) ---
+//
+// Fast path: guard obj is object, then call Go IC helper.
 func emitAMD64StaNamedProperty(as *Assembler, instr *js.Instruction, icSlotOffsets []int, deoptStub *Label) {
-	_ = instr
+	propIdx := int(instr.OperandA)
+	_ = propIdx
+	slotIdx := int(instr.OperandC)
+	valReg := int(instr.OperandB)
 	_ = icSlotOffsets
-	as.AMD64_JMP(deoptStub) // TODO: implement IC sled
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Guard: Acc must be an object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(accTagAlign))
+	as.AMD64_MOV_RI(REG_R13, uint64(js.TagObject)|0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: Acc.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpStaNamedPropertySlow(frame, propIdx, slotIdx, valReg).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(slotIdx))
+	as.AMD64_MOV_RI(REG_RDI, uint64(valReg))
+	addr := funcToAddr(sparkplugOpStaNamedPropertySlow)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
 }
 
-// --- emitAMD64LdaKeyedProperty: keyed load (deopt to interpreter) ---
+// --- emitAMD64LdaKeyedProperty: load obj[key] → Acc ---
+//
+// Fast path: guard obj is object, then call Go helper for full property lookup.
 func emitAMD64LdaKeyedProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
-	_ = instr
-	as.AMD64_JMP(deoptStub) // TODO: implement
+	objReg := int(instr.OperandA)
+	objSlot := objReg * jsValueSize
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Load Regs slice pointer.
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+
+	// Guard: obj must be an object (tag 0x0500).
+	as.AMD64_MOV_LOAD(REG_R8, REG_R15, int8(objSlot+tagWordOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: obj.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(objSlot+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpLdaKeyedPropertySlow(frame, objReg).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpLdaKeyedPropertySlow)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
 }
 
-// --- emitAMD64StaKeyedProperty: keyed store (deopt to interpreter) ---
+// --- emitAMD64StaKeyedProperty: store val → obj[key] ---
+//
+// Fast path: guard obj is object, then call Go helper for full property store.
 func emitAMD64StaKeyedProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
-	_ = instr
-	as.AMD64_JMP(deoptStub) // TODO: implement
+	objReg := int(instr.OperandA)
+	objSlot := objReg * jsValueSize
+	valReg := int(instr.OperandB)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Load Regs slice pointer.
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+
+	// Guard: obj must be an object (tag 0x0500).
+	as.AMD64_MOV_LOAD(REG_R8, REG_R15, int8(objSlot+tagWordOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: obj.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(objSlot+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpStaKeyedPropertySlow(frame, objReg, valReg).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(valReg))
+	addr := funcToAddr(sparkplugOpStaKeyedPropertySlow)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
 }
 
 // --- emitAMD64Throw: set frame.Thrown and trigger unwind ---
@@ -1791,6 +1937,244 @@ func emitAMD64Throw(as *Assembler, deoptStub *Label) {
 		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(thrownOff+i))
 	}
 	as.AMD64_JMP(deoptStub)
+}
+
+// --- emitAMD64LdaGlobalSlot: load GlobalVals[slotIdx] → Acc ---
+//
+// Copies 64 bytes from Func.GlobalVals[slotIdx] into frame.Acc.
+func emitAMD64LdaGlobalSlot(as *Assembler, instr *js.Instruction) {
+	slotIdx := int(instr.OperandA)
+	slotOff := slotIdx * jsValueSize
+
+	// Load frame.Func pointer.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(funcOff))
+	// Load Func.GlobalVals slice data pointer (offset 0 of slice header = data ptr).
+	as.AMD64_MOV_LOAD(REG_R9, REG_R8, int8(globalValsDataOff))
+
+	// Copy GlobalVals[slotIdx] → Acc: 8 × 8-byte MOV (64 bytes).
+	for i := 0; i < 64; i += 8 {
+		as.AMD64_MOV_LOAD(REG_RCX, REG_R9, int8(slotOff+i))
+		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+i))
+	}
+}
+
+// --- emitAMD64StaGlobalSlot: store Acc → GlobalVals[slotIdx] ---
+//
+// Copies 64 bytes from frame.Acc into Func.GlobalVals[slotIdx].
+func emitAMD64StaGlobalSlot(as *Assembler, instr *js.Instruction) {
+	slotIdx := int(instr.OperandA)
+	slotOff := slotIdx * jsValueSize
+
+	// Load frame.Func pointer.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(funcOff))
+	// Load Func.GlobalVals slice data pointer.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R8, int8(globalValsDataOff))
+
+	// Copy Acc → GlobalVals[slotIdx]: 8 × 8-byte MOV (64 bytes).
+	for i := 0; i < 64; i += 8 {
+		as.AMD64_MOV_LOAD(REG_RCX, REG_R12, int8(accOffset+i))
+		as.AMD64_MOV_STORE(REG_RCX, REG_R9, int8(slotOff+i))
+	}
+}
+
+// --- emitAMD64LdaGlobal: inline fast-path for OpLdaGlobal ---
+//
+// Fast path: if Constants[constIdx].Tag != TagString (already cached), copy
+// Constants[constIdx] → Acc. If TagString (not cached), deopt.
+func emitAMD64LdaGlobal(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	constIdx := int(instr.OperandA)
+	constSlot := constIdx * jsValueSize
+
+	// Load frame.Func pointer.
+	as.AMD64_MOV_LOAD(REG_R10, REG_R12, int8(funcOff))
+	// Load Func.Constants slice data pointer.
+	as.AMD64_MOV_LOAD(REG_R11, REG_R10, int8(constsOff))
+
+	// Check Constants[constIdx].Tag — if still TagString, deopt.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R11, int8(constSlot+tagWordOff))
+	as.AMD64_MOV_RI(REG_R9, uint64(js.TagString)|0x0400)
+	as.AMD64_CMP_RR(REG_R8, REG_R9)
+	as.AMD64_JE(deoptStub)
+
+	// Copy Constants[constIdx] → Acc: 8 × 8-byte MOV (64 bytes).
+	for i := 0; i < 64; i += 8 {
+		as.AMD64_MOV_LOAD(REG_RCX, REG_R11, int8(constSlot+i))
+		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+i))
+	}
+}
+
+// --- emitAMD64StaGlobal: inline fast-path for OpStaGlobal ---
+//
+// Fast path: if Constants[constIdx].Tag != TagString (already cached), copy
+// Acc → Constants[constIdx]. If TagString (not cached), deopt.
+func emitAMD64StaGlobal(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	constIdx := int(instr.OperandA)
+	constSlot := constIdx * jsValueSize
+
+	// Load frame.Func pointer.
+	as.AMD64_MOV_LOAD(REG_R10, REG_R12, int8(funcOff))
+	// Load Func.Constants slice data pointer.
+	as.AMD64_MOV_LOAD(REG_R11, REG_R10, int8(constsOff))
+
+	// Check Constants[constIdx].Tag — if still TagString, deopt.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R11, int8(constSlot+tagWordOff))
+	as.AMD64_MOV_RI(REG_R9, uint64(js.TagString)|0x0400)
+	as.AMD64_CMP_RR(REG_R8, REG_R9)
+	as.AMD64_JE(deoptStub)
+
+	// Copy Acc → Constants[constIdx]: 8 × 8-byte MOV (64 bytes).
+	for i := 0; i < 64; i += 8 {
+		as.AMD64_MOV_LOAD(REG_RCX, REG_R12, int8(accOffset+i))
+		as.AMD64_MOV_STORE(REG_RCX, REG_R11, int8(constSlot+i))
+	}
+}
+
+// --- emitAMD64DeleteProperty: delete obj[propIdx] ---
+//
+// Guards that acc is an object, then calls Go helper for shape-based deletion.
+func emitAMD64DeleteProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	propIdx := int(instr.OperandA)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Guard: acc must be object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(accTagAlign))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: acc.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpDelete(frame, propIdx).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	addr := funcToAddr(sparkplugOpDelete)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
+}
+
+// --- emitAMD64DeleteKeyed: delete obj[key] ---
+//
+// Guards that acc is an object, then calls Go helper.
+func emitAMD64DeleteKeyed(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	keyReg := int(instr.OperandB)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Guard: acc must be object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(accTagAlign))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: acc.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpDeleteKeyed(frame, objReg, keyReg).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(keyReg))
+	addr := funcToAddr(sparkplugOpDeleteKeyed)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
+}
+
+// --- emitAMD64Instanceof: lhs instanceof acc → Acc ---
+//
+// Guards both operands are objects, then calls Go helper for prototype chain walk.
+func emitAMD64Instanceof(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	lhsReg := int(instr.OperandA)
+	lhsSlot := lhsReg * jsValueSize
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Load Regs slice pointer.
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+
+	// Guard: lhs must be object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R15, int8(lhsSlot+tagWordOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: lhs.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(lhsSlot+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Guard: acc must be object.
+	as.AMD64_MOV_LOAD(REG_R10, REG_R12, int8(accTagAlign))
+	as.AMD64_CMP_RR(REG_R10, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: acc.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R11, REG_R12, int8(accOffset+accObjValOff))
+	as.AMD64_TEST_RR(REG_R11, REG_R11)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpInstanceof(frame, lhsReg).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(lhsReg))
+	addr := funcToAddr(sparkplugOpInstanceof)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
+}
+
+// --- emitAMD64In: prop in acc → Acc ---
+//
+// Guards acc is an object, then calls Go helper.
+func emitAMD64In(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	propReg := int(instr.OperandA)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Guard: acc must be object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R12, int8(accTagAlign))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: acc.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+accObjValOff))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper: sparkplugOpIn(frame, propReg).
+	as.AMD64_MOV_RR(REG_RAX, REG_R12) // RAX = frame
+	as.AMD64_MOV_RI(REG_RBX, uint64(propReg))
+	addr := funcToAddr(sparkplugOpIn)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+	as.AMD64_JMP(done)
+
+	as.AMD64_Bind(slowPath)
+	as.AMD64_JMP(deoptStub)
+	as.AMD64_Bind(done)
 }
 
 // init sets up the AMD64 Sparkplug compile hook.
