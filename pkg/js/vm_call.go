@@ -47,12 +47,12 @@ func boxString(s JSValue) *JSObject {
 	return boxed
 }
 
-// opCallFast is the shared fast-path for OpCall0/OpCall1/OpCall2.
-func (vm *VM) opCallFast(frame *VMFrame, calleeReg, thisReg, argCount int) {
+// unpackArgs reads argCount arguments starting from calleeReg+1 in frame.Regs.
+// Uses stack allocation for ≤8 args, heap for larger counts.
+func unpackArgs(frame *VMFrame, calleeReg int, argCount int) []JSValue {
 	var args []JSValue
 	if argCount > 0 {
 		if argCount <= 8 {
-			// Stack-allocated array for common arg counts (0-8).
 			var arr [8]JSValue
 			args = arr[:argCount]
 		} else {
@@ -65,14 +65,26 @@ func (vm *VM) opCallFast(frame *VMFrame, calleeReg, thisReg, argCount int) {
 			}
 		}
 	}
-	var thisObj *JSObject
+	return args
+}
+
+// resolveThis returns the JSObject for the given thisReg, or nil.
+// Handles string boxing for String.prototype method calls.
+func resolveThis(frame *VMFrame, thisReg int) *JSObject {
 	if thisReg < 255 && thisReg < len(frame.Regs) {
 		if frame.Regs[thisReg].IsObject() {
-			thisObj = frame.Regs[thisReg].ObjVal
+			return frame.Regs[thisReg].ObjVal
 		} else if frame.Regs[thisReg].IsString() {
-			thisObj = boxString(frame.Regs[thisReg])
+			return boxString(frame.Regs[thisReg])
 		}
 	}
+	return nil
+}
+
+// opCallFast is the shared fast-path for OpCall0/OpCall1/OpCall2.
+func (vm *VM) opCallFast(frame *VMFrame, calleeReg, thisReg, argCount int) {
+	args := unpackArgs(frame, calleeReg, argCount)
+	thisObj := resolveThis(frame, thisReg)
 	if calleeReg < len(frame.Regs) {
 		callee := frame.Regs[calleeReg]
 		vm.pushCallName(callee, frame)
@@ -102,30 +114,8 @@ func opCall2(vm *VM, frame *VMFrame, instr Instruction) {
 func opCall(vm *VM, frame *VMFrame, instr Instruction) {
 	calleeReg, argCount := int(instr.OperandA), int(instr.OperandB)
 	thisReg := int(instr.OperandC)
-	var args []JSValue
-	if argCount > 0 {
-		if argCount <= 8 {
-			// Stack-allocated array for common arg counts (0-8).
-			var arr [8]JSValue
-			args = arr[:argCount]
-		} else {
-			args = make([]JSValue, argCount)
-		}
-		for i := 0; i < argCount; i++ {
-			argReg := calleeReg + 1 + i
-			if argReg < len(frame.Regs) {
-				args[i] = frame.Regs[argReg]
-			}
-		}
-	}
-	var thisObj *JSObject
-	if thisReg < 255 && thisReg < len(frame.Regs) {
-		if frame.Regs[thisReg].IsObject() {
-			thisObj = frame.Regs[thisReg].ObjVal
-		} else if frame.Regs[thisReg].IsString() {
-			thisObj = boxString(frame.Regs[thisReg])
-		}
-	}
+	args := unpackArgs(frame, calleeReg, argCount)
+	thisObj := resolveThis(frame, thisReg)
 	if calleeReg < len(frame.Regs) {
 		callee := frame.Regs[calleeReg]
 		vm.pushCallName(callee, frame)
@@ -143,22 +133,7 @@ func opCall(vm *VM, frame *VMFrame, instr Instruction) {
 func opCallSpread(vm *VM, frame *VMFrame, instr Instruction) {
 	calleeReg, fixedCount := int(instr.OperandA), int(instr.OperandB)
 	thisReg := int(instr.OperandC)
-	var args []JSValue
-	// Read fixed (non-spread) arguments from consecutive registers.
-	if fixedCount > 0 {
-		if fixedCount <= 8 {
-			var arr [8]JSValue
-			args = arr[:fixedCount]
-		} else {
-			args = make([]JSValue, fixedCount)
-		}
-		for i := 0; i < fixedCount; i++ {
-			argReg := calleeReg + 1 + i
-			if argReg < len(frame.Regs) {
-				args[i] = frame.Regs[argReg]
-			}
-		}
-	}
+	args := unpackArgs(frame, calleeReg, fixedCount)
 	// Read spread array from calleeReg + 1 + fixedCount.
 	spreadReg := calleeReg + 1 + fixedCount
 	if spreadReg < len(frame.Regs) {
@@ -172,14 +147,7 @@ func opCallSpread(vm *VM, frame *VMFrame, instr Instruction) {
 			}
 		}
 	}
-	var thisObj *JSObject
-	if thisReg < 255 && thisReg < len(frame.Regs) {
-		if frame.Regs[thisReg].IsObject() {
-			thisObj = frame.Regs[thisReg].ObjVal
-		} else if frame.Regs[thisReg].IsString() {
-			thisObj = boxString(frame.Regs[thisReg])
-		}
-	}
+	thisObj := resolveThis(frame, thisReg)
 	if calleeReg < len(frame.Regs) {
 		callee := frame.Regs[calleeReg]
 		vm.pushCallName(callee, frame)
@@ -197,24 +165,7 @@ func opCallSpread(vm *VM, frame *VMFrame, instr Instruction) {
 func opSuperCall(vm *VM, frame *VMFrame, instr Instruction) {
 	// super() call: load parent constructor from __proto__ on this.
 	// The parent constructor is at this.__proto__.constructor.
-	argCount := int(instr.OperandB)
-	var args []JSValue
-	if argCount > 0 {
-		if argCount <= 8 {
-			var arr [8]JSValue
-			args = arr[:argCount]
-		} else {
-			args = make([]JSValue, argCount)
-		}
-		for i := 0; i < argCount; i++ {
-			// Args start at register 1 (after the callee register which is 0).
-			argReg := 1 + i
-			if argReg < len(frame.Regs) {
-				args[i] = frame.Regs[argReg]
-			}
-		}
-	}
-	// Load parent constructor: this.__proto__.constructor
+	args := unpackArgs(frame, 0, int(instr.OperandB))
 	thisObj := frame.This.ObjVal
 	if thisObj != nil {
 		protoVal := thisObj.Get("__proto__")
