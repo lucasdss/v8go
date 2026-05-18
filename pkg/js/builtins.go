@@ -2135,6 +2135,12 @@ func (vm *VM) registerWeakRef() {
 func (vm *VM) registerFinalizationRegistry() {
 	frCtor := NewJSObject()
 	frCtor.ConstructorName = "Function"
+	// NOTE: FinalizationRegistry callbacks capture the VM pointer through
+	// CallFunc closures. VMs with outstanding registered targets will not be
+	// GC'd until all targets are collected. To avoid VM leaks, call
+	// finalizationRegistry.unregister() for all targets before discarding
+	// the VM. This is an inherent limitation of the Go runtime — there is no
+	// mechanism to weak-reference the VM from a GC cleanup callback.
 	frCtor.CallFunc = func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 || !args[0].IsObject() || args[0].ObjVal == nil || !args[0].ObjVal.isCallable() {
 			return Undefined

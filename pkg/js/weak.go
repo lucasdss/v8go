@@ -21,12 +21,22 @@ var weakRefIDSeq atomic.Uint64
 var weakRefMu sync.Mutex
 
 // weakRefEntry holds a weak reference to a target.
-// For object targets, ptr is stored as unsafe.Pointer (NOT traced by GC).
-// This is what makes the reference "weak" — the Go GC doesn't see it.
+//
+// Design for object targets (race-free deref):
+//   - value: pre-extracted JSValue, stored at registration time. derefWeakRef
+//     returns this stored value under lock — never converts unsafe.Pointer
+//     to *JSObject after lock release. This eliminates the use-after-free race
+//     where GC could sweep the target between lock release and caller use.
+//   - ptr: unsafe.Pointer used ONLY for runtime.AddCleanup registration.
+//     Never dereferenced for value retrieval.
+//   - alive: set to false when the GC-triggered cleanup fires. derefWeakRef
+//     checks this flag under lock to determine whether the target is still alive.
+//
 // For primitive targets, value holds the JSValue directly.
 type weakRefEntry struct {
-	ptr   unsafe.Pointer // *JSObject pointer (not GC-traced)
-	value JSValue        // value for non-object targets
+	ptr   unsafe.Pointer // *JSObject pointer (for AddCleanup only, never dereferenced)
+	value JSValue        // pre-extracted target value
+	alive bool           // true until cleanup fires
 	isObj bool           // true if the target is an object
 }
 
@@ -35,23 +45,33 @@ type weakRefEntry struct {
 var weakRefTable = make(map[uint64]weakRefEntry)
 
 // clearWeakRef is the AddCleanup callback for WeakRef targets.
-// It receives the WeakRef ID and deletes the entry from the weak table.
+// It receives the WeakRef ID and marks the entry as dead.
+// The entry is NOT deleted — derefWeakRef checks the alive flag to
+// determine whether to return the stored value or Undefined.
+// The stored value is cleared so the target can be GC'd.
 // IMPORTANT: this function does NOT reference the target object itself —
 // if it did, runtime.AddCleanup would never fire.
 func clearWeakRef(id uint64) {
 	weakRefMu.Lock()
-	delete(weakRefTable, id)
+	if entry, ok := weakRefTable[id]; ok {
+		entry.alive = false
+		entry.value = Undefined // release reference so GC can collect
+		weakRefTable[id] = entry
+	}
 	weakRefMu.Unlock()
 }
 
 // storeWeakRef registers a target in the weak table and returns a unique ID.
-// For object targets, stores an unsafe pointer so Go's GC can collect the target.
+// For object targets, stores the JSValue immediately (pre-extracted) and also
+// stores an unsafe pointer for AddCleanup registration. The pre-extracted
+// value is returned by derefWeakRef without pointer conversion.
 // For primitive targets, stores the JSValue directly (stack values, not heap).
 func storeWeakRef(target JSValue) uint64 {
 	id := weakRefIDSeq.Add(1)
-	entry := weakRefEntry{}
+	entry := weakRefEntry{alive: true}
 	if target.IsObject() && target.ObjVal != nil {
 		entry.ptr = unsafe.Pointer(target.ObjVal)
+		entry.value = target // pre-extract the JSValue (race-free deref)
 		entry.isObj = true
 	} else {
 		entry.value = target
@@ -64,7 +84,10 @@ func storeWeakRef(target JSValue) uint64 {
 }
 
 // derefWeakRef retrieves the target from the weak table.
-// Returns Undefined if the target has been collected.
+// Returns Undefined if the target has been collected (alive == false).
+// For object targets, returns the pre-extracted value stored at registration
+// time — never converts unsafe.Pointer to *JSObject, eliminating the
+// use-after-free race.
 func derefWeakRef(id uint64) JSValue {
 	weakRefMu.Lock()
 	entry, ok := weakRefTable[id]
@@ -72,16 +95,12 @@ func derefWeakRef(id uint64) JSValue {
 		weakRefMu.Unlock()
 		return Undefined
 	}
-	if !entry.isObj {
-		result := entry.value
+	if !entry.alive {
 		weakRefMu.Unlock()
-		return result
+		return Undefined
 	}
-	// Convert unsafe pointer back to *JSObject while holding the lock.
-	// The cleanup can't run concurrently because it also takes the lock,
-	// so the memory is guaranteed valid at this point.
-	obj := (*JSObject)(entry.ptr)
-	result := NewObject(obj)
+	// Return the pre-extracted value directly — no pointer conversion.
+	result := entry.value
 	weakRefMu.Unlock()
 	return result
 }

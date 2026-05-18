@@ -423,24 +423,18 @@ func NewVM() *VM {
 
 // tagAllPrototypes walks the VM's globals and tags all built-in prototype objects
 // with this VM's RealmID for cross-realm instanceof detection.
+//
+// Package-level prototypes (ObjectPrototype, ArrayPrototype, etc.) are shared
+// across all VM instances. We intentionally skip tagging them here — each new
+// VM would overwrite the previous VM's RealmID, causing false cross-realm
+// detection. For shared prototypes, opInstanceof relies on pointer comparison
+// (same pointer across VMs) rather than RealmID+ConstructorName fallback.
 func (vm *VM) tagAllPrototypes() {
-	// Tag package-level prototypes.
-	protos := []*JSObject{
-		ObjectPrototype,
-		ArrayPrototype,
-		StringPrototype,
-		RegExpPrototype,
-		ArrayBufferPrototype,
-		DataViewPrototype,
-		DatePrototype,
-		PromisePrototype,
-	}
-	for _, p := range protos {
-		if p != nil {
-			vm.tagPrototype(p)
-		}
-	}
-	// Tag prototypes reachable from globals (catches proto objects created locally in register*).
+	// Skip shared package-level prototypes. These are the same *JSObject
+	// pointers across all VMs, so tagging them with per-VM RealmID would
+	// cause false cross-realm positives.
+	// Instead, iterate globals and tag only per-VM prototypes (those created
+	// during RegisterBuiltins — error prototypes, constructor prototypes, etc.).
 	for _, val := range vm.globals {
 		if val.IsObject() && val.ObjVal != nil {
 			protoVal := val.ObjVal.Get("prototype")

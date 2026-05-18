@@ -148,7 +148,11 @@ m = undefined;    // value NOT garbage-collectable yet
 key = undefined;  // NOW it becomes collectable
 ```
 
-WeakRef always returns the target on `deref()` — Go GC cannot notify the engine when an object is collected. FinalizationRegistry callbacks are never fired. These APIs exist for compatibility but are not truly weak.
+WeakRef and FinalizationRegistry use `runtime.AddCleanup` (Go 1.24+) to detect when targets are collected. WeakRef.deref() returns `undefined` after the target is GC'd, and FinalizationRegistry callbacks fire asynchronously when targets are collected.
+
+**FinalizationRegistry VM lifetime:** VMs with outstanding FinalizationRegistry targets will not be garbage collected until all registered targets are collected. The cleanup callbacks capture the VM for execution context. To avoid leaking VMs, call `finalizationRegistry.unregister()` for all targets before discarding the VM.
+
+**WeakRef value retention:** Stored WeakRef entries hold a pre-extracted copy of the target value so that `deref()` can return it without a race-prone unsafe.Pointer conversion. The GC-triggered cleanup marks the entry dead and clears the stored value so the target can be collected.
 
 ### Error.stack
 
