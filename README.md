@@ -1,13 +1,13 @@
 # V8Go — V8-compatible JavaScript Engine in Go with JIT Compiler
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/lucasdss/v8go.svg)](https://pkg.go.dev/github.com/lucasdss/v8go)
-[![Tests](https://img.shields.io/badge/tests-1700+-blue)](https://github.com/lucasdss/v8go)
+[![Tests](https://img.shields.io/badge/tests-1190+-blue)](https://github.com/lucasdss/v8go)
 [![Coverage](https://img.shields.io/badge/JIT_coverage-84.5%25-brightgreen)](https://github.com/lucasdss/v8go)
-[![License](https://img.shields.io/badge/license-MIT-blue)](LICENSE)
+[![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
 V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~98% ECMAScript compatibility** with near-native performance on ARM64.
 
-The minimum required Go version is 1.21.
+The minimum required Go version is 1.24.
 
 ## Features
 
@@ -17,9 +17,9 @@ The minimum required Go version is 1.21.
 - **Inline Caching**: mono/poly/megamorphic runtime code patching for fast property access
 - **Deoptimization**: type guards → FrameDescription → interpreter resume on speculative failure
 - **All major builtins**: Object, Array, String, Number, Math, Date, RegExp, JSON, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Promise (all/race/any/allSettled), BigInt, TypedArrays, Error subtypes
-- **Browser APIs**: `fetch()`, `XMLHttpRequest`, `console`, `setTimeout`, DOM bindings
+- **Browser APIs**: `fetch()`, `XMLHttpRequest`, `console`, DOM bindings
 - **Shadow Stack**: GC-safe object references in JIT native frames
-- **Zero CGO dependencies**: pure Go, cross-compiles everywhere Go does
+- **Minimal CGO**: Darwin-only (pthread_jit_write_protect_np); Linux uses pure Go dual-mapping. Cross-compiles everywhere.
 - **Passes 100% of self-contained Test262** (58/58 ECMAScript conformance tests)
 
 ## Basic Example
@@ -88,15 +88,6 @@ import js "github.com/lucasdss/v8go/pkg/js"
 vm := js.NewVM()
 vm.SetConsoleOutput(func(s string) { fmt.Println(s) })
 vm.Run("console.log('Hello from Go!')")
-```
-
-## QuickJS Comparison Engine (Optional)
-
-V8Go includes an optional QuickJS-based engine for browser comparison testing. It's excluded from default builds to keep the module lightweight for `go.dev/play`.
-
-```bash
-# Build with QuickJS engine included
-go build -tags qjs ./...
 ```
 
 ## Architecture
@@ -199,7 +190,7 @@ For single operations, the interpreter runs at ~50 ns/op. The Sparkplug JIT (Tie
 | 10K arithmetic loop | 1.9 ms | 0.8 ms (**2.5x**) | Pre-warmed to 200 calls |
 | Property access 5K | 100 ns/op | 100 ns/op | IC active, overhead in Go helpers |
 
-**It is not a replacement for Chrome V8 in raw speed.** V8's C++ JIT uses pointer tagging, Smi encoding, and generational GC to achieve higher peak performance. V8Go trades absolute speed for Go safety, portability, and zero CGO dependencies.
+**It is not a replacement for Chrome V8 in raw speed.** V8's C++ JIT uses pointer tagging, Smi encoding, and generational GC to achieve higher peak performance. V8Go trades absolute speed for Go safety, portability, and near-zero CGO.
 
 ### Why would I use it over a V8 wrapper?
 
@@ -217,7 +208,7 @@ No. A VM instance can only be used by one goroutine at a time. Create multiple V
 
 ### Where is setTimeout()/setInterval()?
 
-These are host-provided functions, not part of ECMAScript. V8Go provides them through the `EventLoop` interface. Create an event loop, register it with the engine, and `setTimeout`/`setInterval` become available.
+These are host-provided functions, not part of ECMAScript. V8Go provides stub implementations that return 0. A full event loop with timer support can be built on top of the engine using goroutines and channels.
 
 ### Can you implement (feature X)?
 
@@ -240,10 +231,10 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 
 | Metric | Value |
 |--------|-------|
-| **Total lines** | 65,000+ (155 Go files) |
+| **Total lines** | 64,000+ (146 Go files) |
 | **pkg/jit coverage** | **84.5%** (exceeds 80% gate) |
 | **pkg/js coverage** | 75.8% |
-| **Tests** | 2,050+ across 8 packages |
+| **Tests** | 1,190+ across 8 packages |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
 | **Static analysis** | clean (go vet, gosec ≤12 pre-existing) |
@@ -259,7 +250,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 | Aspect | V8Go | Chrome V8 |
 |--------|------|-----------|
-| **Language** | Go (64K lines) | C++ (2M+ lines) |
+| **Language** | Go (32K lines) | C++ (2M+ lines) |
 | **Interpreter** | Ignition-style register VM (197 ops) | Ignition register VM |
 | **Baseline JIT** | Sparkplug (185/185 ops ARM64) | Sparkplug (ARM64/x86-64) |
 | **Optimizing JIT** | TurboFan (82 SSA ops, inlining) | Maglev + TurboFan |
@@ -280,12 +271,12 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 | Package | Lines | Description |
 |---------|-------|-------------|
-| `pkg/js/` | 31,000 | Bytecode VM, parser, compiler, builtins, Hidden Classes, Inline Caching, feedback vectors |
-| `pkg/jit/` | 12,000 | Sparkplug (Tier 1), TurboFan (Tier 2), ARM64/AMD64 assembler, deoptimization, shadow stack, GC bridge |
-| `gov8.go` | 55 | Public API: `Evaluate()`, `NewEngine()`, `Version()` |
-| `pkg/dom/` | 2,500 | DOM bindings: `document.getElementById`, `element.style`, `classList`, event handling |
-| `pkg/net/` | 1,500 | Browser networking: `fetch()`, `XMLHttpRequest`, URL parsing |
-| `pkg/parser/` | 3,000 | HTML tokenizer + tree builder, CSS parser |
+| `pkg/js/` | 32,000 | Bytecode VM, parser, compiler, builtins, Hidden Classes, Inline Caching, feedback vectors |
+| `pkg/jit/` | 20,000 | Sparkplug (Tier 1), TurboFan (Tier 2), ARM64/AMD64 assembler, deoptimization, shadow stack, GC bridge |
+| `v8go.go` | 54 | Public API: `Evaluate()`, `NewEngine()`, `Version()` |
+| `pkg/dom/` | 4,000 | DOM bindings: `document.getElementById`, `element.style`, `classList`, event handling |
+| `pkg/net/` | 2,700 | Browser networking: `fetch()`, `XMLHttpRequest`, URL parsing |
+| `pkg/parser/` | 4,400 | HTML tokenizer + tree builder, CSS parser |
 
 ## Current Status
 
