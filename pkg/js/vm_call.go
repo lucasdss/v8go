@@ -141,9 +141,19 @@ func opCallSpread(vm *VM, frame *VMFrame, instr Instruction) {
 		if spreadVal.IsObject() && spreadVal.ObjVal != nil {
 			lengthVal := spreadVal.ObjVal.Get("length")
 			arrLen := int(lengthVal.ToNumber())
-			for i := 0; i < arrLen; i++ {
-				elem := spreadVal.ObjVal.Get(intKey(i))
-				args = append(args, elem)
+			if arrLen > 0 {
+				baseIdx := len(args)
+				need := baseIdx + arrLen
+				if cap(args) < need {
+					grown := make([]JSValue, need)
+					copy(grown, args)
+					args = grown
+				} else {
+					args = args[:need]
+				}
+				for i := 0; i < arrLen; i++ {
+					args[baseIdx+i] = spreadVal.ObjVal.Get(intKey(i))
+				}
 			}
 		}
 	}
