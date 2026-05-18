@@ -176,7 +176,7 @@ if (r !== null && r !== undefined) return r;
 return [];
 };
 
-		globalThis.navigator = { userAgent: 'GoBrowser/1.0', language: 'en-US' };
+		globalThis.navigator = { userAgent: 'V8Go/1.0', language: 'en-US' };
 		globalThis.setTimeout = function(fn, ms) { return 0; };
 		globalThis.location = { href: '', protocol: 'https:', hostname: '', pathname: '/', search: '', hash: '' };
 		globalThis.window = globalThis;

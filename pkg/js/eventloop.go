@@ -4,7 +4,7 @@
 // https://html.spec.whatwg.org/multipage/webappapis.html#scripting
 //
 // Note: This package provides the event loop framework.  Actual JS execution
-// would be delegated to an embedded JS engine (e.g. goja).  The interfaces
+// would be delegated to an embedded JS engine. The interfaces
 // here define the host hooks and scheduling primitives needed to integrate
 // such an engine.
 package js

@@ -1,5 +1,5 @@
 // Package jit provides baseline and optimizing JIT compilers for the
-// GoBrowser JavaScript engine. The Sparkplug baseline compiler (Tier 1)
+// V8Go JavaScript engine. The Sparkplug baseline compiler (Tier 1)
 // translates bytecode to ARM64 machine code. TurboFan (Tier 2) uses SSA
 // optimization passes for peak performance.
 //

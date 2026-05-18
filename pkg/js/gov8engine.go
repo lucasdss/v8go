@@ -338,7 +338,7 @@ func (e *Gov8Engine) Execute(source string) error {
 	wrapped := fmt.Sprintf(`
 		var __console = { log: function() { globalThis.__golog(Array.prototype.join.call(arguments, ' ')); } };
 		var document = { getElementById: __goGetElementById, createElement: __goCreateElement, querySelector: __goQuerySelector, querySelectorAll: __goQuerySelectorAll, title: __docTitle__ || '', addEventListener: __goAddEventListener };
-		var navigator = { userAgent: 'GoBrowser/1.0 (GoV8)', language: 'en-US' };
+		var navigator = { userAgent: 'V8Go/1.0', language: 'en-US' };
 		var window = globalThis;
 		%s
 		try { %s } catch(e) { globalThis.__golog('Error: ' + String(e)); }

@@ -11,7 +11,7 @@ import (
 // ParseHTML5 parses HTML using golang.org/x/net/html and returns a
 // dom.Document tree.
 //
-// Parser strategy: gobrowser intentionally uses the maintained HTML5 parser
+// Parser strategy: V8Go intentionally uses the maintained HTML5 parser
 // from x/net/html for the public ParseHTML path so malformed real-world markup
 // follows the same WHATWG HTML tree-construction behavior as other Go tools.
 // The custom tokenizer/parser in html.go is retained as an educational,
