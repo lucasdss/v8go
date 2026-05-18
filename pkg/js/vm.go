@@ -257,17 +257,11 @@ type VM struct {
 	// console buffers log output and forwards to optional callback.
 	console *Console
 
-	// Function registry: maps function names to bytecode.
-	funcRegistry map[string]*BytecodeFunction
-
-	// Built-in functions.
-	builtins map[string]func(args []JSValue) JSValue
+	// registry stores function registrations and bytecode cache.
+	registry *Registry
 
 	// Inline caching support.
 	nextICSlot int
-
-	// Bytecode cache: avoids re-parsing and re-compiling the same source.
-	bytecodeCache map[string]*BytecodeFunction
 
 	// Async work tracking: WaitGroup for goroutines spawned by async builtins.
 	// Tests can call WaitAsync() to wait for all pending async work.
@@ -294,9 +288,7 @@ func NewVM() *VM {
 		calltrack:      &CallTracker{},
 		console:        NewConsole(),
 		events:         NewEventSystem(),
-		funcRegistry:   make(map[string]*BytecodeFunction),
-		builtins:       make(map[string]func(args []JSValue) JSValue),
-		bytecodeCache:      make(map[string]*BytecodeFunction),
+		registry:       NewRegistry(),
 		promiseReactions: make(map[*JSObject][]promiseReaction),
 	}
 	// Pre-create and cache the global object for reuse as `this`.
@@ -373,7 +365,7 @@ func (vm *VM) Run(source string) JSValue {
 	defer vm.mu.Unlock()
 
 	// Check bytecode cache first.
-	if bf, ok := vm.bytecodeCache[source]; ok {
+	if bf, ok := vm.registry.Cache[source]; ok {
 		vm.maybePromoteTier(bf)
 		return vm.execute(bf)
 	}
@@ -396,7 +388,7 @@ func (vm *VM) Run(source string) JSValue {
 	// No per-execution allocation — the frame simply references bf.ICVector.
 
 	// Cache for future runs.
-	vm.bytecodeCache[source] = bf
+	vm.registry.Cache[source] = bf
 
 	// Execute.
 	vm.maybePromoteTier(bf)
@@ -2284,12 +2276,12 @@ func opLdaGlobal(vm *VM, frame *VMFrame, instr Instruction) {
 			if nameIdx < len(frame.Func.Constants) {
 				frame.Func.Constants[nameIdx] = val
 			}
-		} else if builtinFn, ok := vm.builtins[name]; ok {
+		} else if builtinFn, ok := vm.registry.Builtins[name]; ok {
 			frame.Acc = vm.makeBuiltinFunction(name, builtinFn)
 			if nameIdx < len(frame.Func.Constants) {
 				frame.Func.Constants[nameIdx] = frame.Acc
 			}
-		} else if funcBF, ok := vm.funcRegistry[name]; ok {
+		} else if funcBF, ok := vm.registry.Funcs[name]; ok {
 			frame.Acc = vm.makeFunctionObject(name, funcBF)
 			if nameIdx < len(frame.Func.Constants) {
 				frame.Func.Constants[nameIdx] = frame.Acc
@@ -2353,7 +2345,7 @@ func opLdaGlobalSlot(vm *VM, frame *VMFrame, instr Instruction) {
 			frame.Acc = val
 			return
 		}
-		if builtinFn, ok := vm.builtins[name]; ok {
+		if builtinFn, ok := vm.registry.Builtins[name]; ok {
 			frame.Acc = vm.makeBuiltinFunction(name, builtinFn)
 			// Cache in GlobalVals for JIT fast-path reads.
 			if slot < len(frame.Func.GlobalVals) {
@@ -2361,7 +2353,7 @@ func opLdaGlobalSlot(vm *VM, frame *VMFrame, instr Instruction) {
 			}
 			return
 		}
-		if funcBF, ok := vm.funcRegistry[name]; ok {
+		if funcBF, ok := vm.registry.Funcs[name]; ok {
 			frame.Acc = vm.makeFunctionObject(name, funcBF)
 			// Cache in GlobalVals for JIT fast-path reads.
 			if slot < len(frame.Func.GlobalVals) {
@@ -2691,7 +2683,7 @@ func (vm *VM) callMethod(callee JSValue, thisObj *JSObject, args []JSValue) JSVa
 	// Resolve string callee names to built-in functions.
 	if callee.IsString() {
 		name := callee.ToString()
-		if fn, ok := vm.builtins[name]; ok {
+		if fn, ok := vm.registry.Builtins[name]; ok {
 			return fn(args)
 		}
 		return Undefined
@@ -2957,7 +2949,7 @@ func (vm *VM) makeFunctionObject(name string, bf *BytecodeFunction) JSValue {
 			return result
 		}
 	}
-	vm.funcRegistry[name] = bf
+	vm.registry.Funcs[name] = bf
 	return NewObject(obj)
 }
 
@@ -2967,7 +2959,7 @@ func (vm *VM) makeBuiltinFunction(name string, fn func(args []JSValue) JSValue) 
 	obj.CallFunc = func(this *JSObject, args []JSValue) JSValue {
 		return fn(args)
 	}
-	vm.builtins[name] = fn
+	vm.registry.Builtins[name] = fn
 	return NewObject(obj)
 }
 

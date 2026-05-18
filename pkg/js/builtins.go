@@ -246,7 +246,7 @@ func (vm *VM) registerDOMEvents() {
 	// __goDispatchEvent(targetID, eventType)
 	// Called from JS or browser bridge to dispatch an event to an element's inline handler.
 	// The handler receives a synthetic event object: { type, target, preventDefault() }.
-	vm.builtins["__goDispatchEvent"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__goDispatchEvent"] = func(args []JSValue) JSValue {
 		if len(args) < 2 {
 			return False
 		}
@@ -1728,7 +1728,7 @@ func (vm *VM) registerBigInt() {
 // registerModules registers builtins for ES module support.
 func (vm *VM) registerModules() {
 	// __import__(url) — dynamic import, returns Promise<module namespace>
-	vm.builtins["__import__"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__import__"] = func(args []JSValue) JSValue {
 		if len(args) < 1 {
 			return vm.NewPromise(func(resolve, reject func(JSValue)) {
 				reject(NewString("TypeError: import() requires a module specifier"))
@@ -1751,7 +1751,7 @@ func (vm *VM) registerModules() {
 	}
 
 	// __moduleImportNamespace__(url) — synchronous import of namespace (for static import * as)
-	vm.builtins["__moduleImportNamespace__"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__moduleImportNamespace__"] = func(args []JSValue) JSValue {
 		if len(args) < 1 {
 			return Undefined
 		}
@@ -1765,7 +1765,7 @@ func (vm *VM) registerModules() {
 	}
 
 	// __moduleImportDefault__(url) — synchronous import of default export
-	vm.builtins["__moduleImportDefault__"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__moduleImportDefault__"] = func(args []JSValue) JSValue {
 		if len(args) < 1 {
 			return Undefined
 		}
@@ -1783,7 +1783,7 @@ func (vm *VM) registerModules() {
 	}
 
 	// __moduleImportNamed__(url, name) — synchronous import of named export
-	vm.builtins["__moduleImportNamed__"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__moduleImportNamed__"] = func(args []JSValue) JSValue {
 		if len(args) < 2 {
 			return Undefined
 		}

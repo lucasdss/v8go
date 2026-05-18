@@ -106,16 +106,16 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 	if _, hasDoc := e.vm.globals.M["document"]; !hasDoc {
 		docObj := NewJSObject()
 		docObj.Set("getElementById", NewObject(builtinFunc("getElementById", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.builtins["__goGetElementById"](args)
+			return e.vm.registry.Builtins["__goGetElementById"](args)
 		})))
 		docObj.Set("createElement", NewObject(builtinFunc("createElement", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.builtins["__goCreateElement"](args)
+			return e.vm.registry.Builtins["__goCreateElement"](args)
 		})))
 		docObj.Set("querySelector", NewObject(builtinFunc("querySelector", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.builtins["__goQuerySelector"](args)
+			return e.vm.registry.Builtins["__goQuerySelector"](args)
 		})))
 		docObj.Set("querySelectorAll", NewObject(builtinFunc("querySelectorAll", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.builtins["__goQuerySelectorAll"](args)
+			return e.vm.registry.Builtins["__goQuerySelectorAll"](args)
 		})))
 		e.vm.globals.M["document"] = NewObject(docObj)
 	}
@@ -195,7 +195,7 @@ e.heap.MarkJSReachable(&e.doc.DocumentElement.Node)
 	// Propagate DOM change callback to VM for inline event handler repaints.
 	e.vm.SetDOMChangeCallback(e.domChangeCallback)
 	// Expose document.getElementById as a global built-in function.
-	e.vm.builtins["__goGetElementById"] = func(args []JSValue) JSValue {
+	e.vm.registry.Builtins["__goGetElementById"] = func(args []JSValue) JSValue {
 		if len(args) == 0 {
 			return Null
 		}
@@ -215,7 +215,7 @@ e.heap.MarkJSReachable(&e.doc.DocumentElement.Node)
 	}
 
 	// Expose document.createElement as a global built-in.
-	e.vm.builtins["__goCreateElement"] = func(args []JSValue) JSValue {
+	e.vm.registry.Builtins["__goCreateElement"] = func(args []JSValue) JSValue {
 		if e.doc == nil || len(args) == 0 {
 			return Null
 		}
@@ -226,7 +226,7 @@ return e.elementToGov8Value(el)
 }
 
 // Expose document.querySelector as a global built-in.
-e.vm.builtins["__goQuerySelector"] = func(args []JSValue) JSValue {
+e.vm.registry.Builtins["__goQuerySelector"] = func(args []JSValue) JSValue {
 if e.doc == nil || len(args) == 0 {
 return Null
 }
@@ -238,7 +238,7 @@ return e.elementToGov8Value(found)
 }
 
 // Expose document.querySelectorAll as a global built-in.
-e.vm.builtins["__goQuerySelectorAll"] = func(args []JSValue) JSValue {
+e.vm.registry.Builtins["__goQuerySelectorAll"] = func(args []JSValue) JSValue {
 if e.doc == nil || len(args) == 0 {
 return NewObject(NewJSObject())
 }
@@ -273,7 +273,7 @@ func (e *Gov8Engine) Execute(source string) error {
 	// Wire setTimeout if we have an event loop.
 	var setTimeoutDef string
 	if e.eventLoop != nil {
-		e.vm.builtins["__goSetTimeout"] = func(args []JSValue) JSValue {
+		e.vm.registry.Builtins["__goSetTimeout"] = func(args []JSValue) JSValue {
 			if len(args) < 2 {
 				return NewNumber(-1)
 			}
@@ -311,7 +311,7 @@ func (e *Gov8Engine) Execute(source string) error {
 	}
 
 	// Wire document.addEventListener and window.onload lifecycle events.
-	e.vm.builtins["__goAddEventListener"] = func(args []JSValue) JSValue {
+	e.vm.registry.Builtins["__goAddEventListener"] = func(args []JSValue) JSValue {
 		if len(args) < 2 {
 			return Undefined
 		}
@@ -323,14 +323,14 @@ func (e *Gov8Engine) Execute(source string) error {
 		e.vm.AddEventListener(eventType, callback)
 		return Undefined
 	}
-	e.vm.builtins["__goSetOnload"] = func(args []JSValue) JSValue {
+	e.vm.registry.Builtins["__goSetOnload"] = func(args []JSValue) JSValue {
 		if len(args) == 0 {
 			return Undefined
 		}
 		e.vm.SetOnloadHandler(args[0])
 		return Undefined
 	}
-	e.vm.builtins["__goGetOnload"] = func(args []JSValue) JSValue {
+	e.vm.registry.Builtins["__goGetOnload"] = func(args []JSValue) JSValue {
 		return e.vm.GetOnloadHandler()
 	}
 
@@ -354,7 +354,7 @@ func (e *Gov8Engine) Execute(source string) error {
 
 	// Register console log function (once, under lock).
 	e.vm.Lock()
-	e.vm.builtins["__golog"] = func(args []JSValue) JSValue {
+	e.vm.registry.Builtins["__golog"] = func(args []JSValue) JSValue {
 		if len(args) > 0 && e.consoleLogFn != nil {
 			e.consoleLogFn(args[0].ToString())
 		}
