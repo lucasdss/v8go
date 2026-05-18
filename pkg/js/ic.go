@@ -48,7 +48,10 @@ type ICSlot struct {
 	HitCount    int                // number of times this slot was hit
 	Patched     bool               // true if JIT IC slot has been patched
 	ObservedTag TypeTag            // dominant operand type for binary ops
-	Callee      *BytecodeFunction  // callee target for call sites
+	Callee      *BytecodeFunction  // monomorphic callee target for call sites
+	// Polymorphic call site tracking: up to 4 callees, indexed by shape position.
+	PolyCallees   [4]*BytecodeFunction
+	PolyCallCount int
 }
 
 // FeedbackVector holds inline caching data for all property access sites
