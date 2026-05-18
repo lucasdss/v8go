@@ -58,9 +58,33 @@ for _, log := range engine.ConsoleOutput() {
 
 ## Passing Values to JS
 
-Any Go value can be passed to JS by binding functions to the VM.
+Any Go value can be passed to JS by binding values to global scope or calling functions.
 
 ```go
+package main
+
+import (
+    "fmt"
+    "github.com/lucasdss/v8go"
+)
+
+func main() {
+    engine := v8go.NewEngine()
+
+    // Evaluate JS that defines a function
+    engine.Evaluate("function add(a, b) { return a + b; }")
+
+    // Call the function
+    result := engine.Evaluate("add(3, 4)")
+    fmt.Println(result) // 7
+}
+```
+
+For direct VM access (advanced), use the `pkg/js` sub-package:
+
+```go
+import js "github.com/lucasdss/v8go/pkg/js"
+
 vm := js.NewVM()
 vm.SetConsoleOutput(func(s string) { fmt.Println(s) })
 vm.Run("console.log('Hello from Go!')")
