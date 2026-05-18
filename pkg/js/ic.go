@@ -71,6 +71,19 @@ func NewFeedbackVector(numSlots int) *FeedbackVector {
 	}
 }
 
+// Reset clears all inline cache slots back to Uninitialized state.
+// Called on deoptimization to force fresh type feedback collection
+// before the next JIT recompilation.
+func (fv *FeedbackVector) Reset() {
+	for i := range fv.Slots {
+		fv.Slots[i].State = ICUninitialized
+		fv.Slots[i].Shape = nil
+		fv.Slots[i].Offset = 0
+		fv.Slots[i].HitCount = 0
+		fv.Slots[i].Callee = nil
+	}
+}
+
 // LoadIC performs a property load with inline caching.
 // name should be the interned property name (from the constant pool).
 // Returns the property value.
