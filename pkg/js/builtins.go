@@ -275,10 +275,7 @@ func (vm *VM) registerConsole() {
 			parts[i] = a.String()
 		}
 		msg := strings.Join(parts, " ")
-		vm.consoleLog = append(vm.consoleLog, msg)
-		if vm.consoleOutput != nil {
-			vm.consoleOutput(msg)
-		}
+		vm.console.Log(msg)
 		return Undefined
 	}))
 
@@ -288,10 +285,7 @@ func (vm *VM) registerConsole() {
 			parts[i] = a.String()
 		}
 		msg := "WARN: " + strings.Join(parts, " ")
-		vm.consoleLog = append(vm.consoleLog, msg)
-		if vm.consoleOutput != nil {
-			vm.consoleOutput(msg)
-		}
+		vm.console.Log(msg)
 		return Undefined
 	}))
 
@@ -301,10 +295,7 @@ func (vm *VM) registerConsole() {
 			parts[i] = a.String()
 		}
 		msg := "ERROR: " + strings.Join(parts, " ")
-		vm.consoleLog = append(vm.consoleLog, msg)
-		if vm.consoleOutput != nil {
-			vm.consoleOutput(msg)
-		}
+		vm.console.Log(msg)
 		return Undefined
 	}))
 
@@ -379,12 +370,12 @@ func (vm *VM) WaitAsync() {
 
 // ConsoleLogs returns the accumulated console.log output.
 func (vm *VM) ConsoleLogs() []string {
-	return vm.consoleLog
+	return vm.console.Logs()
 }
 
 // ClearConsoleLogs clears the console log buffer.
 func (vm *VM) ClearConsoleLogs() {
-	vm.consoleLog = nil
+	vm.console.Clear()
 }
 
 func (vm *VM) registerGlobalFunctions() {
@@ -772,12 +763,13 @@ func (vm *VM) registerError() {
 		err.Prototype = errorProto
 		err.Set("name", NewString("Error"))
 		err.Set("message", NewString(msg))
-		// Build stack trace from vm.callStack (reversed — most recent call first).
+		// Build stack trace from calltrack (reversed — most recent call first).
 		var sb strings.Builder
 		sb.WriteString("Error: ")
 		sb.WriteString(msg)
-		for i := len(vm.callStack) - 1; i >= 0; i-- {
-			frame := vm.callStack[i]
+		stack := vm.calltrack.Stack()
+		for i := len(stack) - 1; i >= 0; i-- {
+			frame := stack[i]
 			sb.WriteString("\n    at ")
 			sb.WriteString(frame.Name)
 			if frame.File != "" {
@@ -826,13 +818,14 @@ func (vm *VM) registerErrorSubtype(name string, errorProto *JSObject) {
 		err.Prototype = subProto // inherit from subProto → errorProto
 		err.Set("name", NewString(name))
 		err.Set("message", NewString(msg))
-		// Build stack trace from vm.callStack (reversed — most recent call first).
+		// Build stack trace from calltrack (reversed — most recent call first).
 		var sb strings.Builder
 		sb.WriteString(name)
 		sb.WriteString(": ")
 		sb.WriteString(msg)
-		for i := len(vm.callStack) - 1; i >= 0; i-- {
-			frame := vm.callStack[i]
+		stack := vm.calltrack.Stack()
+		for i := len(stack) - 1; i >= 0; i-- {
+			frame := stack[i]
 			sb.WriteString("\n    at ")
 			sb.WriteString(frame.Name)
 			if frame.File != "" {
@@ -2103,7 +2096,7 @@ func (vm *VM) registerEval() {
 		tokens := NewLexer(source).Tokenize()
 		prog, errs := NewParser(tokens).Parse()
 		if len(errs) > 0 {
-			vm.consoleLog = append(vm.consoleLog, "eval parse error: "+strings.Join(errs, "; "))
+			vm.console.Log("eval parse error: " + strings.Join(errs, "; "))
 			return Undefined
 		}
 		bf := Compile(prog)

@@ -101,16 +101,14 @@ func (vm *VM) pushCallName(callee JSValue, frame *VMFrame) {
 			csFrame.File = frame.Func.SourceFile
 		}
 	}
-	vm.callStack = append(vm.callStack, csFrame)
+	vm.calltrack.Push(csFrame)
 }
 
 // popCallName removes the top entry from vm.callStack.
 // Called from opReturn (bytecode functions) and from opCallFast/opCall/opCallSpread
 // after callMethod returns for built-in functions.
 func (vm *VM) popCallName() {
-	if len(vm.callStack) > 0 {
-		vm.callStack = vm.callStack[:len(vm.callStack)-1]
-	}
+	vm.calltrack.Pop()
 }
 
 // calleeGoesToBytecode returns true if calling this callee will enter executeFrame
@@ -243,15 +241,8 @@ type VM struct {
 	// Set to true in benchmarks or tests where JIT is not desired.
 	DisableJIT bool
 
-	// callDepth tracks current call stack depth to prevent infinite recursion
-	// from overflowing the Go stack. Incremented on each callMethod→executeFrame,
-	// decremented on return.
-	callDepth int
-
-	// callStack tracks stack frames for Error.stack traces.
-	// Pushed in opCallFast/opCall/opCallSpread before callMethod;
-	// popped in opReturn (bytecode) or after callMethod returns (built-ins).
-	callStack []CallStackFrame
+	// calltrack manages call depth and stack traces for Error.stack.
+	calltrack *CallTracker
 
 	// stepCount tracks the total bytecode instructions executed in the current
 	// top-level Run/Execute. Resets at the start of each top-level call.
@@ -263,9 +254,8 @@ type VM struct {
 	// globals stores the global scope with slot-based fast path.
 	globals *GlobalStore
 
-	// Console output callback.
-	consoleOutput func(string)
-	consoleLog    []string // accumulated log lines
+	// console buffers log output and forwards to optional callback.
+	console *Console
 
 	// Function registry: maps function names to bytecode.
 	funcRegistry map[string]*BytecodeFunction
@@ -315,7 +305,8 @@ func NewVM() *VM {
 		RealmID:        atomic.AddUint64(&nextRealmID, 1),
 		alloc:          NewAllocator(),
 		globals:        NewGlobalStore(),
-		consoleLog:     make([]string, 0),
+		calltrack:      &CallTracker{},
+		console:        NewConsole(),
 		funcRegistry:   make(map[string]*BytecodeFunction),
 		builtins:       make(map[string]func(args []JSValue) JSValue),
 		listeners:      make(map[string][]JSValue, 4),
@@ -380,7 +371,7 @@ func (vm *VM) getObjectRealm(obj *JSObject) uint64 {
 
 // SetConsoleOutput sets a callback for console.log output.
 func (vm *VM) SetConsoleOutput(fn func(string)) {
-	vm.consoleOutput = fn
+	vm.console.SetOutput(fn)
 }
 
 // GetModuleRegistry returns the module registry, creating one if needed.
@@ -406,7 +397,7 @@ func (vm *VM) Run(source string) JSValue {
 	tokens := NewLexer(source).Tokenize()
 	prog, errs := NewParser(tokens).Parse()
 	if len(errs) > 0 {
-		vm.consoleLog = append(vm.consoleLog, "Parse error: "+strings.Join(errs, "; "))
+		vm.console.Log("Parse error: " + strings.Join(errs, "; "))
 		return Undefined
 	}
 
@@ -2741,10 +2732,10 @@ func (vm *VM) callMethod(callee JSValue, thisObj *JSObject, args []JSValue) JSVa
 		if obj.Bytecode.Generator {
 			return vm.createGeneratorObject(obj.Bytecode, thisObj, args)
 		}
-		if vm.callDepth > maxCallDepth {
+		if vm.calltrack.Depth() > maxCallDepth {
 			return Undefined
 		}
-		vm.callDepth++
+		vm.calltrack.IncDepth()
 		regs := vm.allocRegs(obj.Bytecode.NumRegisters)
 		newFrame := vm.allocFrame()
 		newFrame.Func = obj.Bytecode
@@ -2791,7 +2782,7 @@ func (vm *VM) callMethod(callee JSValue, thisObj *JSObject, args []JSValue) JSVa
 		result := vm.executeFrame(newFrame)
 		vm.freeFrame(newFrame)
 		vm.freeRegs(regs)
-		vm.callDepth--
+		vm.calltrack.DecDepth()
 		return result
 	}
 

@@ -422,8 +422,9 @@ func callBytecodeFunction(bf *BytecodeFunction, args []JSValue) JSValue {
 	vm := &VM{
 		alloc:      NewAllocator(),
 		globals:    NewGlobalStore(),
+		calltrack:  &CallTracker{},
+		console:    NewConsole(),
 		builtins:   make(map[string]func(args []JSValue) JSValue),
-		consoleLog: make([]string, 0),
 	}
 	vm.RegisterBuiltins()
 	regs := vm.allocRegs(bf.NumRegisters)
