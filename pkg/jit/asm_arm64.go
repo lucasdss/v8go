@@ -80,6 +80,18 @@ func (a *Assembler) RET() { a.buf.WriteUint32LE(0xD65F03C0) }
 // NOP emits: NOP
 func (a *Assembler) NOP() { a.buf.WriteUint32LE(0xD503201F) }
 
+// PACIASP signs the link register (LR/X30) and stack pointer (SP) with
+// the A-key. The PAC is stored in the upper bits of LR. Available on
+// ARMv8.3+ (Apple M1+, server ARM64 with PAC extension).
+// Encoding: 0xD503233F (HINT space, CRm=0b0011, op2=0b11111).
+func (a *Assembler) PACIASP() { a.buf.WriteUint32LE(0xD503233F) }
+
+// AUTIASP authenticates LR and SP against the A-key signature. On success,
+// the PAC bits are cleared from LR. On failure, the error indicator is set
+// in the upper bits of LR, causing a fault on the next RET.
+// Encoding: 0xD50323BF (HINT space, CRm=0b1011, op2=0b11111).
+func (a *Assembler) AUTIASP() { a.buf.WriteUint32LE(0xD50323BF) }
+
 // B emits an unconditional branch to the given label.
 func (a *Assembler) B(l *Label) { a.emitBranch(0x14000000, l) }
 

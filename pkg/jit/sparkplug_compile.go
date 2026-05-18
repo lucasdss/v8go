@@ -43,7 +43,12 @@ func CompileSparkplug(bf *js.BytecodeFunction) (*CodeBuf, error) {
 	// R0 holds the *js.VMFrame argument from the Go caller.
 	// Save LR in callee-saved R20 (REG_VM1) so BLR calls don't corrupt it.
 	// Store frame pointer in callee-saved R19 (REG_VM0).
-	as.MOV(REG_VM1, REG_LR) // R20 = LR (save return address)
+	//
+	// PAC: sign LR with SP context before saving (ARMv8.3+).
+	if hasARM64PAC {
+		as.PACIASP()
+	}
+	as.MOV(REG_VM1, REG_LR) // R20 = LR (save signed return address)
 	as.MOV(REG_VM0, REG_R0) // R19 = frame*
 
 	// --- Pre-create labels for all PC targets ---
@@ -83,7 +88,10 @@ func CompileSparkplug(bf *js.BytecodeFunction) (*CodeBuf, error) {
 
 	// --- Epilogue: restore LR and return to caller ---
 	as.Bind(epilogue)
-	as.MOV(REG_LR, REG_VM1) // LR = R20 (restore return address)
+	as.MOV(REG_LR, REG_VM1) // LR = R20 (restore signed return address)
+	if hasARM64PAC {
+		as.AUTIASP() // authenticate LR before RET
+	}
 	as.RET()
 
 	// --- Deoptimization stub (bound after epilogue; only reached via branch) ---
@@ -142,8 +150,11 @@ func emitDeoptStubAt(as *Assembler, stub *Label) {
 	// adjacent fields (InTurboFan and ShadowStack pointer).
 	as.STRB(REG_ZR, REG_VM0, inSparkplugOff)
 
-	// Restore LR from REG_VM1 and return to Go caller.
+	// Restore LR from REG_VM1, authenticate if PAC is active, and return.
 	as.MOV(REG_LR, REG_VM1)
+	if hasARM64PAC {
+		as.AUTIASP()
+	}
 	as.RET()
 }
 

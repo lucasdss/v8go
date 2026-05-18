@@ -65,7 +65,12 @@ func lowerSSAToARM64(g *SSAGraph, ra *RegAlloc) (*CodeBuf, error) {
 	}
 	as := NewAssembler(buf)
 
-	// --- Prologue: store frame pointer in R19 (callee-saved VM register) ---
+	// --- Prologue: store frame pointer in R19, save LR in R20 with PAC ---
+	// PACIASP signs LR with SP context before saving (ARMv8.3+).
+	if hasARM64PAC {
+		as.PACIASP()
+	}
+	as.MOV(REG_VM1, REG_LR) // R20 = LR (save signed return address)
 	as.MOV(REG_VM0, REG_R0) // R19 = frame*
 
 	// --- Label map: one label per basic block for branch targets ---
@@ -1068,6 +1073,11 @@ func lowerSSAToARM64(g *SSAGraph, ra *RegAlloc) (*CodeBuf, error) {
 						as.STRB(REG_R16, REG_VM0, tagOff)
 					}
 				}
+				// Restore LR from callee-saved register, authenticate, return.
+				as.MOV(REG_LR, REG_VM1)
+				if hasARM64PAC {
+					as.AUTIASP()
+				}
 				as.RET()
 			}
 
@@ -1090,6 +1100,10 @@ func lowerSSAToARM64(g *SSAGraph, ra *RegAlloc) (*CodeBuf, error) {
 	}
 
 	// Epilogue fallback: return if no explicit return was emitted.
+	as.MOV(REG_LR, REG_VM1)
+	if hasARM64PAC {
+		as.AUTIASP()
+	}
 	as.RET()
 
 	return buf, nil
