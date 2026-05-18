@@ -1,7 +1,6 @@
 package js
 
 import (
-"fmt"
 "strings"
 )
 
@@ -85,13 +84,13 @@ func (vm *VM) registerString() {
 		result.ConstructorName = "Array"
 		if sep == "" {
 			for i, ch := range s {
-				result.Set(fmt.Sprintf("%d", i), NewString(string(ch)))
+				result.Set(intKey(i), NewString(string(ch)))
 			}
 			result.Set("length", NewNumber(float64(len(s))))
 		} else {
 			parts := strings.Split(s, sep)
 			for i, p := range parts {
-				result.Set(fmt.Sprintf("%d", i), NewString(p))
+				result.Set(intKey(i), NewString(p))
 			}
 			result.Set("length", NewNumber(float64(len(parts))))
 		}
@@ -414,7 +413,7 @@ func (vm *VM) registerString() {
 				if i > 0 && i-1 < len(substitutions) {
 					buf.WriteString(substitutions[i-1].ToString())
 				}
-				idxStr := fmt.Sprintf("%d", i)
+				idxStr := intKey(i)
 				if rawStr := strArr.ObjVal.Get(idxStr); !rawStr.IsUndefined() {
 					buf.WriteString(rawStr.ToString())
 				}

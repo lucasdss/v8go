@@ -13,6 +13,20 @@ import (
 	"sync"
 )
 
+// intKeys is a precomputed pool of integer key strings for fast property access.
+// Array builtins use intKeys[i] instead of fmt.Sprintf("%d", i) to avoid allocation.
+// Populated in the init() below alongside smallIntPool.
+var intKeys [1024]string
+
+// intKey returns a string representation of the integer i using a precomputed
+// pool for values 0-1023 and strconv.Itoa for larger values (allocates).
+func intKey(i int) string {
+	if i >= 0 && i < len(intKeys) {
+		return intKeys[i]
+	}
+	return strconv.Itoa(i)
+}
+
 var stringInternMu sync.Mutex
 var stringInternPool = make(map[string]string)
 
@@ -84,6 +98,9 @@ var smallIntPool [256]JSValue
 func init() {
 	for i := 0; i < 256; i++ {
 		smallIntPool[i] = JSValue{Tag: TagNumber, NumVal: float64(i - smallIntOffset)}
+	}
+	for i := 0; i < 1024; i++ {
+		intKeys[i] = strconv.Itoa(i)
 	}
 }
 

@@ -1,7 +1,6 @@
 package js
 
 import (
-"fmt"
 "strings"
 )
 
@@ -16,16 +15,16 @@ func _arrayFlat(arr *JSObject, depth int) *JSObject {
 	length := int(arr.Get("length").ToNumber())
 	outIdx := 0
 	for i := 0; i < length; i++ {
-		elem := arr.Get(fmt.Sprintf("%d", i))
+		elem := arr.Get(intKey(i))
 		if depth > 0 && elem.IsObject() && elem.ObjVal != nil && elem.ObjVal.ConstructorName == "Array" {
 			sub := _arrayFlat(elem.ObjVal, depth-1)
 			subLen := int(sub.Get("length").ToNumber())
 			for j := 0; j < subLen; j++ {
-				result.Set(fmt.Sprintf("%d", outIdx), sub.Get(fmt.Sprintf("%d", j)))
+				result.Set(intKey(outIdx), sub.Get(intKey(j)))
 				outIdx++
 			}
 		} else {
-			result.Set(fmt.Sprintf("%d", outIdx), elem)
+			result.Set(intKey(outIdx), elem)
 			outIdx++
 		}
 	}
@@ -44,7 +43,7 @@ func (vm *VM) registerArray() {
 		}
 		arr.Set("length", NewNumber(float64(len(args))))
 		for i, arg := range args {
-			arr.Set(fmt.Sprintf("%d", i), arg)
+			arr.Set(intKey(i), arg)
 		}
 		return NewObject(arr)
 	}
@@ -55,7 +54,7 @@ func (vm *VM) registerArray() {
 	arrayProto.Set("push", vm.createBuiltinWithFallback("Array.push", func(this *JSObject, args []JSValue) JSValue {
 		length := int(this.Get("length").ToNumber())
 		for i, arg := range args {
-			this.Set(fmt.Sprintf("%d", length+i), arg)
+			this.Set(intKey(length+i), arg)
 		}
 		newLen := length + len(args)
 		this.Set("length", NewNumber(float64(newLen)))
@@ -68,7 +67,7 @@ func (vm *VM) registerArray() {
 			this.Set("length", NewNumber(0))
 			return Undefined
 		}
-		lastIdx := fmt.Sprintf("%d", length-1)
+		lastIdx := intKey(length-1)
 		val := this.Get(lastIdx)
 		this.Delete(lastIdx)
 		this.Set("length", NewNumber(float64(length-1)))
@@ -87,9 +86,9 @@ func (vm *VM) registerArray() {
 			result.Prototype = ArrayPrototype
 		}
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			mapped := callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)})
-			result.Set(fmt.Sprintf("%d", i), mapped)
+			result.Set(intKey(i), mapped)
 		}
 		result.Set("length", NewNumber(float64(length)))
 		return NewObject(result)
@@ -108,10 +107,10 @@ func (vm *VM) registerArray() {
 		}
 		outIdx := 0
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			passed := callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)})
 			if passed.IsTruthy() {
-				result.Set(fmt.Sprintf("%d", outIdx), elem)
+				result.Set(intKey(outIdx), elem)
 				outIdx++
 			}
 		}
@@ -137,7 +136,7 @@ func (vm *VM) registerArray() {
 			startIdx = 1
 		}
 		for i := startIdx; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			accumulator = callback.Call(nil, []JSValue{accumulator, elem, NewNumber(float64(i)), NewObject(this)})
 		}
 		return accumulator
@@ -150,7 +149,7 @@ func (vm *VM) registerArray() {
 		callback := args[0].ObjVal
 		length := int(this.Get("length").ToNumber())
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)})
 		}
 		return Undefined
@@ -167,7 +166,7 @@ func (vm *VM) registerArray() {
 			startFrom = int(args[1].ToNumber())
 		}
 		for i := startFrom; i < length; i++ {
-			if this.Get(fmt.Sprintf("%d", i)).StrictEquals(search) {
+			if this.Get(intKey(i)).StrictEquals(search) {
 				return NewNumber(float64(i))
 			}
 		}
@@ -182,7 +181,7 @@ func (vm *VM) registerArray() {
 		length := int(this.Get("length").ToNumber())
 		parts := make([]string, length)
 		for i := 0; i < length; i++ {
-			val := this.Get(fmt.Sprintf("%d", i))
+			val := this.Get(intKey(i))
 			if val.IsUndefined() || val.IsNull() {
 				parts[i] = ""
 			} else {
@@ -221,7 +220,7 @@ func (vm *VM) registerArray() {
 		}
 		outIdx := 0
 		for i := start; i < end; i++ {
-			result.Set(fmt.Sprintf("%d", outIdx), this.Get(fmt.Sprintf("%d", i)))
+			result.Set(intKey(outIdx), this.Get(intKey(i)))
 			outIdx++
 		}
 		result.Set("length", NewNumber(float64(outIdx)))
@@ -254,7 +253,7 @@ func (vm *VM) registerArray() {
 			deleted.Prototype = ArrayPrototype
 		}
 		for i := 0; i < deleteCount; i++ {
-			deleted.Set(fmt.Sprintf("%d", i), this.Get(fmt.Sprintf("%d", start+i)))
+			deleted.Set(intKey(i), this.Get(intKey(start+i)))
 		}
 		deleted.Set("length", NewNumber(float64(deleteCount)))
 		// Shift remaining elements.
@@ -262,16 +261,16 @@ func (vm *VM) registerArray() {
 		shift := len(insertItems) - deleteCount
 		if shift > 0 {
 			for i := length - 1; i >= start+deleteCount; i-- {
-				this.Set(fmt.Sprintf("%d", i+shift), this.Get(fmt.Sprintf("%d", i)))
+				this.Set(intKey(i+shift), this.Get(intKey(i)))
 			}
 		} else if shift < 0 {
 			for i := start + deleteCount; i < length; i++ {
-				this.Set(fmt.Sprintf("%d", i+shift), this.Get(fmt.Sprintf("%d", i)))
+				this.Set(intKey(i+shift), this.Get(intKey(i)))
 			}
 		}
 		// Insert new items.
 		for i, item := range insertItems {
-			this.Set(fmt.Sprintf("%d", start+i), item)
+			this.Set(intKey(start+i), item)
 		}
 		newLength := length + shift
 		this.Set("length", NewNumber(float64(newLength)))
@@ -287,18 +286,18 @@ func (vm *VM) registerArray() {
 		length := int(this.Get("length").ToNumber())
 		outIdx := 0
 		for i := 0; i < length; i++ {
-			result.Set(fmt.Sprintf("%d", outIdx), this.Get(fmt.Sprintf("%d", i)))
+			result.Set(intKey(outIdx), this.Get(intKey(i)))
 			outIdx++
 		}
 		for _, arg := range args {
 			if arg.IsObject() && arg.ObjVal != nil {
 				argLen := int(arg.ObjVal.Get("length").ToNumber())
 				for i := 0; i < argLen; i++ {
-					result.Set(fmt.Sprintf("%d", outIdx), arg.ObjVal.Get(fmt.Sprintf("%d", i)))
+					result.Set(intKey(outIdx), arg.ObjVal.Get(intKey(i)))
 					outIdx++
 				}
 			} else {
-				result.Set(fmt.Sprintf("%d", outIdx), arg)
+				result.Set(intKey(outIdx), arg)
 				outIdx++
 			}
 		}
@@ -313,7 +312,7 @@ func (vm *VM) registerArray() {
 		callback := args[0].ObjVal
 		length := int(this.Get("length").ToNumber())
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			if callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
 				return elem
 			}
@@ -328,7 +327,7 @@ func (vm *VM) registerArray() {
 		callback := args[0].ObjVal
 		length := int(this.Get("length").ToNumber())
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			if callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
 				return True
 			}
@@ -343,7 +342,7 @@ func (vm *VM) registerArray() {
 		callback := args[0].ObjVal
 		length := int(this.Get("length").ToNumber())
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			if !callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
 				return False
 			}
@@ -358,7 +357,7 @@ func (vm *VM) registerArray() {
 		callback := args[0].ObjVal
 		length := int(this.Get("length").ToNumber())
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
+			elem := this.Get(intKey(i))
 			if callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
 				return NewNumber(float64(i))
 			}
@@ -393,7 +392,7 @@ func (vm *VM) registerArray() {
 			end = length
 		}
 		for i := start; i < end; i++ {
-			this.Set(fmt.Sprintf("%d", i), value)
+			this.Set(intKey(i), value)
 		}
 		return NewObject(this)
 	}))
@@ -423,8 +422,8 @@ func (vm *VM) registerArray() {
 			mapped.Prototype = ArrayPrototype
 		}
 		for i := 0; i < length; i++ {
-			elem := this.Get(fmt.Sprintf("%d", i))
-			mapped.Set(fmt.Sprintf("%d", i), callback.Call(thisArg, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}))
+			elem := this.Get(intKey(i))
+			mapped.Set(intKey(i), callback.Call(thisArg, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}))
 		}
 		mapped.Set("length", NewNumber(float64(length)))
 		flattened := _arrayFlat(mapped, 1)
@@ -451,7 +450,7 @@ func (vm *VM) registerArray() {
 		if n < 0 || n >= length {
 			return Undefined
 		}
-		idxStr := fmt.Sprintf("%d", n)
+		idxStr := intKey(n)
 		return this.Get(idxStr)
 	}))
 
@@ -480,17 +479,17 @@ func (vm *VM) registerArray() {
 		if source.IsObject() && source.ObjVal != nil {
 			length := int(source.ObjVal.Get("length").ToNumber())
 			for i := 0; i < length; i++ {
-				elem := source.ObjVal.Get(fmt.Sprintf("%d", i))
+				elem := source.ObjVal.Get(intKey(i))
 				if mapFn != nil {
 					elem = mapFn(thisArg, []JSValue{elem, NewNumber(float64(i))})
 				}
-				result.Set(fmt.Sprintf("%d", i), elem)
+				result.Set(intKey(i), elem)
 			}
 			result.Set("length", NewNumber(float64(length)))
 		} else if source.IsString() {
 			s := source.String()
 			for i, ch := range s {
-				result.Set(fmt.Sprintf("%d", i), NewString(string(ch)))
+				result.Set(intKey(i), NewString(string(ch)))
 			}
 			result.Set("length", NewNumber(float64(len(s))))
 		}
@@ -504,7 +503,7 @@ func (vm *VM) registerArray() {
 			result.Prototype = ArrayPrototype
 		}
 		for i, arg := range args {
-			result.Set(fmt.Sprintf("%d", i), arg)
+			result.Set(intKey(i), arg)
 		}
 		result.Set("length", NewNumber(float64(len(args))))
 		return NewObject(result)

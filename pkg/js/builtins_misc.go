@@ -246,7 +246,7 @@ func jsonNodeToJSValue(n *jsonNode) JSValue {
 		arr := NewJSObject()
 		arr.ConstructorName = "Array"
 		for i, elem := range n.Array {
-			arr.Set(fmt.Sprintf("%d", i), jsonNodeToJSValue(&elem))
+			arr.Set(intKey(i), jsonNodeToJSValue(&elem))
 		}
 		arr.Set("length", NewNumber(float64(len(n.Array))))
 		return NewObject(arr)
@@ -277,7 +277,7 @@ func goToJSValue(v interface{}) JSValue {
 		arr := NewJSObject()
 		arr.ConstructorName = "Array"
 		for i, elem := range val {
-			arr.Set(fmt.Sprintf("%d", i), goToJSValue(elem))
+			arr.Set(intKey(i), goToJSValue(elem))
 		}
 		arr.Set("length", NewNumber(float64(len(val))))
 		return NewObject(arr)
@@ -315,7 +315,7 @@ func jsToGoValue(v JSValue) interface{} {
 			length := int(lenVal.ToNumber())
 			result := make([]interface{}, length)
 			for i := 0; i < length; i++ {
-				result[i] = jsToGoValue(v.ObjVal.Get(fmt.Sprintf("%d", i)))
+				result[i] = jsToGoValue(v.ObjVal.Get(intKey(i)))
 			}
 			return result
 		}
@@ -367,7 +367,7 @@ func jsToJSON(v JSValue) string {
 			length := int(lenVal.ToNumber())
 			parts := make([]string, 0, length)
 			for i := 0; i < length; i++ {
-				elem := v.ObjVal.Get(fmt.Sprintf("%d", i))
+				elem := v.ObjVal.Get(intKey(i))
 				val := jsToJSON(elem)
 				if val == "undefined" {
 					val = "null"
@@ -516,9 +516,9 @@ func regExpExec(reObj *JSObject, str string) JSValue {
 	for i := 0; i < matchLen; i++ {
 		start, end := loc[i*2], loc[i*2+1]
 		if start < 0 || start > len(str) || end < 0 || end > len(str) {
-			result.Set(fmt.Sprintf("%d", i), Undefined)
+			result.Set(intKey(i), Undefined)
 		} else {
-			result.Set(fmt.Sprintf("%d", i), NewString(str[start:end]))
+			result.Set(intKey(i), NewString(str[start:end]))
 		}
 	}
 	result.Set("length", NewNumber(float64(matchLen)))
@@ -810,7 +810,7 @@ func (vm *VM) registerRegExp() {
 			}
 			arr := match.ObjVal
 			if arr.Get("length").ToNumber() > 0 {
-				results.Set(fmt.Sprintf("%d", idx), arr.Get("0"))
+				results.Set(intKey(idx), arr.Get("0"))
 				idx++
 			}
 			lastIdx := int(this.Get("lastIndex").ToNumber())
@@ -920,7 +920,7 @@ func (vm *VM) registerRegExp() {
 		arr := NewJSObject()
 		arr.ConstructorName = "Array"
 		for i, p := range parts {
-			arr.Set(fmt.Sprintf("%d", i), NewString(p))
+			arr.Set(intKey(i), NewString(p))
 		}
 		arr.Set("length", NewNumber(float64(len(parts))))
 		return NewObject(arr)
@@ -943,7 +943,7 @@ func doReplace(str string, match JSValue, replacement JSValue) string {
 		args := []JSValue{NewString(matched)}
 		mLen := int(m.Get("length").ToNumber())
 		for i := 1; i < mLen; i++ {
-			args = append(args, m.Get(fmt.Sprintf("%d", i)))
+			args = append(args, m.Get(intKey(i)))
 		}
 		args = append(args, NewNumber(m.Get("index").ToNumber()))
 		args = append(args, NewString(m.Get("input").ToString()))
@@ -967,7 +967,7 @@ func doReplace(str string, match JSValue, replacement JSValue) string {
 	repStr = strings.ReplaceAll(repStr, "$'", singleQuote)
 	// $1..$9 group references.
 	for i := 1; i <= 9; i++ {
-		group := m.Get(fmt.Sprintf("%d", i))
+		group := m.Get(intKey(i))
 		groupStr := ""
 		if !group.IsUndefined() {
 			groupStr = group.ToString()

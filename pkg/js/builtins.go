@@ -8,7 +8,6 @@ import (
 	"context"
 	"encoding/binary"
 	"encoding/json"
-	"fmt"
 	"io"
 	"math"
 	"math/big"
@@ -902,7 +901,7 @@ func (vm *VM) registerFunctionProto() {
 			arrObj := args[1].ObjVal
 			length := int(arrObj.Get("length").ToNumber())
 			for i := 0; i < length; i++ {
-				callArgs = append(callArgs, arrObj.Get(fmt.Sprintf("%d", i)))
+				callArgs = append(callArgs, arrObj.Get(intKey(i)))
 			}
 		}
 		if this.CallFunc != nil {
@@ -1907,7 +1906,7 @@ func (vm *VM) registerProxy() {
 					argsArr.Prototype = ArrayPrototype
 				}
 				for i, a := range callArgs {
-					argsArr.Set(fmt.Sprintf("%d", i), a)
+					argsArr.Set(intKey(i), a)
 				}
 				argsArr.Set("length", NewNumber(float64(len(callArgs))))
 				var thisVal JSValue
@@ -2035,7 +2034,7 @@ func (vm *VM) registerReflect() {
 		}
 		idx := 0
 		for name := range obj.Shape.Properties {
-			keys.Set(fmt.Sprintf("%d", idx), NewString(name))
+			keys.Set(intKey(idx), NewString(name))
 			idx++
 		}
 		keys.Set("length", NewNumber(float64(idx)))
@@ -2060,7 +2059,7 @@ func (vm *VM) registerReflect() {
 		if argsArray.IsObject() && argsArray.ObjVal != nil {
 			length := int(argsArray.ObjVal.Get("length").ToNumber())
 			for i := 0; i < length; i++ {
-				callArgs = append(callArgs, argsArray.ObjVal.Get(fmt.Sprintf("%d", i)))
+				callArgs = append(callArgs, argsArray.ObjVal.Get(intKey(i)))
 			}
 		}
 		return fn.ObjVal.Call(thisObj, callArgs)
@@ -2080,7 +2079,7 @@ func (vm *VM) registerReflect() {
 		if argsArray.IsObject() && argsArray.ObjVal != nil {
 			length := int(argsArray.ObjVal.Get("length").ToNumber())
 			for i := 0; i < length; i++ {
-				callArgs = append(callArgs, argsArray.ObjVal.Get(fmt.Sprintf("%d", i)))
+				callArgs = append(callArgs, argsArray.ObjVal.Get(intKey(i)))
 			}
 		}
 		// Create a new object with the target's prototype.

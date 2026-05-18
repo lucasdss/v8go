@@ -1,10 +1,5 @@
 package js
 
-import (
-"fmt"
-)
-
-
 func (vm *VM) registerObject() {
 	// Object constructor.
 	objectCtor := NewJSObject()
@@ -115,7 +110,7 @@ func (vm *VM) registerObject() {
 			if entry.Attr&AttrEnumerable == 0 {
 				continue
 			}
-			keys.Set(fmt.Sprintf("%d", idx), NewString(name))
+			keys.Set(intKey(idx), NewString(name))
 			idx++
 		}
 		keys.Set("length", NewNumber(float64(idx)))
@@ -150,7 +145,7 @@ func (vm *VM) registerObject() {
 			pair.Set("0", NewString(name))
 			pair.Set("1", val)
 			pair.Set("length", NewNumber(2))
-			entries.Set(fmt.Sprintf("%d", idx), NewObject(pair))
+			entries.Set(intKey(idx), NewObject(pair))
 			idx++
 		}
 		entries.Set("length", NewNumber(float64(idx)))
@@ -177,7 +172,7 @@ func (vm *VM) registerObject() {
 			if entry.Offset >= 0 && entry.Offset < obj.propLen() {
 				val = obj.propAt(entry.Offset)
 			}
-			vals.Set(fmt.Sprintf("%d", idx), val)
+			vals.Set(intKey(idx), val)
 			idx++
 		}
 		vals.Set("length", NewNumber(float64(idx)))
@@ -193,7 +188,7 @@ func (vm *VM) registerObject() {
 		result := NewJSObject()
 		length := int(iterable.Get("length").ToNumber())
 		for i := 0; i < length; i++ {
-			pair := iterable.Get(fmt.Sprintf("%d", i))
+			pair := iterable.Get(intKey(i))
 			if pair.IsObject() && pair.ObjVal != nil {
 				key := pair.ObjVal.Get("0").ToString()
 				val := pair.ObjVal.Get("1")

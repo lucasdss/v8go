@@ -249,7 +249,7 @@ if ArrayPrototype != nil {
 arr.Prototype = ArrayPrototype
 }
 for i, r := range results {
-arr.Set(fmt.Sprintf("%d", i), e.elementToGov8Value(r))
+arr.Set(intKey(i), e.elementToGov8Value(r))
 }
 arr.Set("length", NewNumber(float64(len(results))))
 return NewObject(arr)
@@ -519,7 +519,7 @@ func (e *Gov8Engine) elementToGov8Value(elem *dom.Element) JSValue {
 		childObj.Set("id", NewString(child.GetAttribute("id")))
 		childObj.Set("tagName", NewString(strings.ToUpper(child.LocalName)))
 		childObj.Set("localName", NewString(child.LocalName))
-		childrenArr.Set(fmt.Sprintf("%d", i), NewObject(childObj))
+		childrenArr.Set(intKey(i), NewObject(childObj))
 	}
 	childrenArr.Set("length", NewNumber(float64(len(children))))
 	obj.Set("children", NewObject(childrenArr))
@@ -618,7 +618,7 @@ func (e *Gov8Engine) elementToGov8Value(elem *dom.Element) JSValue {
 			arr.Prototype = ArrayPrototype
 		}
 		for i, r := range results {
-			arr.Set(fmt.Sprintf("%d", i), e.elementToGov8Value(r))
+			arr.Set(intKey(i), e.elementToGov8Value(r))
 		}
 		arr.Set("length", NewNumber(float64(len(results))))
 		return NewObject(arr)

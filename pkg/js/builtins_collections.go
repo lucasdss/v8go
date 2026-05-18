@@ -201,7 +201,7 @@ func createMapIterator(mapObj *JSObject, kind string) *JSObject {
 		keysArr.Prototype = ArrayPrototype
 	}
 	for i, k := range keyNames {
-		keysArr.Set(fmt.Sprintf("%d", i), NewString(k))
+		keysArr.Set(intKey(i), NewString(k))
 	}
 	keysArr.Set("length", NewNumber(float64(len(keyNames))))
 
@@ -226,7 +226,7 @@ func createMapIterator(mapObj *JSObject, kind string) *JSObject {
 		// Skip keys that have been deleted from the Map since iterator creation.
 		var keyStr string
 		for idx < length {
-			keyStr = keysRef.ObjVal.Get(fmt.Sprintf("%d", idx)).ToString()
+			keyStr = keysRef.ObjVal.Get(intKey(idx)).ToString()
 			if mapRef.IsObject() && mapRef.ObjVal != nil {
 				data := mapRef.ObjVal.Get("__map_data__")
 				if data.IsObject() && data.ObjVal != nil {
@@ -315,7 +315,7 @@ func (vm *VM) registerSet() {
 				if lengthVal.Tag == TagNumber {
 					count := int(lengthVal.ToNumber())
 					for i := 0; i < count; i++ {
-						val := iterable.Get(fmt.Sprintf("%d", i))
+						val := iterable.Get(intKey(i))
 						addToSetData(s, val)
 					}
 				}
@@ -708,7 +708,7 @@ func createSetIterator(setObj *JSObject, kind string) *JSObject {
 		keysArr.Prototype = ArrayPrototype
 	}
 	for i, k := range keyNames {
-		keysArr.Set(fmt.Sprintf("%d", i), NewString(k))
+		keysArr.Set(intKey(i), NewString(k))
 	}
 	keysArr.Set("length", NewNumber(float64(len(keyNames))))
 
@@ -730,7 +730,7 @@ func createSetIterator(setObj *JSObject, kind string) *JSObject {
 		// Skip values that have been deleted from the Set since iterator creation.
 		var keyStr string
 		for idx < length {
-			keyStr = keysRef.ObjVal.Get(fmt.Sprintf("%d", idx)).ToString()
+			keyStr = keysRef.ObjVal.Get(intKey(idx)).ToString()
 			if setRef.IsObject() && setRef.ObjVal != nil {
 				data := setRef.ObjVal.Get("__set_data__")
 				if data.IsObject() && data.ObjVal != nil {

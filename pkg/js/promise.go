@@ -6,7 +6,6 @@
 package js
 
 import (
-	"fmt"
 	"runtime"
 )
 
@@ -256,7 +255,7 @@ func (vm *VM) registerPromise() {
 			rejected := false
 			for i := 0; i < count; i++ {
 				idx := i
-				promiseVal := arr.Get(fmt.Sprintf("%d", i))
+				promiseVal := arr.Get(intKey(i))
 				if promiseVal.IsObject() && promiseVal.ObjVal != nil {
 					thenFn := promiseVal.ObjVal.Get("then")
 					if thenFn.IsObject() && thenFn.ObjVal != nil && thenFn.ObjVal.isCallable() {
@@ -306,7 +305,7 @@ func (vm *VM) registerPromise() {
 		return vm.NewPromise(func(resolve, reject func(JSValue)) {
 			settled := false
 			for i := 0; i < count; i++ {
-				promiseVal := arr.Get(fmt.Sprintf("%d", i))
+				promiseVal := arr.Get(intKey(i))
 				if promiseVal.IsObject() && promiseVal.ObjVal != nil {
 					thenFn := promiseVal.ObjVal.Get("then")
 					if thenFn.IsObject() && thenFn.ObjVal != nil && thenFn.ObjVal.isCallable() {
@@ -360,7 +359,7 @@ func (vm *VM) registerPromise() {
 			settled := false
 			for i := 0; i < count; i++ {
 				idx := i
-				promiseVal := arr.Get(fmt.Sprintf("%d", i))
+				promiseVal := arr.Get(intKey(i))
 				if promiseVal.IsObject() && promiseVal.ObjVal != nil {
 					thenFn := promiseVal.ObjVal.Get("then")
 					if thenFn.IsObject() && thenFn.ObjVal != nil && thenFn.ObjVal.isCallable() {
@@ -414,7 +413,7 @@ func (vm *VM) registerPromise() {
 			remaining := count
 			for i := 0; i < count; i++ {
 				idx := i
-				promiseVal := arr.Get(fmt.Sprintf("%d", i))
+				promiseVal := arr.Get(intKey(i))
 				makeResult := func(status string, value JSValue) JSValue {
 					entry := NewJSObject()
 					entry.ConstructorName = "Object"
@@ -510,7 +509,7 @@ func newArray(length int) *JSObject {
 func newArrayFromValues(values []JSValue) *JSObject {
 	arr := newArray(len(values))
 	for i, v := range values {
-		arr.Set(fmt.Sprintf("%d", i), v)
+		arr.Set(intKey(i), v)
 	}
 	return arr
 }

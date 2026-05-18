@@ -260,15 +260,8 @@ type VM struct {
 	// alloc is the bump allocator for frames, registers, and objects.
 	alloc *Allocator
 
-	// Global object holds global variables.
-	globals map[string]JSValue
-
-	// globalSlots is a fixed-size array for fast global variable access.
-	// Slot indices are assigned at compile time (see assignGlobalSlots).
-	// Direct array indexing: globalSlots[slot] = value (no hash lookup).
-	globalSlots []JSValue
-	globalSlotsSet  []bool   // tracks which slots have been written (vs zero-value)
-	globalSlotNames []string // name at each slot index, for SetGlobal write-through
+	// globals stores the global scope with slot-based fast path.
+	globals *GlobalStore
 
 	// Console output callback.
 	consoleOutput func(string)
@@ -310,10 +303,6 @@ type VM struct {
 
 	// moduleRegistry is the ES module registry (nil if no module support).
 	moduleRegistry *ModuleRegistry
-
-	// globalThis is a cached reference to the global object, avoiding
-	// per-execution allocations when setting up the `this` binding.
-	globalThis JSValue
 
 	// promiseReactions stores queued .then()/.catch() callbacks for
 	// pending promises. Keyed by the promise object; drained on settle.
