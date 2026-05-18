@@ -314,8 +314,7 @@ func NewVM() *VM {
 	vm := &VM{
 		RealmID:        atomic.AddUint64(&nextRealmID, 1),
 		alloc:          NewAllocator(),
-		globals:        make(map[string]JSValue, 128),
-		globalSlots:    make([]JSValue, 0, 64),
+		globals:        NewGlobalStore(),
 		consoleLog:     make([]string, 0),
 		funcRegistry:   make(map[string]*BytecodeFunction),
 		builtins:       make(map[string]func(args []JSValue) JSValue),
@@ -325,8 +324,9 @@ func NewVM() *VM {
 		promiseReactions: make(map[*JSObject][]promiseReaction),
 	}
 	// Pre-create and cache the global object for reuse as `this`.
-	vm.globalThis = NewObject(NewJSObject())
-	vm.globalThis.ObjVal.ConstructorName = "Global"
+	globalThis := NewObject(NewJSObject())
+	globalThis.ObjVal.ConstructorName = "Global"
+	vm.globals.SetGlobalThis(globalThis)
 	vm.RegisterBuiltins()
 	vm.tagAllPrototypes()
 	return vm
@@ -480,6 +480,7 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 			if err != nil {
 			} else if rxAddr != 0 {
 				bf.Sparkplug = rxAddr
+				bf.HasJITTier = true
 			} else {
 			}
 		}()
@@ -488,6 +489,7 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 			rxAddr, err := TurboFanCompiler(bf)
 			if err == nil && rxAddr != 0 {
 				bf.TurboFan = rxAddr
+				bf.HasJITTier = true
 			}
 		}()
 	}
@@ -504,35 +506,39 @@ func (vm *VM) executeOne(frame *VMFrame) (shouldReturn bool) {
 	instr := frame.Func.Instructions[frame.PC]
 	frame.PC++
 
-	// OSR check: if TurboFan became available mid-execution, transition
-	// at loop back-edges (backward jumps). TurboFan takes priority over Sparkplug.
-	if frame.Func.TurboFan != 0 && !frame.InTurboFan {
-		if instr.Op == OpJump {
-			target := int(instr.OperandA)
-			if target <= frame.PC { // backward jump = loop edge
-				vm.osrToTurboFan(frame)
-				if !frame.InTurboFan {
-					return false
+	// OSR check: gated by HasJITTier to avoid two wasted loads+comparisons
+	// per jump instruction for functions that never tier up (the common case).
+	if frame.Func.HasJITTier {
+		// OSR check: if TurboFan became available mid-execution, transition
+		// at loop back-edges (backward jumps). TurboFan takes priority over Sparkplug.
+		if frame.Func.TurboFan != 0 && !frame.InTurboFan {
+			if instr.Op == OpJump {
+				target := int(instr.OperandA)
+				if target <= frame.PC { // backward jump = loop edge
+					vm.osrToTurboFan(frame)
+					if !frame.InTurboFan {
+						return false
+					}
+					return true // TurboFan handles the rest
 				}
-				return true // TurboFan handles the rest
 			}
 		}
-	}
 
-	// OSR check: if Sparkplug became available mid-execution, transition
-	// at loop back-edges (backward jumps). This allows hot loops detected
-	// during interpretation to seamlessly upgrade to native code.
-	if !vm.DisableJIT && frame.Func.Sparkplug != 0 && !frame.InSparkplug {
-		if instr.Op == OpJump {
-			target := int(instr.OperandA)
-			if target <= frame.PC { // backward jump = loop edge
-				vm.osrToSparkplug(frame)
-				// If deopt occurred (InSparkplug cleared), continue in
-				// interpreter instead of returning.
-				if !frame.InSparkplug {
-					return false
+		// OSR check: if Sparkplug became available mid-execution, transition
+		// at loop back-edges (backward jumps). This allows hot loops detected
+		// during interpretation to seamlessly upgrade to native code.
+		if !vm.DisableJIT && frame.Func.Sparkplug != 0 && !frame.InSparkplug {
+			if instr.Op == OpJump {
+				target := int(instr.OperandA)
+				if target <= frame.PC { // backward jump = loop edge
+					vm.osrToSparkplug(frame)
+					// If deopt occurred (InSparkplug cleared), continue in
+					// interpreter instead of returning.
+					if !frame.InSparkplug {
+						return false
+					}
+					return true // Sparkplug handles the rest
 				}
-				return true // Sparkplug handles the rest
 			}
 		}
 	}
@@ -2296,7 +2302,7 @@ func opLdaGlobal(vm *VM, frame *VMFrame, instr Instruction) {
 	nameIdx := int(instr.OperandA)
 	if nameIdx < len(frame.Func.ConstantNames) {
 		name := frame.Func.ConstantNames[nameIdx]
-		if val, ok := vm.globals[name]; ok {
+		if val, ok := vm.globals.Lookup(name); ok {
 			frame.Acc = val
 			// Cache the value in Constants pool for JIT fast-path.
 			if nameIdx < len(frame.Func.Constants) {
@@ -2320,7 +2326,7 @@ func opLdaGlobal(vm *VM, frame *VMFrame, instr Instruction) {
 		}
 	} else if nameIdx < len(frame.Func.Constants) {
 		name := frame.Func.Constants[nameIdx].ToString()
-		if val, ok := vm.globals[name]; ok {
+		if val, ok := vm.globals.Lookup(name); ok {
 			frame.Acc = val
 			frame.Func.Constants[nameIdx] = val
 		}
@@ -2330,13 +2336,13 @@ func opLdaGlobal(vm *VM, frame *VMFrame, instr Instruction) {
 func opStaGlobal(vm *VM, frame *VMFrame, instr Instruction) {
 	nameIdx := int(instr.OperandA)
 	if nameIdx < len(frame.Func.ConstantNames) {
-		vm.globals[frame.Func.ConstantNames[nameIdx]] = frame.Acc
+		vm.globals.Set(frame.Func.ConstantNames[nameIdx], frame.Acc)
 		// Cache the value in Constants pool for JIT fast-path.
 		if nameIdx < len(frame.Func.Constants) {
 			frame.Func.Constants[nameIdx] = frame.Acc
 		}
 	} else if nameIdx < len(frame.Func.Constants) {
-		vm.globals[frame.Func.Constants[nameIdx].ToString()] = frame.Acc
+		vm.globals.Set(frame.Func.Constants[nameIdx].ToString(), frame.Acc)
 		// Cache the value in Constants pool for JIT fast-path.
 		frame.Func.Constants[nameIdx] = frame.Acc
 	}
@@ -2468,21 +2474,10 @@ func opThrowConstAssignment(vm *VM, frame *VMFrame, instr Instruction) {
 	}
 }
 
-// ensureGlobalSlots grows the globalSlots array to accommodate at least n slots.
-// Called before executing a BytecodeFunction that uses slot-based global ops.
+// ensureGlobalSlots grows the global slot arrays to accommodate at least n slots.
 // Also ensures bf.GlobalVals is sized correctly and copies current slot values.
 func (vm *VM) ensureGlobalSlots(n int, bf *BytecodeFunction) {
-	if n > len(vm.globalSlots) {
-		newSlots := make([]JSValue, n)
-		copy(newSlots, vm.globalSlots)
-		vm.globalSlots = newSlots
-		newSet := make([]bool, n)
-		copy(newSet, vm.globalSlotsSet)
-		vm.globalSlotsSet = newSet
-		newNames := make([]string, n)
-		copy(newNames, vm.globalSlotNames)
-		vm.globalSlotNames = newNames
-	}
+	vm.globals.EnsureSlots(n)
 	// Ensure bf.GlobalVals is large enough and synced with current slot values.
 	if bf != nil && n > len(bf.GlobalVals) {
 		newVals := make([]JSValue, n)
@@ -2708,7 +2703,7 @@ func GoDeoptimize(desc unsafe.Pointer) {
 // globalObject returns a reference to the VM's cached global object.
 // The global object is created once in NewVM and reused across all calls.
 func (vm *VM) globalObject() JSValue {
-	return vm.globalThis
+	return vm.globals.GlobalThis()
 }
 
 // Lock / Unlock expose vm.mu so external callers (e.g. event-loop timer

@@ -517,6 +517,7 @@ type BytecodeFunction struct {
 	NumFeedbackSlots int             // number of pre-allocated feedback slots
 	Sparkplug        uintptr         // rxAddr of Sparkplug native code (0 if not compiled)
 	TurboFan         uintptr         // rxAddr of TurboFan native code (0 if not compiled)
+	HasJITTier       bool            // true if Sparkplug or TurboFan compilation completed; gates OSR checks
 	PcToNative       map[int]int     // bytecode PC → native code offset (populated by Sparkplug)
 	NativeToPc       map[int]int     // native code offset → bytecode PC (reverse lookup for deopt)
 	DeoptData        interface{}     // *jit.DeoptimizationInputData stored after Sparkplug compilation
