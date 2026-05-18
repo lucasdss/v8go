@@ -84,6 +84,22 @@
 - **Shadow Stack** — Dynamic capacity doubling on overflow. Previously silently dropped pointers (use-after-free risk).
 - **Peephole Optimizer** — Re-enabled LdaGlobal+Dup and StaGlobal+Dup patterns with backward-branch guard. Added LdaZero+Ldar dead code elimination. Star+Ldar and Ldar+Star excluded as unsafe (require register liveness analysis).
 
+## JIT Roadmap (grill-with-docs session)
+
+Performance improvements planned vs Chrome V8 reference:
+
+- **P-1 AMD64 Completion** — 109 remaining Sparkplug ops in batches: property→call→object→exceptions→generator→misc. Goal: full ARM64 parity.
+- **P-2 JSValue Escape Elimination** — Remove intermediate JSValues that feed directly into other ops without escaping the expression. Go-managed heap limits full object escape analysis.
+- **P-3 Load Elimination** — Single-basic-block redundant property load elimination. Catches `obj.x + obj.x` pattern.
+- **P-4 Polymorphic Inlining** — Guard chain for 2-4 target shapes, fall through to call. Currently only monomorphic inlining.
+- **P-5 Concurrent Compilation** — Implemented: goroutine + semaphore throttling to GOMAXPROCS. No further work needed.
+- **P-6 Recompilation** — Reset IC vector on deopt (after 5 deopts) to collect fresh type feedback. Recompile with new data.
+
+Security hardening vs Chrome V8 reference:
+
+- **SEC-1 Constant Blinding** — XOR immediate values with random cookie at compile time, XOR back at execution. Both Sparkplug and TurboFan tiers. Prevents JIT spraying attacks.
+- **SEC-2 ARM64 PAC** — `paciasp` in prologue, `autiasp` before `ret`. Hardware pointer authentication on Apple Silicon (ARMv8.3+). Conditional on CPU feature.
+
 ## Removed Components
 
 - **QuickJS** (formerly `pkg/js/engine.go`, `jsengine.go`, `eventloop.go`, `worker.go`, `scheduler.go`) — Removed entirely. Was a browser comparison engine with heavy CGO dependency (qjs, wazero). V8Go is the sole engine.
