@@ -76,6 +76,7 @@ func patchICGuardAccess(buf *CodeBuf, slotOffset int, objShapeOffset, propOffset
 func PatchICSlot(buf *CodeBuf, slotOffset int, shapePtr uintptr, propOffset int, objShapeOffset int) {
 	patchICShapeLoad(buf, slotOffset, shapePtr)
 	patchICGuardAccess(buf, slotOffset, objShapeOffset, propOffset, false)
+	buf.Commit()
 }
 
 // resolveICSlot looks up the CodeBuf and byte offset for the given slot.
@@ -153,6 +154,7 @@ func PatchMegamorphicICSlot(buf *CodeBuf, slotOffset int) {
 	for i := 4; i < 32; i += 4 {
 		buf.PatchUint32LE(slotOffset+i, 0xD503201F)
 	}
+	buf.Commit()
 }
 
 // EmitICSlot emits a 16-byte NOP sled for an inline cache slot.
@@ -176,6 +178,7 @@ func (a *Assembler) Pos() int {
 func PatchICSlotStore(buf *CodeBuf, slotOffset int, shapePtr uintptr, propOffset int, objShapeOffset int) {
 	patchICShapeLoad(buf, slotOffset, shapePtr)
 	patchICGuardAccess(buf, slotOffset, objShapeOffset, propOffset, true)
+	buf.Commit()
 }
 
 // PatchICSlotStoreAt patches a store IC slot from runtime feedback.

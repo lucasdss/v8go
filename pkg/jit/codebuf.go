@@ -38,6 +38,9 @@ func NewCodeBuf(size int) (*CodeBuf, error) {
 
 // Write appends a single byte to the buffer. Uses the RW mapping.
 func (c *CodeBuf) Write(b byte) {
+	if c.rwBuf == nil {
+		return
+	}
 	if c.pos < c.size {
 		c.rwBuf[c.pos] = b
 		c.pos++
@@ -47,7 +50,10 @@ func (c *CodeBuf) Write(b byte) {
 // WriteUint32LE writes a 32-bit value in little-endian order.
 // Uses the RW mapping.
 func (c *CodeBuf) WriteUint32LE(v uint32) {
-	if c.pos+4 > c.size {
+	if c.rwBuf == nil {
+		return
+	}
+	if c.pos > c.size-4 {
 		panic(fmt.Sprintf("CodeBuf.WriteUint32LE: write past end (pos=%d, size=%d)", c.pos, c.size))
 	}
 	c.rwBuf[c.pos] = byte(v)
@@ -60,7 +66,10 @@ func (c *CodeBuf) WriteUint32LE(v uint32) {
 // PatchUint32LE writes a 32-bit little-endian value at the given offset.
 // Uses the RW mapping. Panics if the offset+4 exceeds the buffer size.
 func (c *CodeBuf) PatchUint32LE(offset int, v uint32) {
-	if offset < 0 || offset+4 > c.size {
+	if c.rwBuf == nil {
+		return
+	}
+	if offset < 0 || offset > c.size-4 {
 		panic(fmt.Sprintf("CodeBuf.PatchUint32LE: offset out of bounds (offset=%d, size=%d)", offset, c.size))
 	}
 	b := c.rwBuf
@@ -87,18 +96,31 @@ func (c *CodeBuf) RXAddr() uintptr { return c.rxAddr }
 // I-cache so that writes via the RW mapping are visible when executing
 // via the RX mapping. On other platforms, this is a no-op.
 func (c *CodeBuf) Commit() {
+	if c.rwBuf == nil {
+		return
+	}
 	flushICache(c.rwAddr, c.pos)
 }
 
 // Free unmaps both the RW and RX mappings.
 // On platforms where rwBuf and rxBuf are the same slice (Darwin single
 // MAP_JIT mapping), the second unmap is skipped to avoid EINVAL.
+// After a successful free, all fields are zeroed to prevent use-after-free.
 func (c *CodeBuf) Free() error {
+	if c.rwBuf == nil {
+		return nil
+	}
 	// If both slices share the same backing array, only unmap once.
 	if &c.rwBuf[0] == &c.rxBuf[0] {
 		if err := syscall.Munmap(c.rwBuf); err != nil {
 			return fmt.Errorf("munmap: %w", err)
 		}
+		c.rwBuf = nil
+		c.rxBuf = nil
+		c.rwAddr = 0
+		c.rxAddr = 0
+		c.size = 0
+		c.pos = 0
 		return nil
 	}
 	var lastErr error
@@ -107,6 +129,14 @@ func (c *CodeBuf) Free() error {
 	}
 	if err := syscall.Munmap(c.rxBuf); err != nil && lastErr == nil {
 		lastErr = fmt.Errorf("munmap rx: %w", err)
+	}
+	if lastErr == nil {
+		c.rwBuf = nil
+		c.rxBuf = nil
+		c.rwAddr = 0
+		c.rxAddr = 0
+		c.size = 0
+		c.pos = 0
 	}
 	return lastErr
 }

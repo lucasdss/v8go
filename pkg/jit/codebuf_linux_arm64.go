@@ -7,6 +7,3 @@ package jit
 // not coherent on ARM64 — writes via the RW mapping may not be visible
 // to the I-cache when executing via the RX mapping.
 func flushICache(addr uintptr, size int)
-
-//go:noescape
-func _flushICache(addr uintptr, size int)
