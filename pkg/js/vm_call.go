@@ -273,8 +273,13 @@ func opLdaCaptured(vm *VM, frame *VMFrame, instr Instruction) {
 
 // Lock / Unlock expose vm.mu so external callers (e.g. event-loop timer
 // callbacks) can serialise with vm.Run / vm.Execute.
-func (vm *VM) Lock()   { vm.mu.Lock() }
-func (vm *VM) Unlock() { vm.mu.Unlock() }
+func (vm *VM) Lock()    { vm.mu.Lock() }
+func (vm *VM) Unlock()  { vm.mu.Unlock() }
+
+// RLock / RUnlock expose vm.mu read lock so external callers can safely read
+// globals, console logs, and other read-only state without blocking other readers.
+func (vm *VM) RLock()   { vm.mu.RLock() }
+func (vm *VM) RUnlock() { vm.mu.RUnlock() }
 
 // CallMethodLocked invokes a callable JSValue with an explicit receiver.
 // The caller MUST hold vm.mu (via Lock()) to serialise with vm.Run.

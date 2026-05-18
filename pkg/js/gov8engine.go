@@ -153,7 +153,9 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 	// Store last error for diagnostics. Undefined result with console errors
 	// indicates a parse/runtime error in the handler code.
 	if result.IsUndefined() {
+		vm.RLock()
 		logs := vm.ConsoleLogs()
+		vm.RUnlock()
 		if len(logs) > 0 {
 			e.lastError = fmt.Errorf("inline event handler error: %s", strings.Join(logs, "; "))
 		}
@@ -447,6 +449,8 @@ func (e *Gov8Engine) ConsoleLogs() []string {
 	if vm == nil {
 		return nil
 	}
+	vm.RLock()
+	defer vm.RUnlock()
 	return vm.ConsoleLogs()
 }
 
@@ -459,6 +463,8 @@ func (e *Gov8Engine) GetGlobal(name string) JSValue {
 	if vm == nil {
 		return Undefined
 	}
+	vm.RLock()
+	defer vm.RUnlock()
 	return vm.GetGlobal(name)
 }
 

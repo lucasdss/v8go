@@ -255,9 +255,9 @@ func (vm *VM) registerDOMEvents() {
 		vm.DispatchEvent(targetID, eventType, nil)
 		// DispatchEvent already triggers domChangeCallback internally,
 		// but we also fire it here to cover any VM-level mutations.
-		vm.mu.Lock()
+		vm.mu.RLock()
 		cb := vm.events.DOMChangeCallback()
-		vm.mu.Unlock()
+		vm.mu.RUnlock()
 		if cb != nil {
 			cb()
 		}
@@ -341,6 +341,7 @@ func (vm *VM) createBuiltinWithFallback(name string, defaultFn func(this *JSObje
 // --- Console log retrieval for tests ---
 
 // GetGlobal returns the value of a global variable by name.
+// Caller must hold vm.mu (via Lock/RLock or during Run/Execute).
 func (vm *VM) GetGlobal(name string) JSValue {
 	return vm.globals.Get(name)
 }
@@ -348,6 +349,7 @@ func (vm *VM) GetGlobal(name string) JSValue {
 // SetGlobal sets a global variable on the VM.
 // Used by the module registry to inject import bindings before module execution.
 // Also updates the slot cache so that OpLdaGlobalSlot fast-path reads the correct value.
+// Caller must hold vm.mu (via Lock or during Run/Execute).
 func (vm *VM) SetGlobal(name string, val JSValue) {
 	vm.globals.Set(name, val)
 }
@@ -369,11 +371,13 @@ func (vm *VM) WaitAsync() {
 }
 
 // ConsoleLogs returns the accumulated console.log output.
+// Caller must hold vm.mu (via Lock/RLock).
 func (vm *VM) ConsoleLogs() []string {
 	return vm.console.Logs()
 }
 
 // ClearConsoleLogs clears the console log buffer.
+// Caller must hold vm.mu (via Lock).
 func (vm *VM) ClearConsoleLogs() {
 	vm.console.Clear()
 }

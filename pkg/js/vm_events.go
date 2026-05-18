@@ -20,11 +20,11 @@ func (vm *VM) AddEventListener(eventType string, callback JSValue) {
 // Called by the browser after DOM parse (DOMContentLoaded) and after
 // subresource loading (load), per the HTML Standard § 8.1.7 "Event loops".
 func (vm *VM) FireEvent(eventType string, data map[string]JSValue) {
-	vm.mu.Lock()
+	vm.mu.RLock()
 	// Snapshot listeners to avoid holding lock during callback execution.
 	callbacks := vm.events.GetListeners(eventType)
 	onloadCB := vm.events.Onload()
-	vm.mu.Unlock()
+	vm.mu.RUnlock()
 
 	// Fire registered addEventListener callbacks.
 	for _, cb := range callbacks {
@@ -58,8 +58,8 @@ func (vm *VM) SetOnloadHandler(callback JSValue) {
 
 // GetOnloadHandler returns the current window.onload callback.
 func (vm *VM) GetOnloadHandler() JSValue {
-	vm.mu.Lock()
-	defer vm.mu.Unlock()
+	vm.mu.RLock()
+	defer vm.mu.RUnlock()
 	return vm.events.Onload()
 }
 
@@ -83,9 +83,9 @@ func (vm *VM) SetDOMChangeCallback(fn func()) {
 // for eventType (e.g., "click" → onclick attribute), and executes the handler
 // code in the VM with a synthetic event object { type, target, preventDefault }.
 func (vm *VM) DispatchEvent(targetID, eventType string, eventData map[string]JSValue) {
-	vm.mu.Lock()
+	vm.mu.RLock()
 	elem := vm.events.LookupElement(targetID)
-	vm.mu.Unlock()
+	vm.mu.RUnlock()
 	if elem == nil {
 		return
 	}
@@ -124,9 +124,9 @@ func (vm *VM) DispatchEvent(targetID, eventType string, eventData map[string]JSV
 	_ = defaultPrevented
 
 	// Trigger DOM change callback after inline handler execution (may have mutated DOM).
-	vm.mu.Lock()
+	vm.mu.RLock()
 	cb := vm.events.DOMChangeCallback()
-	vm.mu.Unlock()
+	vm.mu.RUnlock()
 	if cb != nil {
 		cb()
 	}

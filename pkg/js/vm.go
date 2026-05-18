@@ -78,7 +78,7 @@ type VMFrame struct {
 
 // VM is the GoV8 virtual machine.
 type VM struct {
-	mu sync.Mutex // protects globals, registry, console, calltrack, events, nextICSlot
+	mu sync.RWMutex // protects globals, registry, console, calltrack, events, nextICSlot
 
 	// RealmID uniquely identifies this VM's realm for cross-realm instanceof checks.
 	RealmID uint64
