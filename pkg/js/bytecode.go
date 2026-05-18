@@ -523,6 +523,7 @@ type BytecodeFunction struct {
 	DeoptData        interface{}     // *jit.DeoptimizationInputData stored after Sparkplug compilation
 	CallCount        int             // invocation counter for tier-up decisions
 	CompilingJIT     bool            // atomic flag to prevent duplicate JIT compilation
+	DeoptCount       int             // deoptimization counter; resets tiers after 5 deopts
 	Generator        bool            // true for generator functions (function*) — 1 byte
 	Async            bool            // true for async functions — 1 byte
 	IsDerivedConstructor bool        // true for derived class constructors (this uninitialized until super()) — 1 byte

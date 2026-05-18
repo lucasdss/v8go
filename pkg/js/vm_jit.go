@@ -211,4 +211,17 @@ func GoDeoptimize(desc unsafe.Pointer) {
 	// Clear InSparkplug so the caller (execute / executeFrame) falls back
 	// to the bytecode interpreter.
 	frame.InSparkplug = false
+
+	// Deoptimization counter: if the function deopts too many times, reset
+	// all JIT tiers so it can be recompiled with fresh type feedback.
+	if frame.Func != nil {
+		frame.Func.DeoptCount++
+		if frame.Func.DeoptCount >= 5 {
+			frame.Func.Sparkplug = 0
+			frame.Func.TurboFan = 0
+			frame.Func.HasJITTier = false
+			frame.Func.DeoptCount = 0
+			frame.Func.CompilingJIT = false
+		}
+	}
 }
