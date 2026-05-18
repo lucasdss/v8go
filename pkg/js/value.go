@@ -150,6 +150,15 @@ var (
 	False     = NewBoolean(false)
 )
 
+// Object returns the underlying JSObject pointer if the value is an object.
+// Returns nil for non-object values and for objects with a nil ObjVal (safety).
+func (v JSValue) Object() *JSObject {
+	if v.Tag != TagObject || v.ObjVal == nil {
+		return nil
+	}
+	return v.ObjVal
+}
+
 // Type checks.
 
 func (v JSValue) IsUndefined() bool { return v.Tag == TagUndefined }
@@ -231,7 +240,10 @@ func (v JSValue) ToNumber() float64 {
 		}
 		return n
 	case TagObject:
-		return v.ObjVal.ToPrimitiveNumber().ToNumber()
+		if obj := v.Object(); obj != nil {
+			return obj.ToPrimitiveNumber().ToNumber()
+		}
+		return 0
 	case TagSymbol:
 		return math.NaN() // TypeError in strict ES; NaN for coercion safety
 	case TagBigInt:
@@ -405,10 +417,16 @@ func (v JSValue) Equals(other JSValue) bool {
 	}
 	// Object vs String/Number: convert object to primitive.
 	if v.Tag == TagObject && (other.Tag == TagString || other.Tag == TagNumber) {
-		return v.ObjVal.ToPrimitiveDefault().Equals(other)
+		if obj := v.Object(); obj != nil {
+			return obj.ToPrimitiveDefault().Equals(other)
+		}
+		return false
 	}
 	if other.Tag == TagObject && (v.Tag == TagString || v.Tag == TagNumber) {
-		return v.Equals(other.ObjVal.ToPrimitiveDefault())
+		if obj := other.Object(); obj != nil {
+			return v.Equals(obj.ToPrimitiveDefault())
+		}
+		return false
 	}
 	return false
 }

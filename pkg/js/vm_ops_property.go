@@ -295,7 +295,7 @@ func isDenseArray(obj *JSObject) bool {
 
 func opLdaKeyedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 	objReg := int(instr.OperandA)
-	if objReg < len(frame.Regs) && frame.Regs[objReg].IsObject() {
+	if objReg < len(frame.Regs) && frame.Regs[objReg].IsObject() && frame.Regs[objReg].ObjVal != nil {
 		obj := frame.Regs[objReg].ObjVal
 		key := frame.Acc.ToString()
 
@@ -322,7 +322,7 @@ func opLdaKeyedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 
 func opStaKeyedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 	objReg, valReg := int(instr.OperandA), int(instr.OperandB)
-	if objReg < len(frame.Regs) && frame.Regs[objReg].IsObject() && valReg < len(frame.Regs) {
+	if objReg < len(frame.Regs) && frame.Regs[objReg].IsObject() && frame.Regs[objReg].ObjVal != nil && valReg < len(frame.Regs) {
 		obj := frame.Regs[objReg].ObjVal
 		key := frame.Acc.ToString()
 
