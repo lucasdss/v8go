@@ -6,6 +6,7 @@
 package js
 
 import (
+	"strings"
 	"sync"
 	"unsafe"
 )
@@ -166,4 +167,41 @@ func (a *Allocator) Reset() {
 	a.frameUsed = 0
 	a.regUsed = 0
 	a.objUsed = 0
+}
+
+// --- VM allocator wrappers ---
+
+// allocFrame obtains a VMFrame from the Allocator's pre-allocated buffer.
+func (vm *VM) allocFrame() *VMFrame {
+	return vm.alloc.AllocFrame()
+}
+
+// freeFrame releases a VMFrame back to the Allocator.
+func (vm *VM) freeFrame(f *VMFrame) {
+	vm.alloc.FreeFrame(f)
+}
+
+// equalFold performs case-insensitive string comparison without allocation.
+func equalFold(a, b string) bool {
+	return len(a) == len(b) && strings.EqualFold(a, b)
+}
+
+// allocRegs obtains a []JSValue slice from the Allocator's register buffer.
+func (vm *VM) allocRegs(n int) []JSValue {
+	return vm.alloc.AllocRegs(n)
+}
+
+// freeRegs releases a register slice back to the Allocator.
+func (vm *VM) freeRegs(regs []JSValue) {
+	vm.alloc.FreeRegs(regs)
+}
+
+// allocObj obtains a *JSObject from the Allocator.
+func (vm *VM) allocObj() *JSObject {
+	return vm.alloc.AllocObj()
+}
+
+// freeObj releases a JSObject back to the Allocator.
+func (vm *VM) freeObj(obj *JSObject) {
+	vm.alloc.FreeObj(obj)
 }
