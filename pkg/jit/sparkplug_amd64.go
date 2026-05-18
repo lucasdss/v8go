@@ -515,19 +515,26 @@ func emitAMD64ArithFast(as *Assembler, instr *js.Instruction, op int, deoptStub 
 	as.AMD64_JNE(slowPath)
 
 	// Move float64 bits to XMM registers.
-	as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
-	as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Regs[lhs].NumVal
-
-	// Perform FP operation.
+	// Bytecode: Regs[OperandA] (LHS) OP Acc (RHS).
+	// For commutative ops (Add, Mul), order doesn't matter.
+	// For non-commutative ops (Sub, Div), X0 must hold LHS.
 	switch op {
-	case 0:
-		as.AMD64_ADDSD(REG_X0, REG_X1) // X0 += X1
-	case 1:
-		as.AMD64_SUBSD(REG_X0, REG_X1) // X0 -= X1
-	case 2:
-		as.AMD64_MULSD(REG_X0, REG_X1) // X0 *= X1
-	case 3:
-		as.AMD64_DIVSD(REG_X0, REG_X1) // X0 /= X1
+	case 0: // Add (commutative)
+		as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
+		as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Regs[lhs].NumVal
+		as.AMD64_ADDSD(REG_X0, REG_X1)    // X0 += X1
+	case 1: // Sub: LHS - RHS
+		as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Regs[lhs].NumVal (LHS)
+		as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS)
+		as.AMD64_SUBSD(REG_X0, REG_X1)    // X0 -= X1  →  X0 = LHS - RHS ✓
+	case 2: // Mul (commutative)
+		as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
+		as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Regs[lhs].NumVal
+		as.AMD64_MULSD(REG_X0, REG_X1)    // X0 *= X1
+	case 3: // Div: LHS / RHS
+		as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Regs[lhs].NumVal (LHS)
+		as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS)
+		as.AMD64_DIVSD(REG_X0, REG_X1)    // X0 /= X1  →  X0 = LHS / RHS ✓
 	}
 
 	// Move result back to GP register and store to Acc.
@@ -805,26 +812,33 @@ func emitAMD64CompareFast(as *Assembler, instr *js.Instruction, cond int, deoptS
 	as.AMD64_JNE(slowPath)
 
 	// Move float64 bits to XMM and compare.
-	as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
-	as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Lhs.NumVal
-	as.AMD64_COMISD(REG_X0, REG_X1)
+	// Bytecode: Regs[OperandA] (LHS) OP Acc (RHS).
+	// X0 = LHS, X1 = RHS. COMISD(X0, X1) compares LHS with RHS.
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Lhs.NumVal (LHS)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS)
+	as.AMD64_COMISD(REG_X0, REG_X1)   // compare LHS, RHS
 
 	// Use condition to set boolean result in R9 (1 or 0).
 	isTrue := NewLabel()
+	isFalse := NewLabel()
 	setResult := NewLabel()
 	switch cond {
-	case 0: // EQ
+	case 0: // EQ: LHS === RHS
+		as.AMD64_JP(isFalse)   // NaN check: unordered → false
 		as.AMD64_JE(isTrue)
-	case 1: // LT (Acc < Lhs → R9 < R11 → COMISD: CF=1 if below)
+	case 1: // LT: LHS < RHS
+		as.AMD64_JP(isFalse)   // NaN check: unordered → false
 		as.AMD64_JB(isTrue)
-	case 2: // GT (Acc > Lhs → R9 > R11 → COMISD: ZF=0,CF=0 if above)
-		as.AMD64_JA(isTrue)
-	case 3: // LE (Acc <= Lhs)
+	case 2: // GT: LHS > RHS
+		as.AMD64_JA(isTrue)    // JA: CF=0 AND ZF=0; NaN (CF=1) correctly falls through
+	case 3: // LE: LHS <= RHS
+		as.AMD64_JP(isFalse)   // NaN check: unordered → false
 		as.AMD64_JBE(isTrue)
-	case 4: // GE (Acc >= Lhs)
-		as.AMD64_JAE(isTrue)
+	case 4: // GE: LHS >= RHS
+		as.AMD64_JAE(isTrue)   // JAE: CF=0; NaN (CF=1) correctly falls through
 	}
 	// False: R9 = 0.
+	as.AMD64_Bind(isFalse)
 	as.AMD64_XOR_RR(REG_R9, REG_R9)
 	as.AMD64_JMP(setResult)
 
@@ -898,13 +912,15 @@ func emitAMD64NotEq(as *Assembler, instr *js.Instruction, deoptStub *Label) {
 	as.AMD64_CMP_RR(REG_R10, REG_R13)
 	as.AMD64_JNE(slowPath)
 
-	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
-	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	// Bytecode: LHS != RHS. Ordered: X0 = LHS, X1 = RHS.
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Lhs.NumVal (LHS)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS)
 	as.AMD64_COMISD(REG_X0, REG_X1)
 
 	isTrue := NewLabel()
 	setResult := NewLabel()
-	as.AMD64_JNE(isTrue) // not equal → true
+	as.AMD64_JP(isTrue)      // NaN check: NaN != NaN → true
+	as.AMD64_JNE(isTrue)     // not equal → true
 	// False
 	as.AMD64_XOR_RR(REG_R9, REG_R9)
 	as.AMD64_JMP(setResult)
@@ -954,10 +970,12 @@ func emitAMD64StrictNotEq(as *Assembler, instr *js.Instruction, deoptStub *Label
 	as.AMD64_CMP_RR(REG_R8, REG_R13)
 	as.AMD64_JNE(slowPath)
 
-	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
-	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	// Bytecode: LHS !== RHS. Ordered: X0 = LHS, X1 = RHS.
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Lhs.NumVal (LHS)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS)
 	as.AMD64_COMISD(REG_X0, REG_X1)
-	as.AMD64_JNE(isTrue) // not equal → true
+	as.AMD64_JP(isTrue)      // NaN check: NaN !== NaN → true
+	as.AMD64_JNE(isTrue)     // not equal → true
 
 	// False
 	as.AMD64_XOR_RR(REG_R9, REG_R9)
@@ -1005,10 +1023,16 @@ func emitAMD64BitwiseFast(as *Assembler, instr *js.Instruction, op int, deoptStu
 	as.AMD64_JNE(slowPath)
 
 	// Convert float64 → int64 via CVTTSD2SI.
+	// Operands are commutative for bitwise; no order swap needed.
 	as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
 	as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Lhs.NumVal
 	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
 	as.AMD64_CVTTSD2SI(REG_R11, REG_X1)
+
+	// Mask to 32 bits (JS ToInt32/ToUint32 semantics).
+	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
+	as.AMD64_AND_RR(REG_R9, REG_RDX)
+	as.AMD64_AND_RR(REG_R11, REG_RDX)
 
 	// Bitwise operation.
 	switch op {
@@ -1055,6 +1079,11 @@ func emitAMD64BitwiseNot(as *Assembler, instr *js.Instruction, deoptStub *Label)
 	// Convert float64 → int64 → NOT → float64.
 	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
 	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
+
+	// Mask to 32 bits (JS ToInt32 semantics).
+	as.AMD64_MOV_RI(REG_R11, 0xFFFFFFFF)
+	as.AMD64_AND_RR(REG_R9, REG_R11)
+
 	as.AMD64_NOT_R(REG_R9)
 	as.AMD64_CVTSI2SD(REG_X1, REG_R9)
 	as.AMD64_MOVQ_RX(REG_R9, REG_X1)
@@ -1095,12 +1124,18 @@ func emitAMD64ShiftFast(as *Assembler, instr *js.Instruction, op int, deoptStub 
 	as.AMD64_JNE(slowPath)
 
 	// Convert float64 → int64.
-	as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // value
-	as.AMD64_MOVQ_XR(REG_X1, REG_R11) // shift count
-	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
-	as.AMD64_CVTTSD2SI(REG_R11, REG_X1)
+	// Bytecode: Regs[OperandA] (LHS) << Acc (RHS count).
+	// LHS = value to shift, RHS = shift count.
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Regs[lhs].NumVal (LHS = value)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS = shift count)
+	as.AMD64_CVTTSD2SI(REG_R9, REG_X0) // R9 = int64(LHS value)
+	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(RHS shift count)
 
-	// Mask shift count to 5 bits (JS semantics).
+	// Mask value to 32 bits (JS ToInt32 semantics).
+	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
+	as.AMD64_AND_RR(REG_R9, REG_RDX)
+
+	// Mask shift count to 5 bits (JS semantics: ToUint32(rhs) & 0x1F).
 	as.AMD64_MOV_RI(REG_RCX, 0x1F)
 	as.AMD64_AND_RR(REG_R11, REG_RCX)
 	// Move shift count to CL register.
@@ -1444,26 +1479,27 @@ func emitAMD64ModFast(as *Assembler, instr *js.Instruction, deoptStub *Label) {
 	as.AMD64_JNE(slowPath)
 
 	// Convert to int64 for TruncMod-like behavior via FPREM.
-	// For now, use CVTTSD2SI to get int64 and do integer modulo.
-	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
-	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	// Bytecode: Regs[OperandA] (LHS) % Acc (RHS).
+	// X0 = LHS (dividend), X1 = RHS (divisor).
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = Regs[lhs].NumVal (LHS)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = Acc.NumVal (RHS)
 
 	// Check divisor == 0 → result = NaN.
 	as.AMD64_XORPD(REG_X2, REG_X2)
-	as.AMD64_COMISD(REG_X1, REG_X2)
+	as.AMD64_COMISD(REG_X1, REG_X2)   // check RHS (divisor) == 0
 	zeroDiv := NewLabel()
 	as.AMD64_JE(zeroDiv)
 
 	// Convert to int64 and do integer modulo.
-	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
-	as.AMD64_CVTTSD2SI(REG_R11, REG_X1)
+	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)  // R9 = int64(LHS) = dividend
+	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(RHS) = divisor
 
 	// Sign-extend RAX for IDIV.
-	as.AMD64_MOV_RR(REG_RAX, REG_R9) // RAX = dividend
+	as.AMD64_MOV_RR(REG_RAX, REG_R9) // RAX = dividend (LHS)
 	// CQO: sign-extend RAX → RDX:RAX
 	as.AMD64_CQO()
 	// IDIV: RAX = RDX:RAX / divisor; RDX = remainder
-	as.AMD64_IDIV_RR(REG_R11)
+	as.AMD64_IDIV_RR(REG_R11)        // RDX = LHS % RHS
 	// Remainder in RDX.
 	as.AMD64_MOV_RR(REG_R9, REG_RDX)
 
