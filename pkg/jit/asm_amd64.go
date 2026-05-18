@@ -415,6 +415,18 @@ func (a *Assembler) AMD64_XOR_RR(dst, src int) {
 	a.emitByte(modRM(3, regLo(src), regLo(dst)))
 }
 
+// AMD64_XOR_RI emits: XOR r64, imm32  (REX.W + 81 /6 id) — dst ^= imm32 (sign-extended).
+// Encoding: REX.W + 81 /6  ModRM(mod=11, reg=6, r/m=reg) + imm32 LE
+func (a *Assembler) AMD64_XOR_RI(reg int, imm uint32) {
+	prefix := rex(true, false, false, regHi(reg))
+	if prefix != 0 {
+		a.emitByte(prefix)
+	}
+	a.emitByte(0x81)
+	a.emitByte(modRM(3, 6, regLo(reg)))
+	a.emitUint32(imm)
+}
+
 // ---- Memory load/store --------------------------------------------------
 
 // AMD64_MOV_RM emits: MOV r64, [base]  (REX.W + 8B /r, Mod=00) — load from [base].

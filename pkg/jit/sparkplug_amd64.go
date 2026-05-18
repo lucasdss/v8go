@@ -28,6 +28,7 @@ package jit
 
 import (
 	"math"
+	"math/rand"
 	"unsafe"
 
 	"github.com/lucasdss/v8go/pkg/js"
@@ -55,6 +56,10 @@ func CompileSparkplug(bf *js.BytecodeFunction) (*CodeBuf, error) {
 		return nil, err
 	}
 	as := NewAssembler(buf)
+
+	// --- Per-compilation random cookie for constant blinding (SEC-1) ---
+	cookie := uint64(rand.Uint32())<<32 | uint64(rand.Uint32())
+	as.BlindingCookie = cookie
 
 	// --- Prologue: set up native AMD64 frame ---
 	// RAX holds *js.VMFrame from caller. Save it in R12 (scratch).
@@ -415,14 +420,19 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 
 func emitAMD64LdaSmi(as *Assembler, instr *js.Instruction) {
 	val := int8(instr.OperandA)
+	cookie := as.BlindingCookie
 
-	// Acc.Tag = TagNumber (0x0300)
+	// Acc.Tag = TagNumber (0x0300) — tags are not blinded (predictable low bytes).
 	as.AMD64_MOV_RI(REG_R13, 0x0300)
 	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accOffset+tagWordOff))
 
-	// Acc.NumVal = float64(val)
+	// Acc.NumVal = float64(val), blinded with cookie.
+	// Emit: MOV RCX, blinded_val; MOV RDX, cookie; XOR RCX, RDX; store RCX.
 	fbits := math.Float64bits(float64(val))
-	as.AMD64_MOV_RI(REG_RCX, fbits)
+	blinded := fbits ^ cookie
+	as.AMD64_MOV_RI(REG_RCX, blinded)
+	as.AMD64_MOV_RI(REG_RDX, cookie)
+	as.AMD64_XOR_RR(REG_RCX, REG_RDX) // RCX = unblinded float64 bits
 	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
 
 	// Zero out StrVal (first 16 bytes) and ObjVal.
@@ -449,6 +459,9 @@ func emitAMD64LdaConstant(as *Assembler, instr *js.Instruction) {
 	constSlot := idx * jsValueSize
 
 	// Copy Constants[idx] → Acc: 8 × 8-byte MOV (64 bytes).
+	// NOTE: Constant blinding for LdaConstant requires coordinated blinding
+	// at the GC bridge/interpreter level when values are stored into Constants[].
+	// The per-compilation cookie is available on as.BlindingCookie for future use.
 	for i := 0; i < 64; i += 8 {
 		as.AMD64_MOV_LOAD(REG_RCX, REG_R15, int8(constSlot+i))
 		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+i))

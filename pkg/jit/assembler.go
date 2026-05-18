@@ -11,8 +11,9 @@ func NewLabel() *Label { return &Label{offset: -1} }
 
 // Assembler is a two-pass ARM64 assembler with label backpatching.
 type Assembler struct {
-	buf    *CodeBuf
-	labels map[*Label]int
+	buf            *CodeBuf
+	labels         map[*Label]int
+	BlindingCookie uint64 // per-compilation random cookie for constant blinding
 }
 
 // NewAssembler creates an assembler for the given code buffer.
