@@ -15,7 +15,7 @@
 
 ## Design Decisions
 
-1. **W^X**: True dual-mapping on Linux (memfd_create + dual mmap), pure Go. Darwin uses single MAP_JIT mapping with CGO pthread_jit_write_protect_np (MAP_JIT incompatible with file-backed shared mappings). ARM64 i-cache flush on Linux via DC CVAU + IC IVAU assembly.
+1. **W^X**: True dual-mapping on Linux (memfd_create + dual mmap), pure Go. Darwin uses single MAP_JIT mapping with CGO pthread_jit_write_protect_np (MAP_JIT incompatible with MAP_SHARED). This is the same approach Chrome V8 uses for Apple Silicon. ARM64 i-cache flush on Linux via DC CVAU + IC IVAU assembly.
 
 2. **WeakRef**: Use `runtime.AddCleanup` to detect target collection. `deref()` returns `undefined` after GC collects target.
 
