@@ -1,3 +1,5 @@
+//go:build qjs
+
 // jsengine.go — shared interface for JavaScript engines in the browser.
 //
 // Both the QuickJS-based Engine and the V8Go-based Gov8Engine implement

@@ -90,6 +90,15 @@ vm.SetConsoleOutput(func(s string) { fmt.Println(s) })
 vm.Run("console.log('Hello from Go!')")
 ```
 
+## QuickJS Comparison Engine (Optional)
+
+V8Go includes an optional QuickJS-based engine for browser comparison testing. It's excluded from default builds to keep the module lightweight for `go.dev/play`.
+
+```bash
+# Build with QuickJS engine included
+go build -tags qjs ./...
+```
+
 ## Architecture
 
 ```

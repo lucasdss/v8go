@@ -1,3 +1,5 @@
+//go:build qjs
+
 package js_test
 
 import (

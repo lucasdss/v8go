@@ -1,3 +1,5 @@
+//go:build qjs
+
 // Package js provides JavaScript execution using QuickJS via fastschema/qjs.
 // The Engine wraps a QuickJS runtime with browser Web API bindings
 // (console, document, navigator, setTimeout).
