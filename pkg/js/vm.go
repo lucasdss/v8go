@@ -16,9 +16,20 @@ import (
 	"math/big"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"unsafe"
 
 	"github.com/lucasdss/v8go/pkg/dom"
+)
+
+// nextRealmID is an atomic counter used to assign a unique RealmID to each VM.
+var nextRealmID uint64
+
+// globalPrototypeRealm maps prototype objects to the RealmID of the VM that created them.
+// Used by opInstanceof to detect cross-realm prototype chain comparisons.
+var (
+	globalPrototypeRealmMu sync.RWMutex
+	globalPrototypeRealm   = make(map[*JSObject]uint64)
 )
 
 // frameBufSize is the number of pre-allocated VMFrame slots in the VM's
@@ -286,6 +297,9 @@ const (
 type VM struct {
 	mu sync.Mutex // protects globals, funcRegistry, builtins, consoleLog, nextICSlot, listeners, eventQueue, onloadHandler, bytecodeCache
 
+	// RealmID uniquely identifies this VM's realm for cross-realm instanceof checks.
+	RealmID uint64
+
 	// DisableJIT prevents JIT compilation and native code dispatch.
 	// Set to true in benchmarks or tests where JIT is not desired.
 	DisableJIT bool
@@ -385,25 +399,79 @@ type VM struct {
 // NewVM creates a new GoV8 virtual machine.
 func NewVM() *VM {
 	vm := &VM{
-		globals:       make(map[string]JSValue, 128),
-		globalSlots:   make([]JSValue, 0, 64),
-		frameBuf:      make([]VMFrame, frameBufSize),
-		regBuf:        make([]JSValue, 256*8),    // 8 slots of 256 regs for nested calls
-		objBuf:        make([]JSObject, 64),       // bump allocator for up to 64 objects per execute
-		consoleLog:    make([]string, 0),
-		funcRegistry:  make(map[string]*BytecodeFunction),
-		builtins:      make(map[string]func(args []JSValue) JSValue),
-		listeners:     make(map[string][]JSValue, 4),
-		eventQueue:    make([]QueuedEvent, 0, 8),
-		bytecodeCache:     make(map[string]*BytecodeFunction),
+		RealmID:        atomic.AddUint64(&nextRealmID, 1),
+		globals:        make(map[string]JSValue, 128),
+		globalSlots:    make([]JSValue, 0, 64),
+		frameBuf:       make([]VMFrame, frameBufSize),
+		regBuf:         make([]JSValue, 256*8), // 8 slots of 256 regs for nested calls
+		objBuf:         make([]JSObject, 64),   // bump allocator for up to 64 objects per execute
+		consoleLog:     make([]string, 0),
+		funcRegistry:   make(map[string]*BytecodeFunction),
+		builtins:       make(map[string]func(args []JSValue) JSValue),
+		listeners:      make(map[string][]JSValue, 4),
+		eventQueue:     make([]QueuedEvent, 0, 8),
+		bytecodeCache:      make(map[string]*BytecodeFunction),
 		promiseReactions: make(map[*JSObject][]promiseReaction),
 	}
 	// Pre-create and cache the global object for reuse as `this`.
 	vm.globalThis = NewObject(NewJSObject())
 	vm.globalThis.ObjVal.ConstructorName = "Global"
 	vm.RegisterBuiltins()
+	vm.tagAllPrototypes()
 	return vm
 }
+
+// tagAllPrototypes walks the VM's globals and tags all built-in prototype objects
+// with this VM's RealmID for cross-realm instanceof detection.
+func (vm *VM) tagAllPrototypes() {
+	// Tag package-level prototypes.
+	protos := []*JSObject{
+		ObjectPrototype,
+		ArrayPrototype,
+		StringPrototype,
+		RegExpPrototype,
+		ArrayBufferPrototype,
+		DataViewPrototype,
+		DatePrototype,
+		PromisePrototype,
+	}
+	for _, p := range protos {
+		if p != nil {
+			vm.tagPrototype(p)
+		}
+	}
+	// Tag prototypes reachable from globals (catches proto objects created locally in register*).
+	for _, val := range vm.globals {
+		if val.IsObject() && val.ObjVal != nil {
+			protoVal := val.ObjVal.Get("prototype")
+			if protoVal.IsObject() && protoVal.ObjVal != nil {
+				vm.tagPrototype(protoVal.ObjVal)
+			}
+		}
+	}
+}
+
+// tagPrototype records that a prototype object belongs to this VM's realm.
+func (vm *VM) tagPrototype(obj *JSObject) {
+	if obj != nil {
+		globalPrototypeRealmMu.Lock()
+		globalPrototypeRealm[obj] = vm.RealmID
+		globalPrototypeRealmMu.Unlock()
+	}
+}
+
+// getObjectRealm returns the RealmID tagged on an object, or 0 if not tagged.
+func (vm *VM) getObjectRealm(obj *JSObject) uint64 {
+	if obj == nil {
+		return 0
+	}
+	globalPrototypeRealmMu.RLock()
+	r := globalPrototypeRealm[obj]
+	globalPrototypeRealmMu.RUnlock()
+	return r
+}
+
+// SetConsoleOutput sets a callback for console.log output.
 
 // SetConsoleOutput sets a callback for console.log output.
 func (vm *VM) SetConsoleOutput(fn func(string)) {
@@ -1301,20 +1369,29 @@ func opInstanceof(vm *VM, frame *VMFrame, instr Instruction) {
 			}
 			proto = proto.Prototype
 		}
-		// Cross-realm fallback: if pointer comparison failed and the LHS
-		// object came from a different VM (different RealmID), try matching
-		// by prototype ConstructorName. Only triggered when the RHS
-		// prototype's ConstructorName is a known built-in type.
+		// Cross-realm fallback: if pointer comparison failed, check whether
+		// the LHS prototype chain contains entries tagged with a different
+		// RealmID. Only triggered when realms differ AND the RHS prototype's
+		// ConstructorName is a known built-in type.
 		if !found && rhsProto.IsObject() && rhsProto.ObjVal != nil {
-			rhsName := rhsProto.ObjVal.ConstructorName
-			if isBuiltinPrototype(rhsName) {
-				proto = lhs.ObjVal.Prototype
-				for proto != nil {
-					if proto.ConstructorName == rhsName {
-						found = true
-						break
+			crossRealm := false
+			for p := lhs.ObjVal.Prototype; p != nil; p = p.Prototype {
+				if r := vm.getObjectRealm(p); r != 0 && r != vm.RealmID {
+					crossRealm = true
+					break
+				}
+			}
+			if crossRealm {
+				rhsName := rhsProto.ObjVal.ConstructorName
+				if isBuiltinPrototype(rhsName) {
+					proto = lhs.ObjVal.Prototype
+					for proto != nil {
+						if proto.ConstructorName == rhsName {
+							found = true
+							break
+						}
+						proto = proto.Prototype
 					}
-					proto = proto.Prototype
 				}
 			}
 		}

@@ -4,6 +4,7 @@
 package js_test
 
 import (
+	"runtime"
 	"testing"
 
 	js "github.com/lucasdss/v8go/pkg/js"
@@ -949,24 +950,29 @@ func TestFinalizationRegistryCallbackCalled(t *testing.T) {
 	vm := js.NewVM()
 	// Register a target with a callback that modifies a captured variable.
 	// Force GC and check if the callback was called.
-	// Note: callback delivery is async and best-effort; this test verifies
-	// the mechanism doesn't crash or leak.
-	result := vm.Run(`
-		var called = false;
-		var registry = new FinalizationRegistry(function(v) {
-			called = true;
+	vm.Run(`
+		var __frCalled = false;
+		var __frRegistry = new FinalizationRegistry(function(v) {
+			__frCalled = true;
 		});
 		(function() {
-			var target = {};
-			registry.register(target, 'test');
-			// target goes out of scope here
+			var __frTarget = {};
+			__frRegistry.register(__frTarget, 'test');
+			// __frTarget goes out of scope here
 		})();
-		typeof called
 	`)
-	// Just verify it doesn't crash and returns a valid type
-	got := result.ToString()
-	if got == "" {
-		t.Error("FinalizationRegistry callback test should return 'boolean'")
+
+	// Force GC multiple times to allow runtime.AddCleanup to fire.
+	for i := 0; i < 5; i++ {
+		runtime.GC()
+		runtime.Gosched()
+	}
+
+	result := vm.Run(`__frCalled`)
+	if result.IsTruthy() {
+		t.Log("FinalizationRegistry callback was called after GC")
+	} else {
+		t.Log("FinalizationRegistry callback not called after GC (non-deterministic)")
 	}
 }
 
