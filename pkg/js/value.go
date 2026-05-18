@@ -6,6 +6,7 @@ package js
 
 import (
 	"fmt"
+	"hash/fnv"
 	"math"
 	"math/big"
 	"strconv"
@@ -27,16 +28,33 @@ func intKey(i int) string {
 	return strconv.Itoa(i)
 }
 
-var stringInternMu sync.Mutex
-var stringInternPool = make(map[string]string)
+// string interning uses sharded maps to reduce lock contention.
+// Each shard has its own mutex, allowing parallel NewString calls
+// on different shards without blocking each other.
+const internShards = 16
+
+type internShard struct {
+	mu sync.Mutex
+	m  map[string]string
+}
+
+var internMaps [internShards]internShard
 
 func internString(s string) string {
-	stringInternMu.Lock()
-	defer stringInternMu.Unlock()
-	if existing, ok := stringInternPool[s]; ok {
+	h := fnv.New32a()
+	h.Write([]byte(s))
+	idx := h.Sum32() % internShards
+	shard := &internMaps[idx]
+	shard.mu.Lock()
+	if existing, ok := shard.m[s]; ok {
+		shard.mu.Unlock()
 		return existing
 	}
-	stringInternPool[s] = s
+	if shard.m == nil {
+		shard.m = make(map[string]string)
+	}
+	shard.m[s] = s
+	shard.mu.Unlock()
 	return s
 }
 
