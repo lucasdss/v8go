@@ -204,7 +204,7 @@ func (fv *FeedbackVector) StoreIC(slotIdx int, obj *JSObject, name string, value
 	case ICMonomorphic:
 		if obj.Shape == slot.Shape {
 			// Fast path: direct offset write.
-			if !obj.Frozen && !obj.Sealed && slot.Offset < obj.propLen() {
+			if !obj.IsFrozen() && !obj.IsSealed() && slot.Offset < obj.propLen() {
 				obj.propSet(slot.Offset, value)
 				return
 			}

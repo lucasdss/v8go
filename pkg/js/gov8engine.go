@@ -470,7 +470,7 @@ func (e *Gov8Engine) elementToGov8Value(elem *dom.Element) JSValue {
 	// Wire OnPropertySet to intercept JS assignments to mutable properties.
 	// When JS does element.textContent = 'x', this mutates the Go DOM element
 	// and fires the DOM change callback for repaint.
-	obj.OnPropertySet = func(name string, value JSValue) bool {
+	obj.ensureInterceptor().OnPropertySet = func(o *JSObject, name string, value JSValue) bool {
 		switch name {
 		case "textContent":
 			elem.SetTextContent(value.ToString())

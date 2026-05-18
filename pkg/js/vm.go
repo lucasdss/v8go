@@ -1431,7 +1431,7 @@ func opStaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 			slot := &slots[slotIdx]
 			// Monomorphic fast path: shape match → direct offset write (0 allocs).
 			if slot.State == ICMonomorphic && obj.Shape == slot.Shape {
-				if !obj.Frozen && slot.Offset < obj.propLen() {
+				if !obj.IsFrozen() && slot.Offset < obj.propLen() {
 					obj.propSet(slot.Offset, val)
 					return
 				}
@@ -1465,7 +1465,7 @@ func opStaByOffset(vm *VM, frame *VMFrame, instr Instruction) {
 			val = frame.Regs[valReg]
 		}
 		obj.lastLookupValid = false
-		if !obj.Frozen && !obj.Sealed {
+		if !obj.IsFrozen() && !obj.IsSealed() {
 			obj.propSet(offset, val)
 		}
 	}
@@ -1515,7 +1515,7 @@ func opStaKeyedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 			if idx, ok := parseArrayIndex(key); ok {
 				length := int(obj.Get("length").ToNumber())
 				if idx <= length { // allow writing one past for array growth
-					if offset := obj.Shape.GetOffset(key); offset >= 0 && offset < obj.propLen() && !obj.Frozen {
+					if offset := obj.Shape.GetOffset(key); offset >= 0 && offset < obj.propLen() && !obj.IsFrozen() {
 						obj.propSet(offset, frame.Regs[valReg])
 						// Update length if writing at or beyond current.
 						if idx >= length {
@@ -2019,7 +2019,7 @@ func (bf *BytecodeFunction) BytecodeFuncToObj(original *BytecodeFunction) *JSObj
 // genStateToObj wraps GeneratorState in a JSObject for storage.
 func genStateToObj(gs *GeneratorState) *JSObject {
 	obj := NewJSObject()
-	obj.generatorState = gs
+	obj.ensureGenerator().State = gs
 	return obj
 }
 
@@ -2787,7 +2787,7 @@ func (vm *VM) createGeneratorObject(bf *BytecodeFunction, thisObj *JSObject, arg
 	}
 	// Store gs in genObj for internal access.
 	gsObj := NewJSObject()
-	gsObj.generatorState = gs
+	gsObj.ensureGenerator().State = gs
 	genObj.Set("__genstate__", NewObject(gsObj))
 
 	// Attach .next(), .return(), .throw() methods.

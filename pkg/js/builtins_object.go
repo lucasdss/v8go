@@ -204,8 +204,8 @@ func (vm *VM) registerObject() {
 			return args[0]
 		}
 		obj := args[0].ObjVal
-		obj.Frozen = true
-		obj.Sealed = true
+		obj.SetFrozen()
+		obj.SetSealed()
 		return NewObject(obj)
 	}))
 
@@ -214,7 +214,7 @@ func (vm *VM) registerObject() {
 		if len(args) == 0 || !args[0].IsObject() || args[0].ObjVal == nil {
 			return args[0]
 		}
-		args[0].ObjVal.Sealed = true
+		args[0].ObjVal.SetSealed()
 		return NewObject(args[0].ObjVal)
 	}))
 
@@ -223,7 +223,7 @@ func (vm *VM) registerObject() {
 		if len(args) == 0 || !args[0].IsObject() || args[0].ObjVal == nil {
 			return True
 		}
-		return NewBoolean(args[0].ObjVal.Frozen)
+		return NewBoolean(args[0].ObjVal.IsFrozen())
 	}))
 
 	// Object.isSealed(obj)
@@ -231,7 +231,7 @@ func (vm *VM) registerObject() {
 		if len(args) == 0 || !args[0].IsObject() || args[0].ObjVal == nil {
 			return True
 		}
-		return NewBoolean(args[0].ObjVal.Sealed)
+		return NewBoolean(args[0].ObjVal.IsSealed())
 	}))
 
 	// Object.create(proto, props) — creates object with given prototype.

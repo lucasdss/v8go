@@ -13,6 +13,46 @@ import (
 // Objects with ≤4 properties (95%+ of all objects) avoid heap allocation.
 const inlinePropsMax = 4
 
+// InterceptorMixin provides DOM/Proxy/TypedArray property interception callbacks.
+// Nil for most objects. Set on DOM elements, Proxy targets, and TypedArrays.
+type InterceptorMixin struct {
+	// OnPropertyGet is invoked when Get() resolves a property.
+	// Returns (value, handled). If handled is true, value is used directly.
+	OnPropertyGet func(obj *JSObject, key string) (JSValue, bool)
+	// OnPropertySet is invoked when Set() assigns a property.
+	// Returns true if the callback handled the assignment (default storage skipped).
+	OnPropertySet func(obj *JSObject, key string, value JSValue) bool
+	// OnHas is an optional callback invoked when Has() checks for property existence.
+	// Returns (handled, result). If handled is true, result is used directly.
+	OnHas func(obj *JSObject, key string) (bool, bool)
+	// OnDelete is an optional callback invoked when Delete() removes a property.
+	// Returns (handled, result). If handled is true, result is used directly.
+	OnDelete func(obj *JSObject, key string) (bool, bool)
+}
+
+// ProxyMixin provides Proxy target and handler references.
+// Nil for all objects except those created via `new Proxy(target, handler)`.
+type ProxyMixin struct {
+	// Target is the wrapped target object for Proxy.
+	Target JSValue
+	// Handler is the handler object with trap methods for Proxy.
+	Handler *JSObject
+}
+
+// TypedArrayMixin provides TypedArray backing store.
+// Nil for non-TypedArray objects.
+type TypedArrayMixin struct {
+	// ByteData stores the raw bytes backing an ArrayBuffer or TypedArray.
+	ByteData []byte
+}
+
+// GeneratorMixin provides generator suspended execution state.
+// Nil for all objects except suspended generator objects.
+type GeneratorMixin struct {
+	// State holds the generator's suspended execution state.
+	State *GeneratorState
+}
+
 // JSObject is the runtime representation of a JavaScript object.
 // Fields ordered by size for optimal alignment (largest first).
 type JSObject struct {
@@ -43,41 +83,61 @@ type JSObject struct {
 	ConstructFunc func(this *JSObject, args []JSValue, newTarget *JSObject) JSValue
 	// Bytecode for user-defined functions (set by compiler, executed by VM).
 	Bytecode *BytecodeFunction
-	// GeneratorState for generator objects (non-nil if this is a generator frame).
-	generatorState *GeneratorState
-	// OnPropertySet is an optional callback invoked when a property is assigned.
-	// If it returns true, default storage is skipped (callback handled the assignment).
-	// Used by DOM element bindings to intercept textContent, innerHTML, etc.
-	OnPropertySet func(name string, value JSValue) bool
-	// OnHas is an optional callback invoked when Has() checks for property existence.
-	// If it returns (true, bool), that value is used directly.
-	// Used by Proxy objects to intercept the 'in' operator via handler.has().
-	OnHas func(name string) (bool, bool)
-	// OnDelete is an optional callback invoked when Delete() removes a property.
-	// If it returns (true, bool), that value is used directly.
-	// Used by Proxy objects to intercept delete via handler.deleteProperty().
-	OnDelete func(name string) (bool, bool)
-	// ByteData stores the raw bytes backing an ArrayBuffer or TypedArray.
-	// nil for ordinary objects. Used by ArrayBuffer, DataView, and all typed arrays.
-	ByteData []byte
-	// OnPropertyGet is an optional callback invoked when getOwn returns not-found.
-	// If set, it is called BEFORE walking the prototype chain.
-	// If it returns (value, true), the value is used directly.
-	// Used by TypedArrays to implement indexed access against ByteData.
-	OnPropertyGet func(name string) (JSValue, bool)
-	// ProxyTarget holds the target object when this is a Proxy wrapper.
-	// Non-nil only for Proxy objects created via new Proxy(target, handler).
-	ProxyTarget JSValue
-	// ProxyHandler holds the handler object with trap methods for Proxy.
-	// Non-nil only for Proxy objects created via new Proxy(target, handler).
-	ProxyHandler *JSObject
-	// Frozen set by Object.freeze() — prevents property changes and deletions.
-	Frozen bool
-	// Sealed set by Object.seal() — prevents property addition and deletion,
-	// but allows modification of existing properties.
-	Sealed bool
+
+	// Optional mixins (nil for most objects)
+	interceptor *InterceptorMixin
+	proxy       *ProxyMixin
+	typedArray  *TypedArrayMixin
+	generator   *GeneratorMixin
+
+	// Seal/freeze state (bitfield: bit 0 = Frozen, bit 1 = Sealed)
+	flags uint8
 	// lastLookup cache validity flag.
 	lastLookupValid bool
+}
+
+// IsFrozen returns true if the object is frozen via Object.freeze().
+func (obj *JSObject) IsFrozen() bool { return obj.flags&1 != 0 }
+
+// SetFrozen marks the object as frozen.
+func (obj *JSObject) SetFrozen() { obj.flags |= 1 }
+
+// IsSealed returns true if the object is sealed via Object.seal().
+func (obj *JSObject) IsSealed() bool { return obj.flags&2 != 0 }
+
+// SetSealed marks the object as sealed.
+func (obj *JSObject) SetSealed() { obj.flags |= 2 }
+
+// ensureInterceptor returns the InterceptorMixin, allocating on first use.
+func (obj *JSObject) ensureInterceptor() *InterceptorMixin {
+	if obj.interceptor == nil {
+		obj.interceptor = &InterceptorMixin{}
+	}
+	return obj.interceptor
+}
+
+// ensureProxy returns the ProxyMixin, allocating on first use.
+func (obj *JSObject) ensureProxy() *ProxyMixin {
+	if obj.proxy == nil {
+		obj.proxy = &ProxyMixin{}
+	}
+	return obj.proxy
+}
+
+// ensureTypedArray returns the TypedArrayMixin, allocating on first use.
+func (obj *JSObject) ensureTypedArray() *TypedArrayMixin {
+	if obj.typedArray == nil {
+		obj.typedArray = &TypedArrayMixin{}
+	}
+	return obj.typedArray
+}
+
+// ensureGenerator returns the GeneratorMixin, allocating on first use.
+func (obj *JSObject) ensureGenerator() *GeneratorMixin {
+	if obj.generator == nil {
+		obj.generator = &GeneratorMixin{}
+	}
+	return obj.generator
 }
 
 // PropLen returns the number of stored own properties.
@@ -205,9 +265,9 @@ func (obj *JSObject) Get(name string) JSValue {
 	if val, ok := obj.getOwn(name); ok {
 		return val
 	}
-	// Virtual property interceptor (TypedArray indexed access).
-	if obj.OnPropertyGet != nil {
-		if val, ok := obj.OnPropertyGet(name); ok {
+	// Virtual property interceptor (TypedArray indexed access, Proxy get trap).
+	if obj.interceptor != nil && obj.interceptor.OnPropertyGet != nil {
+		if val, ok := obj.interceptor.OnPropertyGet(obj, name); ok {
 			return val
 		}
 	}
@@ -259,10 +319,10 @@ func (obj *JSObject) getOwnByOffset(offset int) (JSValue, bool) {
 // Set assigns a value to a named property, creating a new Shape transition if needed.
 // If OnPropertySet is set and returns true, default storage is skipped.
 func (obj *JSObject) Set(name string, value JSValue) {
-	if obj.Frozen {
+	if obj.IsFrozen() {
 		return
 	}
-	if obj.Sealed {
+	if obj.IsSealed() {
 		_, exists := obj.getOwn(name)
 		if !exists {
 			return // can't add new properties to sealed objects
@@ -270,7 +330,7 @@ func (obj *JSObject) Set(name string, value JSValue) {
 	}
 	// Invalidate last-lookup cache on any mutation.
 	obj.lastLookupValid = false
-	if obj.OnPropertySet != nil && obj.OnPropertySet(name, value) {
+	if obj.interceptor != nil && obj.interceptor.OnPropertySet != nil && obj.interceptor.OnPropertySet(obj, name, value) {
 		return
 	}
 	if obj.Shape.IsDictionary {
@@ -297,8 +357,8 @@ func (obj *JSObject) Set(name string, value JSValue) {
 // Has returns true if the named property exists anywhere in the prototype chain.
 func (obj *JSObject) Has(name string) bool {
 	// Proxy intercept: handler.has(target, prop)
-	if obj.OnHas != nil {
-		if handled, result := obj.OnHas(name); handled {
+	if obj.interceptor != nil && obj.interceptor.OnHas != nil {
+		if handled, result := obj.interceptor.OnHas(obj, name); handled {
 			return result
 		}
 	}
@@ -319,12 +379,12 @@ func (obj *JSObject) Has(name string) bool {
 // false only when the property is non-configurable (strict mode would throw).
 // Per ECMAScript §13.5.1.2: delete returns true for non-existent properties.
 func (obj *JSObject) Delete(name string) bool {
-	if obj.Frozen || obj.Sealed {
+	if obj.IsFrozen() || obj.IsSealed() {
 		return false
 	}
 	// Proxy intercept: handler.deleteProperty(target, prop)
-	if obj.OnDelete != nil {
-		if handled, result := obj.OnDelete(name); handled {
+	if obj.interceptor != nil && obj.interceptor.OnDelete != nil {
+		if handled, result := obj.interceptor.OnDelete(obj, name); handled {
 			return result
 		}
 	}

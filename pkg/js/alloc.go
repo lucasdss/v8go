@@ -136,6 +136,12 @@ func (a *Allocator) AllocObj() *JSObject {
 // FreeObj releases a JSObject. For buffer-allocated objects, rewinds the
 // bump allocator. Pool-allocated objects are returned to the pool.
 func (a *Allocator) FreeObj(obj *JSObject) {
+	// Reset mixin pointers before returning to pool.
+	obj.interceptor = nil
+	obj.proxy = nil
+	obj.typedArray = nil
+	obj.generator = nil
+	obj.flags = 0
 	if len(a.objBuf) == 0 || a.objUsed == 0 {
 		a.objPool.Put(obj)
 		return

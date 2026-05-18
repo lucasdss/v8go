@@ -533,7 +533,7 @@ func sparkplugOpStaKeyedPropertySlow(frame *js.VMFrame, objReg int, valReg int) 
 		if obj.Prototype == js.ArrayPrototype && !obj.Shape.IsDictionary {
 			if idx, ok := parseArrayIndexGo(key); ok {
 				length := int(obj.Get("length").ToNumber())
-				if idx <= length && !obj.Frozen {
+				if idx <= length && !obj.IsFrozen() {
 					if offset := obj.Shape.GetOffset(key); offset >= 0 && offset < obj.PropLen() {
 						obj.PropSet(offset, frame.Regs[valReg])
 						if idx >= length {

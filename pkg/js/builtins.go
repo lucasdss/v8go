@@ -1029,10 +1029,10 @@ func (vm *VM) registerArrayBuffer() {
 
 	// ArrayBuffer.prototype.slice(begin, end)
 	ArrayBufferPrototype.Set("slice", NewObject(builtinFunc("ArrayBuffer.slice", func(this *JSObject, args []JSValue) JSValue {
-		if this.ByteData == nil {
+		if this.typedArray == nil || this.typedArray.ByteData == nil {
 			return NewObject(newArrayBuffer(0))
 		}
-		totalLen := len(this.ByteData)
+		totalLen := len(this.typedArray.ByteData)
 		begin := 0
 		end := totalLen
 		if len(args) > 0 {
@@ -1058,7 +1058,7 @@ func (vm *VM) registerArrayBuffer() {
 		}
 		newLen := end - begin
 		ab := newArrayBuffer(newLen)
-		copy(ab.ByteData, this.ByteData[begin:end])
+		copy(ab.ensureTypedArray().ByteData, this.typedArray.ByteData[begin:end])
 		return NewObject(ab)
 	})))
 
@@ -1083,7 +1083,7 @@ func newArrayBuffer(byteLength int) *JSObject {
 	ab := NewJSObject()
 	ab.ConstructorName = "ArrayBuffer"
 	ab.Prototype = ArrayBufferPrototype
-	ab.ByteData = make([]byte, byteLength)
+	ab.ensureTypedArray().ByteData = make([]byte, byteLength)
 	ab.Set("byteLength", NewNumber(float64(byteLength)))
 	return ab
 }
@@ -1182,27 +1182,27 @@ func (vm *VM) registerDataView() {
 			return NewObject(newDataView(nil, 0, 0))
 		}
 		buffer := args[0].ObjVal
-		if buffer.ByteData == nil {
+		if buffer.typedArray == nil || buffer.typedArray.ByteData == nil {
 			return NewObject(newDataView(nil, 0, 0))
 		}
 		byteOffset := 0
 		if len(args) > 1 {
 			byteOffset = int(args[1].ToNumber())
 		}
-		if byteOffset < 0 || byteOffset > len(buffer.ByteData) {
+		if byteOffset < 0 || byteOffset > len(buffer.typedArray.ByteData) {
 			byteOffset = 0
 		}
-		byteLength := len(buffer.ByteData) - byteOffset
+		byteLength := len(buffer.typedArray.ByteData) - byteOffset
 		if len(args) > 2 && !args[2].IsUndefined() {
 			byteLength = int(args[2].ToNumber())
 		}
-		if byteOffset+byteLength > len(buffer.ByteData) {
-			byteLength = len(buffer.ByteData) - byteOffset
+		if byteOffset+byteLength > len(buffer.typedArray.ByteData) {
+			byteLength = len(buffer.typedArray.ByteData) - byteOffset
 		}
 		if byteLength < 0 {
 			byteLength = 0
 		}
-		return NewObject(newDataView(buffer.ByteData, byteOffset, byteLength))
+		return NewObject(newDataView(buffer.typedArray.ByteData, byteOffset, byteLength))
 	}
 	dataViewCtor.Set("prototype", NewObject(DataViewPrototype))
 
@@ -1214,9 +1214,9 @@ func newDataView(bytes []byte, byteOffset, byteLength int) *JSObject {
 	dv.ConstructorName = "DataView"
 	dv.Prototype = DataViewPrototype
 	if bytes != nil {
-		dv.ByteData = bytes[byteOffset : byteOffset+byteLength]
+		dv.ensureTypedArray().ByteData = bytes[byteOffset : byteOffset+byteLength]
 	} else {
-		dv.ByteData = nil
+		dv.ensureTypedArray().ByteData = nil
 	}
 	dv.Set("byteOffset", NewNumber(float64(byteOffset)))
 	dv.Set("byteLength", NewNumber(float64(byteLength)))
@@ -1239,10 +1239,11 @@ func dvGet(dv *JSObject, args []JSValue, size int, littleEndian bool, kind strin
 		return Undefined
 	}
 	offset := int(args[0].ToNumber())
-	if dv.ByteData == nil || offset < 0 || offset+size > len(dv.ByteData) {
+	bd := dv.typedArray.ByteData
+	if dv.typedArray == nil || bd == nil || offset < 0 || offset+size > len(bd) {
 		return Undefined
 	}
-	b := dv.ByteData[offset : offset+size]
+	b := bd[offset : offset+size]
 	switch kind {
 	case "int8":
 		return NewNumber(float64(int8(b[0])))
@@ -1306,10 +1307,11 @@ func dvSet(dv *JSObject, args []JSValue, size int, littleEndian bool, kind strin
 	}
 	offset := int(args[0].ToNumber())
 	value := args[1].ToNumber()
-	if dv.ByteData == nil || offset < 0 || offset+size > len(dv.ByteData) {
+	bd := dv.typedArray.ByteData
+	if dv.typedArray == nil || bd == nil || offset < 0 || offset+size > len(bd) {
 		return Undefined
 	}
-	b := dv.ByteData[offset : offset+size]
+	b := bd[offset : offset+size]
 	switch kind {
 	case "int8":
 		b[0] = byte(int8(value))
@@ -1363,10 +1365,11 @@ func dvGetBigInt(dv *JSObject, args []JSValue, size int, littleEndian bool, sign
 		return Undefined
 	}
 	offset := int(args[0].ToNumber())
-	if dv.ByteData == nil || offset < 0 || offset+size > len(dv.ByteData) {
+	bd := dv.typedArray.ByteData
+	if dv.typedArray == nil || bd == nil || offset < 0 || offset+size > len(bd) {
 		return Undefined
 	}
-	b := dv.ByteData[offset : offset+size]
+	b := bd[offset : offset+size]
 	var val uint64
 	if littleEndian {
 		val = binary.LittleEndian.Uint64(b)
@@ -1385,10 +1388,11 @@ func dvSetBigInt(dv *JSObject, args []JSValue, size int, littleEndian bool, sign
 		return Undefined
 	}
 	offset := int(args[0].ToNumber())
-	if dv.ByteData == nil || offset < 0 || offset+size > len(dv.ByteData) {
+	bd := dv.typedArray.ByteData
+	if dv.typedArray == nil || bd == nil || offset < 0 || offset+size > len(bd) {
 		return Undefined
 	}
-	b := dv.ByteData[offset : offset+size]
+	b := bd[offset : offset+size]
 
 	// Extract uint64 bits from the BigInt argument.
 	var bits uint64
@@ -1472,20 +1476,21 @@ func makeTypedArrayCtor(name string, kind typedArrayKind) *JSObject {
 		ta := NewJSObject()
 		ta.ConstructorName = name
 		ta.Prototype = proto
+		taTyped := ta.ensureTypedArray()
 
 		if len(args) == 0 {
-			ta.ByteData = make([]byte, 0)
+			taTyped.ByteData = make([]byte, 0)
 		} else if args[0].IsNumber() {
 			// new TypedArray(length)
 			length := int(args[0].ToNumber())
 			if length < 0 {
 				length = 0
 			}
-			ta.ByteData = make([]byte, length*byteSize)
-		} else if args[0].IsObject() && args[0].ObjVal != nil && args[0].ObjVal.ByteData != nil {
+			taTyped.ByteData = make([]byte, length*byteSize)
+		} else if args[0].IsObject() && args[0].ObjVal != nil && args[0].ObjVal.typedArray != nil && args[0].ObjVal.typedArray.ByteData != nil {
 			// new TypedArray(buffer, byteOffset?, length?)
 			buffer := args[0].ObjVal
-			srcData := buffer.ByteData
+			srcData := buffer.typedArray.ByteData
 			byteOffset := 0
 			length := len(srcData) / byteSize
 			if len(args) > 1 {
@@ -1506,53 +1511,56 @@ func makeTypedArrayCtor(name string, kind typedArrayKind) *JSObject {
 				elemBytes = 0
 				length = 0
 			}
-			ta.ByteData = make([]byte, elemBytes)
-			copy(ta.ByteData, srcData[byteOffset:byteOffset+elemBytes])
+			taTyped.ByteData = make([]byte, elemBytes)
+			copy(taTyped.ByteData, srcData[byteOffset:byteOffset+elemBytes])
 		} else if args[0].IsObject() && args[0].ObjVal != nil {
 			// new TypedArray(typedArray) — copy from another typed array
 			src := args[0].ObjVal
-			if src.ByteData != nil {
-				ta.ByteData = make([]byte, len(src.ByteData))
-				copy(ta.ByteData, src.ByteData)
+			if src.typedArray != nil && src.typedArray.ByteData != nil {
+				taTyped.ByteData = make([]byte, len(src.typedArray.ByteData))
+				copy(taTyped.ByteData, src.typedArray.ByteData)
 			} else {
-				ta.ByteData = make([]byte, 0)
+				taTyped.ByteData = make([]byte, 0)
 			}
 		} else {
-			ta.ByteData = make([]byte, 0)
+			taTyped.ByteData = make([]byte, 0)
 		}
 
-		n := len(ta.ByteData) / byteSize
+		n := len(taTyped.ByteData) / byteSize
 		ta.Set("length", NewNumber(float64(n)))
 
 		// Virtual property interceptor for indexed access.
-		ta.OnPropertyGet = func(prop string) (JSValue, bool) {
+		taIntercept := ta.ensureInterceptor()
+		taIntercept.OnPropertyGet = func(obj *JSObject, prop string) (JSValue, bool) {
 			idx, ok := parseArrayIndex(prop)
 			if !ok {
 				return Undefined, false
 			}
-			if ta.ByteData == nil || idx*byteSize+byteSize > len(ta.ByteData) {
+			bd := obj.typedArray.ByteData
+			if bd == nil || idx*byteSize+byteSize > len(bd) {
 				return Undefined, true
 			}
-			return typedArrayGet(ta.ByteData, idx, byteSize, kind), true
+			return typedArrayGet(bd, idx, byteSize, kind), true
 		}
-		ta.OnPropertySet = func(prop string, val JSValue) bool {
+		taIntercept.OnPropertySet = func(obj *JSObject, prop string, val JSValue) bool {
 			idx, ok := parseArrayIndex(prop)
 			if !ok {
 				return false
 			}
-			if ta.ByteData == nil || idx*byteSize+byteSize > len(ta.ByteData) {
+			bd := obj.typedArray.ByteData
+			if bd == nil || idx*byteSize+byteSize > len(bd) {
 				return true
 			}
-			typedArraySet(ta.ByteData, idx, byteSize, kind, val.ToNumber())
+			typedArraySet(bd, idx, byteSize, kind, val.ToNumber())
 			return true
 		}
 
-		ta.Set("buffer", NewObject(&JSObject{
-			ConstructorName: "ArrayBuffer",
-			ByteData:        ta.ByteData,
-		}))
+		bufObj := NewJSObject()
+		bufObj.ConstructorName = "ArrayBuffer"
+		bufObj.ensureTypedArray().ByteData = taTyped.ByteData
+		ta.Set("buffer", NewObject(bufObj))
 		ta.Set("byteOffset", NewNumber(0))
-		ta.Set("byteLength", NewNumber(float64(len(ta.ByteData))))
+		ta.Set("byteLength", NewNumber(float64(len(taTyped.ByteData))))
 
 		return NewObject(ta)
 	}
@@ -1821,12 +1829,12 @@ func (vm *VM) registerProxy() {
 		}
 		handlerObj := handler.ObjVal
 		proxy := this
-		proxy.ProxyTarget = target
-		proxy.ProxyHandler = handlerObj
+		proxy.ensureProxy().Target = target
+		proxy.ensureProxy().Handler = handlerObj
 		proxy.ConstructorName = "Proxy"
 
 		// Property get trap: handler.get(target, prop, receiver)
-		proxy.OnPropertyGet = func(name string) (JSValue, bool) {
+		proxy.ensureInterceptor().OnPropertyGet = func(obj *JSObject, name string) (JSValue, bool) {
 			getTrap := handlerObj.Get("get")
 			if getTrap.IsObject() && getTrap.ObjVal != nil && getTrap.ObjVal.IsCallable() {
 				receiver := NewObject(proxy)
@@ -1841,7 +1849,7 @@ func (vm *VM) registerProxy() {
 		}
 
 		// Property set trap: handler.set(target, prop, value, receiver) → boolean
-		proxy.OnPropertySet = func(name string, value JSValue) bool {
+		proxy.ensureInterceptor().OnPropertySet = func(obj *JSObject, name string, value JSValue) bool {
 			setTrap := handlerObj.Get("set")
 			if setTrap.IsObject() && setTrap.ObjVal != nil && setTrap.ObjVal.IsCallable() {
 				receiver := NewObject(proxy)
@@ -1856,7 +1864,7 @@ func (vm *VM) registerProxy() {
 		}
 
 		// has trap: handler.has(target, prop) → boolean
-		proxy.OnHas = func(name string) (bool, bool) {
+		proxy.ensureInterceptor().OnHas = func(obj *JSObject, name string) (bool, bool) {
 			hasTrap := handlerObj.Get("has")
 			if hasTrap.IsObject() && hasTrap.ObjVal != nil && hasTrap.ObjVal.IsCallable() {
 				result := hasTrap.ObjVal.Call(handlerObj, []JSValue{target, NewString(name)})
@@ -1866,7 +1874,7 @@ func (vm *VM) registerProxy() {
 		}
 
 		// deleteProperty trap: handler.deleteProperty(target, prop) → boolean
-		proxy.OnDelete = func(name string) (bool, bool) {
+		proxy.ensureInterceptor().OnDelete = func(obj *JSObject, name string) (bool, bool) {
 			deleteTrap := handlerObj.Get("deleteProperty")
 			if deleteTrap.IsObject() && deleteTrap.ObjVal != nil && deleteTrap.ObjVal.IsCallable() {
 				result := deleteTrap.ObjVal.Call(handlerObj, []JSValue{target, NewString(name)})
@@ -1928,13 +1936,17 @@ func (vm *VM) registerProxy() {
 			revoked = true
 			if proxyVal.IsObject() && proxyVal.ObjVal != nil {
 				p := proxyVal.ObjVal
-				p.OnPropertyGet = nil
-				p.OnPropertySet = nil
-				p.OnHas = nil
-				p.OnDelete = nil
+				if p.interceptor != nil {
+					p.interceptor.OnPropertyGet = nil
+					p.interceptor.OnPropertySet = nil
+					p.interceptor.OnHas = nil
+					p.interceptor.OnDelete = nil
+				}
 				p.CallFunc = nil
-				p.ProxyTarget = JSValue{}
-				p.ProxyHandler = nil
+				if p.proxy != nil {
+					p.proxy.Target = JSValue{}
+					p.proxy.Handler = nil
+				}
 			}
 			return Undefined
 		}))
