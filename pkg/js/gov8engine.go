@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"strings"
 	"sync"
-	"time"
 
 	"github.com/lucasdss/v8go/pkg/dom"
 )
@@ -14,22 +13,19 @@ import (
 // Gov8Engine wraps the V8Go custom VM with the same API as the QuickJS Engine,
 // enabling the browser to use our custom JavaScript engine.
 type Gov8Engine struct {
-	mu                sync.Mutex
-	vm                *VM
-	doc               *dom.Document
-	heap              *dom.DOMHeap
-	consoleLogFn      func(args ...any)
-	consoleWarnFn     func(args ...any)
-	consoleErrorFn    func(args ...any)
-	documentLookup    func(id string) any
-	domChangeCallback    func()                                            // called when JS mutates the DOM
-	styleTransitionHook  func(el *dom.Element, prop, oldVal, newVal string) // called when JS sets a style property
-	eventLoop            *EventLoop
-	timeoutID         int
-	timeoutMu         sync.Mutex
-	initialized       bool
-	closed            bool // true after Close(), prevents lazy reinit
-	lastError         error // last error from DispatchInlineEvent or other async operations
+	mu                  sync.Mutex
+	vm                  *VM
+	doc                 *dom.Document
+	heap                *dom.DOMHeap
+	consoleLogFn        func(args ...any)
+	consoleWarnFn       func(args ...any)
+	consoleErrorFn      func(args ...any)
+	documentLookup      func(id string) any
+	domChangeCallback   func()                                             // called when JS mutates the DOM
+	styleTransitionHook func(el *dom.Element, prop, oldVal, newVal string) // called when JS sets a style property
+	initialized         bool
+	closed              bool  // true after Close(), prevents lazy reinit
+	lastError           error // last error from DispatchInlineEvent or other async operations
 }
 
 // NewGov8Engine creates a new V8Go JavaScript engine with browser API bindings.
@@ -197,10 +193,10 @@ func (e *Gov8Engine) init() {
 }
 
 func (e *Gov8Engine) bindDOM() {
-// Mark the document element as JS-reachable for unified heap GC.
-if e.doc != nil && e.doc.DocumentElement != nil && e.heap != nil {
-e.heap.MarkJSReachable(&e.doc.DocumentElement.Node)
-}
+	// Mark the document element as JS-reachable for unified heap GC.
+	if e.doc != nil && e.doc.DocumentElement != nil && e.heap != nil {
+		e.heap.MarkJSReachable(&e.doc.DocumentElement.Node)
+	}
 	// Wire element lookup so VM.DispatchEvent can resolve target IDs.
 	if e.doc != nil {
 		e.vm.SetElementLookup(func(id string) *dom.Element {
@@ -237,40 +233,40 @@ e.heap.MarkJSReachable(&e.doc.DocumentElement.Node)
 		tagName := args[0].ToString()
 		el := e.doc.CreateElement(tagName)
 		e.notifyDOMChange()
-return e.elementToGov8Value(el)
-}
+		return e.elementToGov8Value(el)
+	}
 
-// Expose document.querySelector as a global built-in.
-e.vm.registry.Builtins["__goQuerySelector"] = func(args []JSValue) JSValue {
-if e.doc == nil || len(args) == 0 {
-return Null
-}
-found := e.doc.QuerySelector(args[0].ToString())
-if found == nil {
-return Null
-}
-return e.elementToGov8Value(found)
-}
+	// Expose document.querySelector as a global built-in.
+	e.vm.registry.Builtins["__goQuerySelector"] = func(args []JSValue) JSValue {
+		if e.doc == nil || len(args) == 0 {
+			return Null
+		}
+		found := e.doc.QuerySelector(args[0].ToString())
+		if found == nil {
+			return Null
+		}
+		return e.elementToGov8Value(found)
+	}
 
-// Expose document.querySelectorAll as a global built-in.
-e.vm.registry.Builtins["__goQuerySelectorAll"] = func(args []JSValue) JSValue {
-if e.doc == nil || len(args) == 0 {
-return NewObject(NewJSObject())
-}
-results := e.doc.QuerySelectorAll(args[0].ToString())
-arr := NewJSObject()
-arr.ConstructorName = "Array"
-if ArrayPrototype != nil {
-arr.Prototype = ArrayPrototype
-}
-for i, r := range results {
-arr.Set(intKey(i), e.elementToGov8Value(r))
-}
-arr.Set("length", NewNumber(float64(len(results))))
-return NewObject(arr)
-}
+	// Expose document.querySelectorAll as a global built-in.
+	e.vm.registry.Builtins["__goQuerySelectorAll"] = func(args []JSValue) JSValue {
+		if e.doc == nil || len(args) == 0 {
+			return NewObject(NewJSObject())
+		}
+		results := e.doc.QuerySelectorAll(args[0].ToString())
+		arr := NewJSObject()
+		arr.ConstructorName = "Array"
+		if ArrayPrototype != nil {
+			arr.Prototype = ArrayPrototype
+		}
+		for i, r := range results {
+			arr.Set(intKey(i), e.elementToGov8Value(r))
+		}
+		arr.Set("length", NewNumber(float64(len(results))))
+		return NewObject(arr)
+	}
 
-// Expose console functions through the VM's built-in console.
+	// Expose console functions through the VM's built-in console.
 }
 
 // Execute runs a JavaScript source string and returns the result value.
@@ -286,45 +282,9 @@ func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 	}
 	e.mu.Unlock()
 
-	// Wire setTimeout if we have an event loop.
-	var setTimeoutDef string
-	if e.eventLoop != nil {
-		e.vm.registry.Builtins["__goSetTimeout"] = func(args []JSValue) JSValue {
-			if len(args) < 2 {
-				return NewNumber(-1)
-			}
-			callback := args[0]
-			if !callback.IsObject() || callback.ObjVal == nil {
-				return NewNumber(-1)
-			}
-			ms := int(args[1].ToNumber())
-			e.timeoutMu.Lock()
-			e.timeoutID++
-			id := e.timeoutID
-			e.timeoutMu.Unlock()
-			cb := callback // capture for closure
-			e.eventLoop.SetTimeout(func() {
-				// Serialise with any in-progress vm.Run() to avoid
-				// concurrent executeFrame data races on vm.globals /
-				// vm.builtins / vm.funcRegistry.
-				e.mu.Lock()
-				vm := e.vm
-				e.mu.Unlock()
-				if vm == nil {
-					return
-				}
-				vm.Lock()
-				vm.CallMethodLocked(cb, nil, nil)
-				vm.Unlock()
-				// Trigger repaint after timeout callback fires.
-				e.notifyDOMChange()
-			}, time.Duration(ms)*time.Millisecond)
-			return NewNumber(float64(id))
-		}
-		setTimeoutDef = `var setTimeout = __goSetTimeout; var setInterval = __goSetTimeout;`
-	} else {
-		setTimeoutDef = `var setTimeout = function(fn, ms) { return 0; }; var setInterval = function(fn, ms) { return 0; };`
-	}
+	// setTimeout/setInterval are host-provided functions (not part of ECMAScript).
+	// They return stub implementations; full event loop support was removed with QuickJS.
+	setTimeoutDef := `var setTimeout = function(fn, ms) { return 0; }; var setInterval = function(fn, ms) { return 0; };`
 
 	// Wire document.addEventListener and window.onload lifecycle events.
 	e.vm.registry.Builtins["__goAddEventListener"] = func(args []JSValue) JSValue {
@@ -384,13 +344,6 @@ func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 	e.notifyDOMChange()
 
 	return result, nil
-}
-
-// SetEventLoop registers an event loop for setTimeout/setInterval support.
-func (e *Gov8Engine) SetEventLoop(loop *EventLoop) {
-	e.mu.Lock()
-	defer e.mu.Unlock()
-	e.eventLoop = loop
 }
 
 // Close releases V8Go resources.
@@ -485,8 +438,8 @@ func (e *Gov8Engine) FireEvent(eventType string, data map[string]JSValue) {
 
 // elementToGov8Value converts a DOM Element to a V8Go JSValue object.
 func (e *Gov8Engine) elementToGov8Value(elem *dom.Element) JSValue {
-// Mark element as JS-reachable (unified heap).
-// The caller should ensure the engine's heap is available.
+	// Mark element as JS-reachable (unified heap).
+	// The caller should ensure the engine's heap is available.
 	obj := NewJSObject()
 	obj.Set("id", NewString(elem.GetAttribute("id")))
 	obj.Set("tagName", NewString(strings.ToUpper(elem.LocalName)))
