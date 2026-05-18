@@ -1309,6 +1309,57 @@ func BenchmarkIfConditional(b *testing.B) {
 	}
 }
 
+func BenchmarkJITThreshold(b *testing.B) {
+	vm := js.NewVM()
+	// Run function just below Sparkplug threshold (default 50 calls).
+	// DisableJIT ensures we benchmark pure interpreter cost without
+	// background compilation overhead.
+	vm.DisableJIT = true
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("function f(a,b){return a+b}; f(1,2)")
+	}
+}
+
+func BenchmarkPropertyAccessHot(b *testing.B) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	// Pre-warm: populate bytecode cache and IC slots.
+	vm.Run("var obj = {x: 1, y: 2}")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("obj.x + obj.y")
+	}
+}
+
+func BenchmarkFunctionCall(b *testing.B) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	vm.Run("function add(a,b){return a+b}")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("add(1,2)")
+	}
+}
+
+func BenchmarkArrayIteration(b *testing.B) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("var arr=[1,2,3,4,5]; var s=0; for(var i=0;i<arr.length;i++)s+=arr[i]; s")
+	}
+}
+
+func BenchmarkObjectCreation(b *testing.B) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("var o={a:1,b:2,c:3,d:4,e:5}; o")
+	}
+}
+
 // --- Lifecycle event tests ---
 
 func TestFireEventDOMContentLoaded(t *testing.T) {

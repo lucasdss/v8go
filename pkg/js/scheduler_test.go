@@ -23,24 +23,32 @@ func TestTaskPriority_String(t *testing.T) {
 func TestScheduler_EnqueueAndRun(t *testing.T) {
 	s := NewScheduler(nil)
 	var counter int32
+	done := make(chan struct{})
 
 	s.Enqueue(PriorityNormal, ScriptTaskSource, func() {
 		atomic.AddInt32(&counter, 1)
 	})
 	s.Enqueue(PriorityNormal, ScriptTaskSource, func() {
-		atomic.AddInt32(&counter, 1)
+		if atomic.AddInt32(&counter, 1) == 2 {
+			close(done)
+		}
 	})
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
-	// Run in background.
 	go s.Run(ctx)
-	time.Sleep(100 * time.Millisecond)
+
+	// Wait for tasks to complete or timeout.
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for tasks")
+	}
 	s.Stop()
 
-	if c := atomic.LoadInt32(&counter); c < 2 {
-		t.Errorf("expected at least 2 tasks processed, got %d", c)
+	if c := atomic.LoadInt32(&counter); c != 2 {
+		t.Errorf("expected 2 tasks, got %d", c)
 	}
 }
 
@@ -48,12 +56,15 @@ func TestScheduler_PriorityOrder(t *testing.T) {
 	s := NewScheduler(nil)
 	var mu sync.Mutex
 	var order []TaskPriority
+	var wg sync.WaitGroup
+	wg.Add(5)
 
 	enqueue := func(pri TaskPriority) {
 		s.Enqueue(pri, ScriptTaskSource, func() {
 			mu.Lock()
 			order = append(order, pri)
 			mu.Unlock()
+			wg.Done()
 		})
 	}
 
@@ -64,37 +75,47 @@ func TestScheduler_PriorityOrder(t *testing.T) {
 	enqueue(PriorityHigh)
 	enqueue(PriorityInput)
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	go s.Run(ctx)
-	time.Sleep(100 * time.Millisecond)
+
+	// Wait for all tasks to complete.
+	wg.Wait()
 	s.Stop()
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(order) < 3 {
-		t.Fatalf("expected at least 3 tasks processed, got %d", len(order))
+	if len(order) != 5 {
+		t.Fatalf("expected 5 tasks processed, got %d", len(order))
 	}
 }
 
 func TestScheduler_Microtask(t *testing.T) {
 	s := NewScheduler(nil)
 	var counter int32
+	done := make(chan struct{})
 
 	s.EnqueueMicrotask(func() {
 		atomic.AddInt32(&counter, 1)
 	})
 	s.EnqueueMicrotask(func() {
-		atomic.AddInt32(&counter, 1)
+		if atomic.AddInt32(&counter, 1) == 2 {
+			close(done)
+		}
 	})
 
-	// Run until empty drains microtasks.
-	ctx, cancel := context.WithTimeout(context.Background(), 100*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 
 	go s.Run(ctx)
-	time.Sleep(30 * time.Millisecond)
+
+	// Wait for microtasks or timeout.
+	select {
+	case <-done:
+	case <-ctx.Done():
+		t.Fatal("timeout waiting for microtasks")
+	}
 	s.Stop()
 
 	if c := atomic.LoadInt32(&counter); c != 2 {
@@ -132,6 +153,9 @@ func TestScheduler_WeightedOrder(t *testing.T) {
 	s := NewScheduler(nil)
 	var mu sync.Mutex
 	var results []TaskPriority
+	const totalTasks = 20
+	var wg sync.WaitGroup
+	wg.Add(totalTasks)
 
 	// Enqueue 10 normal and 10 input tasks.
 	for i := 0; i < 10; i++ {
@@ -139,6 +163,7 @@ func TestScheduler_WeightedOrder(t *testing.T) {
 			mu.Lock()
 			results = append(results, PriorityNormal)
 			mu.Unlock()
+			wg.Done()
 		})
 	}
 	for i := 0; i < 10; i++ {
@@ -146,18 +171,21 @@ func TestScheduler_WeightedOrder(t *testing.T) {
 			mu.Lock()
 			results = append(results, PriorityInput)
 			mu.Unlock()
+			wg.Done()
 		})
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 500*time.Millisecond)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Second)
 	defer cancel()
 	go s.Run(ctx)
-	time.Sleep(200 * time.Millisecond)
+
+	// Wait for all tasks to complete.
+	wg.Wait()
 	s.Stop()
 
 	mu.Lock()
 	defer mu.Unlock()
-	if len(results) < 10 {
-		t.Fatalf("expected at least 10 tasks processed, got %d", len(results))
+	if len(results) != totalTasks {
+		t.Fatalf("expected %d tasks, got %d", totalTasks, len(results))
 	}
 }
