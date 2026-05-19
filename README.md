@@ -1,8 +1,8 @@
 # V8Go — V8-compatible JavaScript Engine in Go with JIT Compiler
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/lucasdss/v8go.svg)](https://pkg.go.dev/github.com/lucasdss/v8go)
-[![Tests](https://img.shields.io/badge/tests-1190+-blue)](https://github.com/lucasdss/v8go)
-[![Coverage](https://img.shields.io/badge/JIT_coverage-84.5%25-brightgreen)](https://github.com/lucasdss/v8go)
+[![Tests](https://img.shields.io/badge/tests-1480+-blue)](https://github.com/lucasdss/v8go)
+[![Coverage](https://img.shields.io/badge/coverage-78.6%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
 V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~98% ECMAScript compatibility** with near-native performance on ARM64.
@@ -12,6 +12,12 @@ The minimum required Go version is 1.24.
 ## Features
 
 - **Full modern JavaScript support** (ES2022+): classes, async/await, generators, destructuring, optional chaining, nullish coalescing, template literals, spread/rest, ES modules
+- **Polymorphic inlining**: guard chains for 2-4 target shapes, budget-capped at 200 instructions per site
+- **Escape analysis**: JSValue allocation elimination when results don't escape the expression
+- **Load elimination**: redundant property load elimination within basic blocks
+- **AMD64 Sparkplug**: 40+ native opcode handlers (property, call, arithmetic, comparison, control flow)
+- **Constant blinding**: random cookie XOR for immediate values to prevent JIT spraying
+- **ARM64 PAC**: pointer authentication on Apple Silicon (ARMv8.3+) for JIT frame protection
 - **Multi-tier JIT compiler**: Sparkplug baseline (185/185 ops ARM64) + TurboFan optimizing (SSA IR, type specialization, speculative inlining)
 - **Hidden Classes (Shapes)**: V8-style transition tree with slack tracking, inline property storage, and dictionary mode fallback
 - **Inline Caching**: mono/poly/megamorphic runtime code patching for fast property access
@@ -115,8 +121,8 @@ vm.Run("console.log('Hello from Go!')")
 ┌──────────────────────────────────────────────────────────────┐
 │                TIER 2: TurboFan Optimizing JIT               │
 │  Bytecode + Feedback → SSA Sea-of-Nodes IR (82 ops lowered) │
-│  Type specialization: unbox numbers, inline monomorphic calls│
-│  Linear scan register allocation → optimized ARM64           │
+│  Type specialization, escape analysis, load elimination      │
+│  Poly/mono inlining, linear scan register allocation          │
 └───────────────────┬──────────────────────────────────────────┘
                     │ type guard fails
                     ▼
@@ -132,7 +138,8 @@ vm.Run("console.log('Hello from Go!')")
 │  Hidden Classes (Shapes) + transition tree + slack tracking │
 │  Inline Caching: mono/poly/megamorphic runtime patching      │
 │  Shadow Stack: GC-safe object references in native frames    │
-│  W^X dual-mapped memory: mmap + pthread_jit_write_protect_np│
+│  W^X dual-mapped memory: memfd_create + dual mmap (Linux),  │
+│  MAP_JIT + pthread_jit_write_protect_np (Darwin)            │
 │  Go ABIInternal interop: $g$ preservation, 16-byte SP        │
 │  Preempt polling at loop back-edges for goroutine scheduling │
 │  runtime/jit GC bridge: JITRegion + Next + ScanStack         │
@@ -172,7 +179,7 @@ Stack traces now include source positions: `at funcName (<file>:<line>:<col>)`. 
 
 ### AMD64 JIT
 
-The AMD64 Sparkplug JIT has **28 fast-path opcode handlers** (comparison, bitwise, shift, logical, type, math, control flow) plus 35 deopt-to-interpreter stubs. The assembler has 60+ instructions. Remaining 122 handlers are planned. All JavaScript executes correctly — non-native ops deopt to the interpreter.
+The AMD64 Sparkplug JIT has **40+ fast-path opcode handlers** (property, call, arithmetic, comparison, bitwise, shift, logical, type, math, control flow) plus 150+ deopt-to-interpreter stubs. The assembler has 60+ instructions. Remaining ~100 handlers are planned. All JavaScript executes correctly — non-native ops deopt to the interpreter.
 
 ### Instanceof with cross-realm objects
 
@@ -182,7 +189,7 @@ Each VM gets a unique `RealmID`. Cross-realm `instanceof` falls back to `Constru
 
 ### How fast is it?
 
-For single operations, the interpreter runs at ~50 ns/op. The Sparkplug JIT (Tier 1) activates after 100 calls and provides 3-10x speedup on hot loops. TurboFan (Tier 2) activates at 1000 calls with speculative optimizations.
+For single operations, the interpreter runs at ~56 ns/op (Apple M3). The Sparkplug JIT (Tier 1) activates after 100 calls and provides 3-10x speedup on hot loops. TurboFan (Tier 2) activates at 1000 calls with escape analysis, load elimination, and poly/mono inlining.
 
 | Benchmark | Interpreter | Sparkplug | Notes |
 |-----------|-------------|-----------|-------|
@@ -194,7 +201,7 @@ For single operations, the interpreter runs at ~50 ns/op. The Sparkplug JIT (Tie
 
 ### Why would I use it over a V8 wrapper?
 
-- **Pure Go**: no CGO, no native library dependencies. Cross-compiles everywhere Go does.
+- **Pure Go**: near-zero CGO (Darwin-only pthread_jit_write_protect_np; Linux uses pure Go dual-mapping). Cross-compiles everywhere Go does.
 - **Go integration**: seamless Go↔JS interop with no FFI overhead. Pass Go structs, call Go functions from JS.
 - **Safety**: Go memory safety. No use-after-free, no buffer overflows, no sandbox escapes.
 - **Deploy simplicity**: `go get github.com/lucasdss/v8go` vs CGO + V8 static library (~50MB).
@@ -212,29 +219,34 @@ These are host-provided functions, not part of ECMAScript. V8Go provides stub im
 
 ### Can you implement (feature X)?
 
-V8Go is under active development. The roadmap includes: AMD64 JIT completion, full TurboFan inlining, polymorphic IC wiring, and runtime/jit GC registration. Features are implemented in dependency order.
+V8Go is under active development. The roadmap includes: AMD64 JIT completion (remaining 100+ ops), full TurboFan escape analysis for objects, runtime/jit GC registration, and JSValue representation optimization. Features are implemented in dependency order.
 
 ## Performance
 
 Single-op benchmarks are dominated by VM overhead (function lookup, frame allocation, JSValue boxing). Real workloads with persistent VMs and hot loops see the full native speedup.
 
-| Benchmark | Interpreter | Sparkplug (Tier 1) | Notes |
-|-----------|-------------|-------------------|-------|
-| `function add(a,b){return a+b}` | 50 ns/op | 335 ns/op* | *Full `vm.Run()` overhead |
-| 10K arithmetic loop | 1.9 ms | 0.8 ms (**2.5x**) | Pre-warmed to 200 calls |
-| Property access 5K | 453 µs | 447 µs | IC patching active |
-| JIT compile time | — | 2.6 µs | ARM64 codegen for add() |
+| Benchmark | Interpreter | Notes |
+|-----------|-------------|-------|
+| `1 + 2` | 56 ns/op | Simplified expression, 0 allocs |
+| `1 + 2 * 3 - 4 / 2` | 112 ns/op | Multi-op arithmetic, 0 allocs |
+| `var x = 42; x` | 54 ns/op | Variable access, 0 allocs |
+| Property access (hot) | 71 ns/op | Pre-warmed shape cache |
+| Object literal creation | 221 ns/op | `{a: 1, b: 2}`, 1 alloc |
+| Function call | 241 ns/op | `function f(a,b){return a+b}; f(1,2)`, 1 alloc |
+| Array iteration (100 items) | 1,746 ns/op | 3 allocs |
+| JIT compile (Sparkplug) | ~2.6 µs | ARM64 codegen for `add()` |
 
-**Performance ceiling:** The interpreter runs at ~50 ns/op. Sparkplug eliminates interpreter dispatch overhead but Go helper calls remain the bottleneck. Full native speedup requires native ARM64 for all bytecodes plus TurboFan inlining.
+**Performance ceiling:** The interpreter runs at ~50 ns/op for simple expressions. Sparkplug and TurboFan eliminate interpreter dispatch overhead but Go helper calls remain the bottleneck. Full native speedup requires comprehensive native ARM64/AMD64 codegen plus TurboFan aggressive inlining. All benchmarks on Apple M3 with `DisableJIT=true` (pure interpreter path).
 
 ## Code Quality
 
 | Metric | Value |
 |--------|-------|
-| **Total lines** | 64,000+ (146 Go files) |
-| **pkg/jit coverage** | **84.5%** (exceeds 80% gate) |
-| **pkg/js coverage** | 75.8% |
-| **Tests** | 1,190+ across 8 packages |
+| **Total lines** | 68,000+ (155 Go files) |
+| **pkg/jit coverage** | **82.6%** (exceeds 80% gate) |
+| **pkg/js coverage** | **78.6%** (exceeds 75% baseline) |
+| **Tests** | 1,480+ across 8 packages |
+| **Benchmarks** | 23 (interpreter, JIT compilation, SSA passes) |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
 | **Static analysis** | clean (go vet, gosec ≤12 pre-existing) |
@@ -250,10 +262,10 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 | Aspect | V8Go | Chrome V8 |
 |--------|------|-----------|
-| **Language** | Go (32K lines) | C++ (2M+ lines) |
+| **Language** | Go (34K lines) | C++ (2M+ lines) |
 | **Interpreter** | Ignition-style register VM (197 ops) | Ignition register VM |
 | **Baseline JIT** | Sparkplug (185/185 ops ARM64) | Sparkplug (ARM64/x86-64) |
-| **Optimizing JIT** | TurboFan (82 SSA ops, inlining) | Maglev + TurboFan |
+| **Optimizing JIT** | TurboFan (82 SSA ops, poly/mono inlining, escape analysis) | Maglev + TurboFan |
 | **Hidden Classes** | Shapes + transition tree + slack tracking | Maps + transitions + slack |
 | **Inline Caching** | mono/poly/mega with runtime patching | mono/poly/mega with code patching |
 | **Deoptimization** | FrameDescription + DeoptInputData | Deoptimizer + TranslationArrays |
@@ -265,14 +277,14 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | **Portability** | Go cross-compile (GOOS/GOARCH) | Platform-specific builds |
 | **Deploy** | `go get github.com/lucasdss/v8go` | CGO + V8 static library (~50MB) |
 
-**Why not faster than 25% of V8?** Chrome V8 uses raw C++ pointer arithmetic, Smi tagging to avoid heap allocations for numbers, and a generational garbage collector optimized over 15 years. V8Go runs within Go's managed runtime — all values are heap-allocated JSValue structs, the GC is Go's concurrent mark-sweep, and pointer compression is not possible. The tradeoff is **Go safety and simplicity** over absolute peak performance. For server-side JavaScript execution where Go integration matters more than microbenchmark speed, V8Go provides a compelling alternative.
+**Why not faster than 25% of V8?** Chrome V8 uses raw C++ pointer arithmetic, Smi tagging to avoid heap allocations for numbers, and a generational garbage collector optimized over 15 years. V8Go runs within Go's managed runtime — JSValues are struct-copied (56 bytes), the GC is Go's concurrent mark-sweep, and pointer compression is not possible. The escape analysis pass eliminates intermediate JSValues in TurboFan-compiled code. The tradeoff is **Go safety and simplicity** over absolute peak performance. For server-side JavaScript execution where Go integration matters more than microbenchmark speed, V8Go provides a compelling alternative.
 
 ## Packages
 
 | Package | Lines | Description |
 |---------|-------|-------------|
-| `pkg/js/` | 32,000 | Bytecode VM, parser, compiler, builtins, Hidden Classes, Inline Caching, feedback vectors |
-| `pkg/jit/` | 20,000 | Sparkplug (Tier 1), TurboFan (Tier 2), ARM64/AMD64 assembler, deoptimization, shadow stack, GC bridge |
+| `pkg/js/` | 21,000 | Bytecode VM, parser, compiler, builtins, Hidden Classes, Inline Caching, feedback vectors |
+| `pkg/jit/` | 13,000 | Sparkplug (Tier 1), TurboFan (Tier 2), ARM64/AMD64 assembler, deoptimization, shadow stack, GC bridge |
 | `v8go.go` | 54 | Public API: `Evaluate()`, `NewEngine()`, `Version()` |
 | `pkg/dom/` | 4,000 | DOM bindings: `document.getElementById`, `element.style`, `classList`, event handling |
 | `pkg/net/` | 2,700 | Browser networking: `fetch()`, `XMLHttpRequest`, URL parsing |
@@ -281,13 +293,14 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 ## Current Status
 
 - All major ES2022+ features implemented and tested
-- Sparkplug JIT active on ARM64 with 185/185 ops native
-- Sparkplug JIT on AMD64 with 28 fast-path handlers + 35 deopt stubs
-- TurboFan SSA pipeline complete with 82 ops lowered
-- Deoptimization wired and tested
-- W^X dual-mapping on Linux, MAP_JIT on Darwin
+- Sparkplug JIT active on ARM64 with 196/196 ops native
+- Sparkplug JIT on AMD64 with 40+ fast-path handlers + 150+ deopt stubs
+- TurboFan SSA pipeline: 82 ops, escape analysis, load elimination, poly/mono inlining
+- Deoptimization wired and tested; tier reset + IC vector reset on 5 consecutive deopts
+- W^X dual-mapping on Linux (pure Go), MAP_JIT on Darwin
 - Error.stack with source file:line:col positions
-- Active development: TurboFan inlining, polymorphic IC, remaining AMD64 op coverage
+- ARM64 PAC (Apple Silicon) and constant blinding (both tiers) for JIT security
+- Active development: remaining AMD64 op coverage, JSValue representation optimization
 
 ## Architecture
 
