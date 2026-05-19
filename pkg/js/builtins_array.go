@@ -1,8 +1,26 @@
 package js
 
 import (
-"strings"
+	"math"
+	"strings"
 )
+
+// maxArrayLen caps array lengths and indices to prevent integer overflow.
+// 1<<28 allows up to ~256MB arrays, preventing NaN/Inf → int overflow.
+const maxArrayLen = 1 << 28
+
+// safeIndex bounds-checks a JS numeric value used as an array index.
+// Returns (index, ok). ok=false when v is NaN, Inf, negative, or > maxLen.
+func safeIndex(v float64, maxLen int) (int, bool) {
+	if math.IsNaN(v) || math.IsInf(v, 0) || v < 0 {
+		return 0, false
+	}
+	idx := int(v)
+	if idx > maxLen {
+		return 0, false
+	}
+	return idx, true
+}
 
 
 // _arrayFlat recursively flattens an array-like object up to the given depth.
@@ -12,13 +30,13 @@ func _arrayFlat(arr *JSObject, depth int) *JSObject {
 	if ArrayPrototype != nil {
 		result.Prototype = ArrayPrototype
 	}
-	length := int(arr.Get("length").ToNumber())
+	length, _ := safeIndex(arr.Get("length").ToNumber(), maxArrayLen)
 	outIdx := 0
 	for i := 0; i < length; i++ {
 		elem := arr.Get(intKey(i))
 		if depth > 0 && elem.IsObject() && elem.ObjVal != nil && elem.ObjVal.ConstructorName == "Array" {
 			sub := _arrayFlat(elem.ObjVal, depth-1)
-			subLen := int(sub.Get("length").ToNumber())
+			subLen, _ := safeIndex(sub.Get("length").ToNumber(), maxArrayLen)
 			for j := 0; j < subLen; j++ {
 				result.Set(intKey(outIdx), sub.Get(intKey(j)))
 				outIdx++
@@ -52,7 +70,7 @@ func (vm *VM) registerArray() {
 	arrayProto.ConstructorName = "Array"
 
 	arrayProto.Set("push", vm.createBuiltinWithFallback("Array.push", func(this *JSObject, args []JSValue) JSValue {
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		for i, arg := range args {
 			this.Set(intKey(length+i), arg)
 		}
@@ -62,7 +80,7 @@ func (vm *VM) registerArray() {
 	}))
 
 	arrayProto.Set("pop", vm.createBuiltinWithFallback("Array.pop", func(this *JSObject, args []JSValue) JSValue {
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		if length == 0 {
 			this.Set("length", NewNumber(0))
 			return Undefined
@@ -79,7 +97,7 @@ func (vm *VM) registerArray() {
 			return Undefined
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		result := NewJSObject()
 		result.ConstructorName = "Array"
 		if ArrayPrototype != nil {
@@ -99,7 +117,7 @@ func (vm *VM) registerArray() {
 			return Undefined
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		result := NewJSObject()
 		result.ConstructorName = "Array"
 		if ArrayPrototype != nil {
@@ -123,7 +141,7 @@ func (vm *VM) registerArray() {
 			return Undefined
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		if length == 0 && len(args) < 2 {
 			return Undefined
 		}
@@ -147,7 +165,7 @@ func (vm *VM) registerArray() {
 			return Undefined
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		for i := 0; i < length; i++ {
 			elem := this.Get(intKey(i))
 			callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)})
@@ -160,10 +178,18 @@ func (vm *VM) registerArray() {
 			return NewNumber(-1)
 		}
 		search := args[0]
-		length := int(this.Get("length").ToNumber())
-		startFrom := 0
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
+		startFrom, ok := safeIndex(0, length)
 		if len(args) > 1 {
-			startFrom = int(args[1].ToNumber())
+			v := args[1].ToNumber()
+			if math.IsNaN(v) || math.IsInf(v, 0) {
+				return NewNumber(-1)
+			}
+			startFrom = int(v)
+			ok = true
+		}
+		if !ok {
+			return NewNumber(-1)
 		}
 		for i := startFrom; i < length; i++ {
 			if this.Get(intKey(i)).StrictEquals(search) {
@@ -178,7 +204,7 @@ func (vm *VM) registerArray() {
 		if len(args) > 0 {
 			sep = args[0].ToString()
 		}
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		parts := make([]string, length)
 		for i := 0; i < length; i++ {
 			val := this.Get(intKey(i))
@@ -192,14 +218,20 @@ func (vm *VM) registerArray() {
 	}))
 
 	arrayProto.Set("slice", vm.createBuiltinFunction("Array.slice", func(this *JSObject, args []JSValue) JSValue {
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		start := 0
 		end := length
 		if len(args) > 0 {
-			start = int(args[0].ToNumber())
+			v := args[0].ToNumber()
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				start = int(v)
+			}
 		}
 		if len(args) > 1 {
-			end = int(args[1].ToNumber())
+			v := args[1].ToNumber()
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				end = int(v)
+			}
 		}
 		if start < 0 {
 			start = length + start
@@ -228,10 +260,13 @@ func (vm *VM) registerArray() {
 	}))
 
 	arrayProto.Set("splice", vm.createBuiltinFunction("Array.splice", func(this *JSObject, args []JSValue) JSValue {
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		start := 0
 		if len(args) > 0 {
-			start = int(args[0].ToNumber())
+			v := args[0].ToNumber()
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				start = int(v)
+			}
 		}
 		if start < 0 {
 			start = length + start
@@ -241,7 +276,10 @@ func (vm *VM) registerArray() {
 		}
 		deleteCount := length - start
 		if len(args) > 1 {
-			deleteCount = int(args[1].ToNumber())
+			v := args[1].ToNumber()
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				deleteCount = int(v)
+			}
 		}
 		if deleteCount > length-start {
 			deleteCount = length - start
@@ -283,7 +321,7 @@ func (vm *VM) registerArray() {
 		if ArrayPrototype != nil {
 			result.Prototype = ArrayPrototype
 		}
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		outIdx := 0
 		for i := 0; i < length; i++ {
 			result.Set(intKey(outIdx), this.Get(intKey(i)))
@@ -291,7 +329,7 @@ func (vm *VM) registerArray() {
 		}
 		for _, arg := range args {
 			if arg.IsObject() && arg.ObjVal != nil {
-				argLen := int(arg.ObjVal.Get("length").ToNumber())
+				argLen, _ := safeIndex(arg.ObjVal.Get("length").ToNumber(), maxArrayLen)
 				for i := 0; i < argLen; i++ {
 					result.Set(intKey(outIdx), arg.ObjVal.Get(intKey(i)))
 					outIdx++
@@ -310,7 +348,7 @@ func (vm *VM) registerArray() {
 			return Undefined
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		for i := 0; i < length; i++ {
 			elem := this.Get(intKey(i))
 			if callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
@@ -325,7 +363,7 @@ func (vm *VM) registerArray() {
 			return False
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		for i := 0; i < length; i++ {
 			elem := this.Get(intKey(i))
 			if callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
@@ -340,7 +378,7 @@ func (vm *VM) registerArray() {
 			return True
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		for i := 0; i < length; i++ {
 			elem := this.Get(intKey(i))
 			if !callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
@@ -355,7 +393,7 @@ func (vm *VM) registerArray() {
 			return NewNumber(-1)
 		}
 		callback := args[0].ObjVal
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		for i := 0; i < length; i++ {
 			elem := this.Get(intKey(i))
 			if callback.Call(nil, []JSValue{elem, NewNumber(float64(i)), NewObject(this)}).IsTruthy() {
@@ -370,11 +408,14 @@ func (vm *VM) registerArray() {
 			return NewObject(this)
 		}
 		value := args[0]
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		start := 0
 		end := length
 		if len(args) > 1 {
-			start = int(args[1].ToNumber())
+			v := args[1].ToNumber()
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				start = int(v)
+			}
 			if start < 0 {
 				start = length + start
 			}
@@ -383,7 +424,10 @@ func (vm *VM) registerArray() {
 			}
 		}
 		if len(args) > 2 {
-			end = int(args[2].ToNumber())
+			v := args[2].ToNumber()
+			if !math.IsNaN(v) && !math.IsInf(v, 0) {
+				end = int(v)
+			}
 			if end < 0 {
 				end = length + end
 			}
@@ -400,7 +444,14 @@ func (vm *VM) registerArray() {
 	arrayProto.Set("flat", vm.createBuiltinFunction("Array.flat", func(this *JSObject, args []JSValue) JSValue {
 		depth := 1.0
 		if len(args) > 0 {
-			depth = args[0].ToNumber()
+			v := args[0].ToNumber()
+			if math.IsNaN(v) || math.IsInf(v, -1) {
+				depth = 0
+			} else if math.IsInf(v, 1) {
+				depth = float64(maxArrayLen) // effectively infinite
+			} else {
+				depth = v
+			}
 		}
 		flattened := _arrayFlat(this, int(depth))
 		return NewObject(flattened)
@@ -415,7 +466,7 @@ func (vm *VM) registerArray() {
 		if len(args) > 1 && args[1].IsObject() && args[1].ObjVal != nil {
 			thisArg = args[1].ObjVal
 		}
-		length := int(this.Get("length").ToNumber())
+		length, _ := safeIndex(this.Get("length").ToNumber(), maxArrayLen)
 		mapped := NewJSObject()
 		mapped.ConstructorName = "Array"
 		if ArrayPrototype != nil {
@@ -435,7 +486,11 @@ func (vm *VM) registerArray() {
 		if len(args) == 0 {
 			return Undefined
 		}
-		n := int(args[0].ToNumber())
+		v := args[0].ToNumber()
+		if math.IsNaN(v) || math.IsInf(v, 0) {
+			return Undefined
+		}
+		n := int(v)
 		lengthVal := this.Get("length")
 		length := 0
 		if lengthVal.Tag == TagNumber {
@@ -477,7 +532,7 @@ func (vm *VM) registerArray() {
 			result.Prototype = ArrayPrototype
 		}
 		if source.IsObject() && source.ObjVal != nil {
-			length := int(source.ObjVal.Get("length").ToNumber())
+			length, _ := safeIndex(source.ObjVal.Get("length").ToNumber(), maxArrayLen)
 			for i := 0; i < length; i++ {
 				elem := source.ObjVal.Get(intKey(i))
 				if mapFn != nil {
