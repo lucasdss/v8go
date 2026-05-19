@@ -1059,6 +1059,11 @@ func lowerSSAToARM64(g *SSAGraph, ra *RegAlloc) (*CodeBuf, error) {
 				as.MOVZ(REG_R16, 0, 0)
 				as.NOP() // placeholder: BRK #0
 
+			case SSANop:
+				// No-op: node was eliminated by optimization pass.
+				// Should not appear in practice (removeNops strips them),
+				// but handle gracefully if one slips through.
+
 			case SSAReturn:
 				// Store result directly to frame.Acc using known offsets.
 				if len(node.Args) > 0 {

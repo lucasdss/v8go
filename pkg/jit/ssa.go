@@ -92,6 +92,7 @@ const (
 	SSACreateClosure                      // create closure (function + captured context)
 	SSATypeof                             // typeof operator evaluation
 	SSADeleteProperty                     // delete named property from object
+	SSANop                                // no-op (node eliminated by optimization)
 )
 
 // String returns a human-readable name for the SSA operation.
@@ -261,6 +262,8 @@ func (op SSAOp) String() string {
 		return "Typeof"
 	case SSADeleteProperty:
 		return "DeleteProperty"
+	case SSANop:
+		return "Nop"
 	default:
 		return "Unknown"
 	}

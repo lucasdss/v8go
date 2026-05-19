@@ -53,10 +53,16 @@ func CompileTurboFan(bf *js.BytecodeFunction) (*CodeBuf, error) {
 	// Phase 6: Inline polymorphic call sites (guard chains).
 	inlinePolymorphicCalls(g)
 
-	// Phase 7: Linear-scan register allocation.
+	// Phase 7: Global Value Numbering — eliminate redundant computations.
+	runGVN(g)
+
+	// Phase 8: Algebraic simplification — peephole identity reductions.
+	simplifyAlgebraic(g)
+
+	// Phase 9: Linear-scan register allocation.
 	ra := allocateRegisters(g)
 
-	// Phase 8: Lower SSA to ARM64 machine code.
+	// Phase 10: Lower SSA to ARM64 machine code.
 	buf, err := lowerSSAToARM64(g, ra)
 	if err != nil {
 		return nil, fmt.Errorf("turbofan: lowering failed: %w", err)

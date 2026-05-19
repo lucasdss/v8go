@@ -186,6 +186,7 @@ SSAForInStart:            "ForInStart",
 SSACreateClosure:         "CreateClosure",
 SSATypeof:                "Typeof",
 SSADeleteProperty:        "DeleteProperty",
+SSANop:                   "Nop",
 }
 for op, expected := range tests {
 got := op.String()
