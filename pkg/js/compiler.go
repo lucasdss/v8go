@@ -1112,9 +1112,6 @@ func (c *Compiler) compileClassDeclaration(decl *ClassDeclaration) {
 	c.bf.Emit(OpStar, uint8(protoReg), 0, 0)
 
 	for i, m := range decl.Methods {
-		if m.Static {
-			continue // skip static methods for now (would attach to constructor)
-		}
 		// Compile method into bytecode, embed in template, create closure.
 		mTemplate := NewJSObject()
 		mTemplate.ConstructorName = "Function"
@@ -1125,8 +1122,12 @@ func (c *Compiler) compileClassDeclaration(decl *ClassDeclaration) {
 		methodReg := c.allocReg()
 		c.bf.Emit(OpStar, uint8(methodReg), 0, 0)
 
-		// Set method on prototype: proto.methodName = methodFn
-		c.bf.Emit(OpLdar, uint8(protoReg), 0, 0)
+		// Static methods → attach to constructor; instance methods → attach to prototype.
+		targetReg := protoReg
+		if m.Static {
+			targetReg = ctorReg
+		}
+		c.bf.Emit(OpLdar, uint8(targetReg), 0, 0)
 		methodNameIdx := c.stringConstant(m.Name)
 		c.bf.Emit(OpStaNamedProperty, uint8(methodNameIdx), uint8(methodReg), 255)
 	}
@@ -1209,9 +1210,6 @@ func (c *Compiler) compileClassExpression(decl *ClassDeclaration) {
 	c.bf.Emit(OpStar, uint8(protoReg), 0, 0)
 
 	for i, m := range decl.Methods {
-		if m.Static {
-			continue
-		}
 		mTemplate := NewJSObject()
 		mTemplate.ConstructorName = "Function"
 		mTemplate.Bytecode = methodBFs[i]
@@ -1221,7 +1219,12 @@ func (c *Compiler) compileClassExpression(decl *ClassDeclaration) {
 		methodReg := c.allocReg()
 		c.bf.Emit(OpStar, uint8(methodReg), 0, 0)
 
-		c.bf.Emit(OpLdar, uint8(protoReg), 0, 0)
+		// Static methods → attach to constructor; instance methods → attach to prototype.
+		targetReg := protoReg
+		if m.Static {
+			targetReg = ctorReg
+		}
+		c.bf.Emit(OpLdar, uint8(targetReg), 0, 0)
 		methodNameIdx := c.stringConstant(m.Name)
 		c.bf.Emit(OpStaNamedProperty, uint8(methodNameIdx), uint8(methodReg), 255)
 	}

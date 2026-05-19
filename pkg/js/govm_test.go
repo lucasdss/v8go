@@ -3273,6 +3273,46 @@ func TestClassExpressionVariable(t *testing.T) {
 	}
 }
 
+func TestClassStaticMethod(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		class Foo {
+			static bar() { return 42; }
+		}
+		Foo.bar()
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("static method on class: %v, want 42", result)
+	}
+}
+
+func TestClassStaticAndInstanceMethods(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		class Foo {
+			static bar() { return 10; }
+			baz() { return 20; }
+		}
+		Foo.bar() + new Foo().baz()
+	`)
+	if result.ToNumber() != 30 {
+		t.Errorf("static + instance methods: %v, want 30", result)
+	}
+}
+
+func TestClassExpressionStaticMethod(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var Foo = class {
+			static bar() { return 99; }
+		};
+		Foo.bar()
+	`)
+	if result.ToNumber() != 99 {
+		t.Errorf("static method on class expression: %v, want 99", result)
+	}
+}
+
 func TestTypeErrorExists(t *testing.T) {
 	vm := js.NewVM()
 	if vm.Run(`typeof TypeError`).ToString() != "function" {
