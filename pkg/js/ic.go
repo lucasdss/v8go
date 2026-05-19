@@ -106,7 +106,12 @@ func (fv *FeedbackVector) LoadIC(slotIdx int, obj *JSObject, name string) JSValu
 			slot.Shape = obj.Shape
 			slot.Offset = offset
 			slot.State = ICMonomorphic
-			return obj.propAt(offset)
+			val := obj.propAt(offset)
+			// Accessor property: call the getter function.
+			if attr := obj.Shape.GetAttr(name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+				return val.ObjVal.Call(obj, nil)
+			}
+			return val
 		}
 		// Property not found inline (prototype or dictionary). Try slow path.
 		// Leave slot uninitialized — future accesses may hit inline.
@@ -116,7 +121,12 @@ func (fv *FeedbackVector) LoadIC(slotIdx int, obj *JSObject, name string) JSValu
 		// Fast path: shape matches — direct offset access, zero allocations.
 		if obj.Shape == slot.Shape {
 			if slot.Offset < obj.propLen() {
-				return obj.propAt(slot.Offset)
+				val := obj.propAt(slot.Offset)
+				// Accessor property: call the getter function.
+				if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+					return val.ObjVal.Call(obj, nil)
+				}
+				return val
 			}
 			// Properties array shrunk (e.g., delete). Fall through to miss.
 		}
@@ -137,7 +147,11 @@ func (fv *FeedbackVector) LoadIC(slotIdx int, obj *JSObject, name string) JSValu
 			slot.PolyCount = 2
 			slot.State = ICPolymorphic
 			// LRU: move new shape to position 0 for faster future lookups.
-			return obj.propAt(offset)
+			val := obj.propAt(offset)
+			if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+				return val.ObjVal.Call(obj, nil)
+			}
+			return val
 		}
 		slot.State = ICPolymorphic
 		return obj.Get(name)
@@ -147,7 +161,11 @@ func (fv *FeedbackVector) LoadIC(slotIdx int, obj *JSObject, name string) JSValu
 		for i := 0; i < slot.Count; i++ {
 			if obj.Shape == slot.Shapes[i] {
 				if slot.Offsets[i] < obj.propLen() {
-					return obj.propAt(slot.Offsets[i])
+					val := obj.propAt(slot.Offsets[i])
+					if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+						return val.ObjVal.Call(obj, nil)
+					}
+					return val
 				}
 				// Stale offset, fall through.
 				break
@@ -163,7 +181,11 @@ func (fv *FeedbackVector) LoadIC(slotIdx int, obj *JSObject, name string) JSValu
 				slot.PolyOffsets[slot.Count] = offset
 				slot.PolyCount = slot.Count + 1
 				slot.Count++
-				return obj.propAt(offset)
+				val := obj.propAt(offset)
+				if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+					return val.ObjVal.Call(obj, nil)
+				}
+				return val
 			}
 		} else {
 			// Too many shapes → megamorphic. Cache last shape for re-check.
@@ -179,14 +201,22 @@ func (fv *FeedbackVector) LoadIC(slotIdx int, obj *JSObject, name string) JSValu
 	case ICMegamorphic:
 		// Try the megamorphic LRU cache before full slow path.
 		if obj.Shape == slot.MegaShape && slot.MegaOffset < obj.propLen() {
-			return obj.propAt(slot.MegaOffset)
+			val := obj.propAt(slot.MegaOffset)
+			if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+				return val.ObjVal.Call(obj, nil)
+			}
+			return val
 		}
 		// Update megamorphic cache on miss.
 		offset := obj.Shape.GetOffset(slot.Name)
 		if offset >= 0 && offset < obj.propLen() {
 			slot.MegaShape = obj.Shape
 			slot.MegaOffset = offset
-			return obj.propAt(offset)
+			val := obj.propAt(offset)
+			if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+				return val.ObjVal.Call(obj, nil)
+			}
+			return val
 		}
 		return obj.Get(name)
 	}

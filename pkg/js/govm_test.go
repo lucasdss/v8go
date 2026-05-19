@@ -229,6 +229,23 @@ func TestObjectLiteral(t *testing.T) {
 	}
 }
 
+func TestObjectLiteralGetter(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("var obj = { get x() { return 42; } }; obj.x")
+	if result.ToNumber() != 42 {
+		t.Errorf("expected 42 from getter, got %v", result)
+	}
+}
+
+func TestObjectLiteralSetter(t *testing.T) {
+	vm := js.NewVM()
+	_ = vm.Run("var obj = { value: 0, set x(v) { this.value = v; } }; obj.x = 99")
+	result := vm.Run("obj.value")
+	if result.ToNumber() != 99 {
+		t.Errorf("expected 99 after setter, got %v", result)
+	}
+}
+
 // --- Arrays ---
 
 func TestArrayLiteral(t *testing.T) {

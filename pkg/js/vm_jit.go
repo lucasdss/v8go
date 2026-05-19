@@ -28,8 +28,16 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 		if bf.CompilingJIT {
 			return // already being compiled
 		}
+		// Check if VM is shutting down before launching goroutine.
+		select {
+		case <-vm.jitClosed:
+			return
+		default:
+		}
 		bf.CompilingJIT = true
+		vm.jitWg.Add(1)
 		go func() {
+			defer vm.jitWg.Done()
 			jitCompileSem <- struct{}{}
 			defer func() {
 				<-jitCompileSem
@@ -50,8 +58,16 @@ func (vm *VM) maybePromoteTier(bf *BytecodeFunction) {
 		if bf.CompilingJIT {
 			return // already being compiled
 		}
+		// Check if VM is shutting down before launching goroutine.
+		select {
+		case <-vm.jitClosed:
+			return
+		default:
+		}
 		bf.CompilingJIT = true
+		vm.jitWg.Add(1)
 		go func() {
+			defer vm.jitWg.Done()
 			jitCompileSem <- struct{}{}
 			defer func() {
 				<-jitCompileSem

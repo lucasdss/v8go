@@ -172,7 +172,13 @@ func opLdaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 			// Monomorphic fast path: shape match → direct offset access (0 allocs).
 			if slot.State == ICMonomorphic && obj.Shape == slot.Shape {
 				if slot.Offset < obj.propLen() {
-					frame.Acc = obj.propAt(slot.Offset)
+					val := obj.propAt(slot.Offset)
+					// Accessor property: call the getter function.
+					if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+						frame.Acc = val.ObjVal.Call(obj, nil)
+					} else {
+						frame.Acc = val
+					}
 					slot.HitCount++
 					// Patch JIT IC slot once when Sparkplug code becomes available.
 					if !vm.DisableJIT && frame.Func.Sparkplug != 0 && vm.patcher != nil && !slot.Patched {
@@ -184,7 +190,13 @@ func opLdaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 			}
 			// Megamorphic fast path: cached shape re-check.
 			if slot.State == ICMegamorphic && obj.Shape == slot.MegaShape && slot.MegaOffset < obj.propLen() {
-				frame.Acc = obj.propAt(slot.MegaOffset)
+				val := obj.propAt(slot.MegaOffset)
+				// Accessor property: call the getter function.
+				if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+					frame.Acc = val.ObjVal.Call(obj, nil)
+				} else {
+					frame.Acc = val
+				}
 				slot.HitCount++
 				return
 			}
@@ -265,6 +277,28 @@ func opStaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 	} else if frame.Acc.IsObject() && frame.Acc.ObjVal != nil {
 		frame.Acc.ObjVal.Set(propName, val)
 	}
+}
+
+// opDefineAccessorProperty defines an accessor property (getter/setter) on an object.
+// OperandA = constant-pool index for property name string.
+// OperandB = register holding the accessor function.
+// OperandC = flags: 0 = getter, 1 = setter.
+// Uses JSObject.SetAccessor to store the function with accessor shape attributes.
+func opDefineAccessorProperty(vm *VM, frame *VMFrame, instr Instruction) {
+	propIdx := int(instr.OperandA)
+	val := Undefined
+	if int(instr.OperandB) < len(frame.Regs) {
+		val = frame.Regs[int(instr.OperandB)]
+	}
+	if !frame.Acc.IsObject() || frame.Acc.ObjVal == nil {
+		return
+	}
+	obj := frame.Acc.ObjVal
+	propName := ""
+	if propIdx < len(frame.Func.Constants) {
+		propName = frame.Func.Constants[propIdx].ToString()
+	}
+	obj.SetAccessor(propName, val)
 }
 
 // opStaByOffset stores a value directly into an object's property slot by offset.

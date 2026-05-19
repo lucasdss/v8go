@@ -1753,17 +1753,15 @@ func (p *Parser) parseObjectExpression() Node {
 		// Getter/setter in object literal: get foo() { ... } or set foo(v) { ... }
 		// Only valid if key is "get"/"set" and next token is a valid property name.
 		if (key == "get" || key == "set") && p.isPropertyName(p.peek().Kind) {
-			getter := key == "get"
-			setter := key == "set"
+			isGetter := key == "get"
+			isSetter := key == "set"
 			actualKey := p.advance().Value // consume the actual property name
 			p.consume(TokLParen)
 			params := p.parseFormalParameters()
 			p.consume(TokRParen)
 			body := p.parseBlockStatement()
 			fn := &FunctionExpression{Name: actualKey, Params: params, Body: body}
-			obj.Properties = append(obj.Properties, ObjectProperty{Key: actualKey, Value: fn})
-			_ = getter
-			_ = setter
+			obj.Properties = append(obj.Properties, ObjectProperty{Key: actualKey, Value: fn, IsGetter: isGetter, IsSetter: isSetter})
 			if p.peek().Kind != TokComma {
 				break
 			}

@@ -299,6 +299,14 @@ func (obj *JSObject) getOwn(name string) (JSValue, bool) {
 		return Undefined, false
 	}
 	val := obj.propAt(offset)
+
+	// Accessor property: if getter function is stored, call it.
+	if attr := obj.Shape.GetAttr(name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+		result := val.ObjVal.Call(obj, nil)
+		// Don't cache accessor results — they may be dynamic.
+		return result, true
+	}
+
 	// Cache the result for subsequent lookups of the same property name.
 	obj.lastLookupName = name
 	obj.lastLookupValue = val
@@ -333,6 +341,15 @@ func (obj *JSObject) Set(name string, value JSValue) {
 	if obj.interceptor != nil && obj.interceptor.OnPropertySet != nil && obj.interceptor.OnPropertySet(obj, name, value) {
 		return
 	}
+	// Accessor property: if the property is an accessor, treat assignment as setter call.
+	if attr := obj.Shape.GetAttr(name); attr&AttrAccessor != 0 {
+		// Call the stored function as a setter with the new value.
+		existing := obj.propAt(obj.Shape.GetOffset(name))
+		if existing.IsObject() && existing.ObjVal.IsCallable() {
+			existing.ObjVal.Call(obj, []JSValue{value})
+		}
+		return
+	}
 	if obj.Shape.IsDictionary {
 		obj.Dictionary[name] = value
 		return
@@ -351,6 +368,31 @@ func (obj *JSObject) Set(name string, value JSValue) {
 	newOffset := obj.Shape.GetOffset(name)
 	if newOffset >= 0 && newOffset < obj.propLen() {
 		obj.propSet(newOffset, value)
+	}
+}
+
+// SetAccessor defines an accessor property (getter/setter) on the object.
+// The getter function is stored in the property slot. On get, it is called
+// with no arguments. On set, the same function is called with the new value
+// as argument (setter mode). For combined getter+setter properties, call
+// SetAccessor for the getter first, then SetAccessorSetter for the setter.
+func (obj *JSObject) SetAccessor(name string, getter JSValue) {
+	obj.lastLookupValid = false
+	if obj.Shape.IsDictionary {
+		obj.Dictionary[name] = getter
+		return
+	}
+	offset := obj.Shape.GetOffset(name)
+	if offset < 0 {
+		// New property — transition with accessor attributes.
+		obj.Shape = obj.Shape.AddPropertyWithAttr(name, AttrAccessorDefault)
+		if obj.propLen() < obj.Shape.PropertyCount {
+			obj.growProperties(obj.Shape.PropertyCount)
+		}
+		offset = obj.Shape.GetOffset(name)
+	}
+	if offset >= 0 && offset < obj.propLen() {
+		obj.propSet(offset, getter)
 	}
 }
 

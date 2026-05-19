@@ -131,6 +131,14 @@ type VM struct {
 
 	// jitErrors accumulates JIT compilation errors for diagnostics.
 	jitErrors []error
+
+	// jitWg tracks in-flight JIT compilation goroutines.
+	// Call WaitJIT() to wait for all pending compilations to finish.
+	jitWg sync.WaitGroup
+
+	// jitClosed is closed when the VM is shutting down, signalling
+	// compilation goroutines not to start new work.
+	jitClosed chan struct{}
 }
 
 // NewVM creates a new V8Go virtual machine.
@@ -144,6 +152,7 @@ func NewVM() *VM {
 		events:         NewEventSystem(),
 		registry:       NewRegistry(),
 		promiseReactions: make(map[*JSObject][]promiseReaction),
+		jitClosed:        make(chan struct{}),
 	}
 	// Pre-create and cache the global object for reuse as `this`.
 	globalThis := NewObject(NewJSObject())
@@ -204,4 +213,23 @@ func (vm *VM) pushCallName(callee JSValue, frame *VMFrame) {
 // after callMethod returns for built-in functions.
 func (vm *VM) popCallName() {
 	vm.calltrack.Pop()
+}
+
+// WaitJIT waits for all in-flight JIT compilation goroutines to complete.
+// Safe to call from any goroutine; blocks until all pending compilations finish.
+func (vm *VM) WaitJIT() {
+	vm.jitWg.Wait()
+}
+
+// ShutdownJIT signals JIT compilation goroutines to stop and waits for
+// in-flight compilations to finish. After calling ShutdownJIT, no new
+// JIT compilations will be started. The VM can still execute bytecode.
+func (vm *VM) ShutdownJIT() {
+	select {
+	case <-vm.jitClosed:
+		// Already closed.
+	default:
+		close(vm.jitClosed)
+	}
+	vm.jitWg.Wait()
 }
