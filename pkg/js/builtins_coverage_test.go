@@ -1968,3 +1968,90 @@ func TestRegExpGlobalFlag(t *testing.T) {
 		t.Logf("global regexp exec count = %v (may not support while/exec loop)", result.ToNumber())
 	}
 }
+
+// =========================================================================
+// Function.prototype — call / apply / bind / toString
+// =========================================================================
+
+func TestFunctionProtoCall(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function add(a, b) { return a + b; }
+		add.call(null, 1, 2)
+	`)
+	if result.ToNumber() != 3 {
+		t.Errorf("add.call(null, 1, 2) = %v, want 3", result)
+	}
+}
+
+func TestFunctionProtoCallWithThis(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var obj = { value: 42 };
+		function getValue() { return this.value; }
+		getValue.call(obj)
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("getValue.call(obj) = %v, want 42", result)
+	}
+}
+
+func TestFunctionProtoApply(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function sum(a, b, c) { return a + b + c; }
+		sum.apply(null, [1, 2, 3])
+	`)
+	if result.ToNumber() != 6 {
+		t.Errorf("sum.apply(null, [1,2,3]) = %v, want 6", result)
+	}
+}
+
+func TestFunctionProtoBind(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function multiply(a, b) { return a * b; }
+		var double = multiply.bind(null, 2);
+		double(5)
+	`)
+	if result.ToNumber() != 10 {
+		t.Errorf("double(5) = %v, want 10", result)
+	}
+}
+
+func TestFunctionProtoToString(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var s = (function(){}).toString();
+		s.indexOf('function') === 0
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("Function.toString() should start with 'function': %v", result)
+	}
+}
+
+func TestFunctionProtoCallIsMethod(t *testing.T) {
+	vm := js.NewVM()
+	// Verify call/apply/bind are accessible on user-defined functions
+	result := vm.Run(`
+		function f() { return 1; }
+		typeof f.call === 'function' &&
+		typeof f.apply === 'function' &&
+		typeof f.bind === 'function' &&
+		typeof f.toString === 'function'
+	`)
+	if !result.IsTruthy() {
+		t.Error("User-defined function should have call, apply, bind, toString methods")
+	}
+}
+
+func TestFunctionNameInference(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function myFunc() {}
+		myFunc.name
+	`)
+	if result.ToString() != "myFunc" {
+		t.Errorf("myFunc.name = %q, want 'myFunc'", result.ToString())
+	}
+}

@@ -492,7 +492,13 @@ func sparkplugOpCreateClosure(frame *js.VMFrame) {
 		closure := js.NewJSObject()
 		closure.ConstructorName = frame.Acc.ObjVal.ConstructorName
 		closure.Bytecode = frame.Acc.ObjVal.Bytecode
+		if js.FunctionPrototype != nil {
+			closure.Prototype = js.FunctionPrototype
+		}
 		closure.Set("length", js.NewNumber(float64(frame.Acc.ObjVal.Bytecode.NumParams)))
+		if frame.Acc.ObjVal.Bytecode.Name != "" {
+			closure.Set("name", js.NewString(frame.Acc.ObjVal.Bytecode.Name))
+		}
 		frame.Acc = js.NewObject(closure)
 	} else {
 		frame.Acc = js.NewObject(js.NewJSObject())
