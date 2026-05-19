@@ -1150,6 +1150,24 @@ func (c *Compiler) compileClassDeclaration(decl *ClassDeclaration) {
 	prototypeIdx := c.stringConstant("prototype")
 	c.bf.Emit(OpStaNamedProperty, uint8(prototypeIdx), uint8(protoValReg), 255)
 
+	// 6.5 Compile and execute static initialization blocks (ES2022).
+	for _, stmts := range decl.StaticBlocks {
+		blockBody := &BlockStatement{Body: stmts}
+		blockBF := CompileFunctionWithParent("", nil, nil, blockBody, parentScope)
+
+		blockTemplate := NewJSObject()
+		blockTemplate.ConstructorName = "Function"
+		blockTemplate.Bytecode = blockBF
+		blockTemplateIdx := c.bf.AddConstant(NewObject(blockTemplate))
+		c.bf.Emit(OpLdaConstant, uint8(blockTemplateIdx), 0, 0)
+		c.bf.Emit(OpCreateClosure, 0, 0, 0)
+		blockFuncReg := c.allocReg()
+		c.bf.Emit(OpStar, uint8(blockFuncReg), 0, 0)
+
+		// Call with this = ctorReg, 0 args.
+		c.bf.Emit(OpCall, uint8(blockFuncReg), 0, uint8(ctorReg))
+	}
+
 	// 7. Store constructor as class name in global scope.
 	c.bf.Emit(OpLdar, uint8(ctorReg), 0, 0)
 	nameIdx := c.stringConstant(decl.Name)
@@ -1246,6 +1264,24 @@ func (c *Compiler) compileClassExpression(decl *ClassDeclaration) {
 	c.bf.Emit(OpLdar, uint8(ctorReg), 0, 0)
 	prototypeIdx := c.stringConstant("prototype")
 	c.bf.Emit(OpStaNamedProperty, uint8(prototypeIdx), uint8(protoValReg), 255)
+
+	// 6.5 Compile and execute static initialization blocks (ES2022).
+	for _, stmts := range decl.StaticBlocks {
+		blockBody := &BlockStatement{Body: stmts}
+		blockBF := CompileFunctionWithParent("", nil, nil, blockBody, parentScope)
+
+		blockTemplate := NewJSObject()
+		blockTemplate.ConstructorName = "Function"
+		blockTemplate.Bytecode = blockBF
+		blockTemplateIdx := c.bf.AddConstant(NewObject(blockTemplate))
+		c.bf.Emit(OpLdaConstant, uint8(blockTemplateIdx), 0, 0)
+		c.bf.Emit(OpCreateClosure, 0, 0, 0)
+		blockFuncReg := c.allocReg()
+		c.bf.Emit(OpStar, uint8(blockFuncReg), 0, 0)
+
+		// Call with this = ctorReg, 0 args.
+		c.bf.Emit(OpCall, uint8(blockFuncReg), 0, uint8(ctorReg))
+	}
 
 	// 7. Leave constructor in acc — no global store for class expression.
 	c.bf.Emit(OpLdar, uint8(ctorReg), 0, 0)

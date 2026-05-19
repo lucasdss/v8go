@@ -879,6 +879,22 @@ func (p *Parser) parseClassDeclaration() *ClassDeclaration {
 	seenSetters := make(map[string]bool)  // tracks setter names
 
 	for p.peek().Kind != TokRBrace && p.peek().Kind != TokEOF {
+		// static { ... } — static initialization block (ES2022).
+		if p.peek().Kind == TokIdentifier && p.peek().Value == "static" && p.peekN(1).Kind == TokLBrace {
+			p.advance() // consume 'static'
+			p.advance() // consume '{'
+			var stmts []Node
+			for p.peek().Kind != TokRBrace && p.peek().Kind != TokEOF {
+				stmt := p.parseStatement()
+				if stmt != nil {
+					stmts = append(stmts, stmt)
+				}
+			}
+			p.consume(TokRBrace)
+			decl.StaticBlocks = append(decl.StaticBlocks, stmts)
+			continue
+		}
+
 		method := p.parseClassMethod()
 
 		// Reject 'arguments' and 'eval' as method names (strict mode).

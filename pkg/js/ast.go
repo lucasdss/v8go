@@ -401,11 +401,12 @@ type DefaultParam struct {
 
 // ClassDeclaration: class Name { constructor(...) { ... } method() { ... } }
 type ClassDeclaration struct {
-	Name        string
-	HasExtends  bool // true if class has an extends clause
-	ExtendsExpr Node // the extends expression (nil if no extends)
-	Constructor *ClassMethod
-	Methods     []ClassMethod
+	Name         string
+	HasExtends   bool     // true if class has an extends clause
+	ExtendsExpr  Node     // the extends expression (nil if no extends)
+	Constructor  *ClassMethod
+	Methods      []ClassMethod
+	StaticBlocks [][]Node // static { ... } initialization blocks (ES2022), each inner slice is one block's body
 }
 
 func (*ClassDeclaration) nodeMarker() {}
