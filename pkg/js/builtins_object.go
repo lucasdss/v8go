@@ -263,4 +263,14 @@ func (vm *VM) registerObject() {
 		return NewObject(obj)
 	}))
 
+	// Object.hasOwn(obj, prop) — ES2022
+	objectCtor.Set("hasOwn", vm.createBuiltinFunction("Object.hasOwn", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 2 || !args[0].IsObject() || args[0].ObjVal == nil {
+			return False
+		}
+		propName := args[1].ToString()
+		_, ok := args[0].ObjVal.getOwn(propName)
+		return NewBoolean(ok)
+	}))
+
 }

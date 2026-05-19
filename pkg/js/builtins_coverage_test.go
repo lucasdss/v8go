@@ -2087,6 +2087,27 @@ func TestObjectSeal(t *testing.T) {
 	}
 }
 
+func TestObjectHasOwn(t *testing.T) {
+	vm := js.NewVM()
+	// ES2022: Object.hasOwn(obj, prop).
+	if !vm.Run("Object.hasOwn({a:1}, 'a')").IsTruthy() {
+		t.Error("Object.hasOwn should return true for own property")
+	}
+	if vm.Run("Object.hasOwn({a:1}, 'b')").IsTruthy() {
+		t.Error("Object.hasOwn should return false for missing property")
+	}
+	if vm.Run("Object.hasOwn({a:1}, 'toString')").IsTruthy() {
+		t.Error("Object.hasOwn should return false for inherited property")
+	}
+	// Non-object args.
+	if vm.Run("Object.hasOwn(null, 'x')").IsTruthy() {
+		t.Error("Object.hasOwn with null should return false")
+	}
+	if vm.Run("Object.hasOwn(42, 'x')").IsTruthy() {
+		t.Error("Object.hasOwn with non-object should return false")
+	}
+}
+
 // =========================================================================
 // JSON Builtins — gap coverage for registerJSON
 // =========================================================================
