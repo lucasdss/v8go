@@ -330,8 +330,6 @@ These ECMAScript features are not yet implemented:
 | `Intl` API | ES2020+ | Not implemented |
 | Private methods (`#method()`) | ES2022 | Partial (fields only) |
 | `Atomics` / `SharedArrayBuffer` | ES2017 | Not implemented |
-| `Symbol.asyncIterator` / `for-await-of` | ES2018 | Not implemented |
-| Proxy: 6 traps (getPrototypeOf, etc.) | ES2015 | Partial (7/13 traps) |
 
 The curated Test262 benchmark covers the implemented features only (58/58 pass).
 
