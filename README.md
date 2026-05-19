@@ -1,11 +1,11 @@
 # V8Go — V8-compatible JavaScript Engine in Go with JIT Compiler
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/lucasdss/v8go.svg)](https://pkg.go.dev/github.com/lucasdss/v8go)
-[![Tests](https://img.shields.io/badge/tests-1480+-blue)](https://github.com/lucasdss/v8go)
+[![Tests](https://img.shields.io/badge/tests-2370+-blue)](https://github.com/lucasdss/v8go)
 [![Coverage](https://img.shields.io/badge/coverage-78.6%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
-V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~99% ECMAScript compatibility** with near-native performance on ARM64.
+V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~99%+ ECMAScript compatibility** with near-native performance on ARM64.
 
 The minimum required Go version is 1.24.
 
@@ -24,6 +24,7 @@ The minimum required Go version is 1.24.
 - **Deoptimization**: type guards → FrameDescription → interpreter resume on speculative failure
 - **All major builtins**: Object, Array, String, Number, Math, Date, RegExp, JSON, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Promise (all/race/any/allSettled), BigInt, TypedArrays, Error subtypes
 - **Internationalization**: `Intl.NumberFormat`, `Intl.DateTimeFormat`, `Intl.ListFormat`, `Intl.RelativeTimeFormat` (Go-native, no CGO/ICU dependency)
+- **Atomics & SharedArrayBuffer**: `Atomics.add/sub/load/store/compareExchange/isLockFree`, `SharedArrayBuffer` (compatibility stubs, single-threaded VM)
 - **Shadow Stack**: GC-safe object references in JIT native frames
 - **Minimal CGO**: Darwin-only (pthread_jit_write_protect_np); Linux uses pure Go dual-mapping. Cross-compiles everywhere.
 - **Passes 100% of curated Test262 benchmark** (58/58 tests covering major ECMAScript features)
@@ -245,7 +246,7 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 | **Total lines** | 68,000+ (155 Go files) |
 | **pkg/jit coverage** | **82.6%** (exceeds 80% gate) |
 | **pkg/js coverage** | **78.6%** (exceeds 75% baseline) |
-| **Tests** | 1,480+ across 8 packages |
+| **Tests** | 2,370+ across 8 packages |
 | **Benchmarks** | 23 (interpreter, JIT compilation, SSA passes) |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
@@ -327,8 +328,6 @@ These ECMAScript features are not yet implemented:
 
 | Feature | ES Version | Status |
 |---------|-----------|--------|
-| `Atomics` / `SharedArrayBuffer` | ES2017 | Not implemented |
-
 The curated Test262 benchmark covers the implemented features only (58/58 pass).
 
 ## Architecture
