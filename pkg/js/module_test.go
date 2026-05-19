@@ -486,6 +486,127 @@ func TestModuleRegisterAndLink(t *testing.T) {
 		t.Errorf("expected pi=3.14, got %v", result.ObjVal.Get("pi").ToNumber())
 	}
 }
+func TestImportMetaBuiltin(t *testing.T) {
+	// Test __moduleGetMeta__ builtin directly via Run.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var meta = __moduleGetMeta__("https://example.com/app/main.js");
+		meta.url
+	`)
+	if result.ToString() != "https://example.com/app/main.js" {
+		t.Errorf("expected meta.url = 'https://example.com/app/main.js', got %q", result.ToString())
+	}
+}
+
+func TestImportMetaResolve(t *testing.T) {
+	// Test import.meta.resolve specifier resolution.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var meta = __moduleGetMeta__("https://example.com/app/main.js");
+		meta.resolve("./lib.js")
+	`)
+	expected := "https://example.com/app/lib.js"
+	if result.ToString() != expected {
+		t.Errorf("expected resolve('./lib.js') = %q, got %q", expected, result.ToString())
+	}
+}
+
+func TestImportMetaResolveParent(t *testing.T) {
+	// Test ../ resolution in import.meta.resolve.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var meta = __moduleGetMeta__("https://example.com/app/sub/main.js");
+		meta.resolve("../lib.js")
+	`)
+	expected := "https://example.com/app/lib.js"
+	if result.ToString() != expected {
+		t.Errorf("expected resolve('../lib.js') = %q, got %q", expected, result.ToString())
+	}
+}
+
+func TestImportMetaResolveBareSpecifier(t *testing.T) {
+	// Bare specifiers (no ./ or ../) are returned as-is.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var meta = __moduleGetMeta__("https://example.com/app/main.js");
+		meta.resolve("lodash")
+	`)
+	if result.ToString() != "lodash" {
+		t.Errorf("expected resolve('lodash') = 'lodash', got %q", result.ToString())
+	}
+}
+
+func TestImportMetaResolveNoArgs(t *testing.T) {
+	// resolve() with no args returns undefined.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var meta = __moduleGetMeta__("https://example.com/app/main.js");
+		typeof meta.resolve()
+	`)
+	if result.ToString() != "undefined" {
+		t.Errorf("expected typeof meta.resolve() = 'undefined', got %q", result.ToString())
+	}
+}
+
+func TestImportMetaNoArgs(t *testing.T) {
+	// __moduleGetMeta__ with no args returns undefined.
+	vm := js.NewVM()
+	result := vm.Run(`
+		typeof __moduleGetMeta__()
+	`)
+	if result.ToString() != "undefined" {
+		t.Errorf("expected typeof __moduleGetMeta__() = 'undefined', got %q", result.ToString())
+	}
+}
+
+func TestImportMetaModuleEvaluation(t *testing.T) {
+	// Test that import_meta is available during module evaluation.
+	vm := js.NewVM()
+	mr := js.NewModuleLoader(vm, nil)
+
+	_, err := mr.Register("main.js", "export const url = import_meta.url;")
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+	if err := mr.Link("main.js"); err != nil {
+		t.Fatalf("link failed: %v", err)
+	}
+	result, err := mr.Evaluate("main.js")
+	if err != nil {
+		t.Fatalf("evaluate failed: %v", err)
+	}
+
+	u := result.ObjVal.Get("url")
+	if u.ToString() != "main.js" {
+		t.Errorf("expected import_meta.url = 'main.js', got %q", u.ToString())
+	}
+}
+
+func TestImportMetaModuleResolve(t *testing.T) {
+	// Test that import_meta.resolve works during module evaluation.
+	vm := js.NewVM()
+	mr := js.NewModuleLoader(vm, nil)
+
+	_, err := mr.Register("main.js", "export const resolved = import_meta.resolve('./lib.js');")
+	if err != nil {
+		t.Fatalf("register failed: %v", err)
+	}
+	if err := mr.Link("main.js"); err != nil {
+		t.Fatalf("link failed: %v", err)
+	}
+	result, err := mr.Evaluate("main.js")
+	if err != nil {
+		t.Fatalf("evaluate failed: %v", err)
+	}
+
+	r := result.ObjVal.Get("resolved")
+	// path-based resolution: "main.js" -> dir is ".", so "./lib.js" resolves to "lib.js"
+	expected := "lib.js"
+	if r.ToString() != expected {
+		t.Errorf("expected resolved = %q, got %q", expected, r.ToString())
+	}
+}
+
 func TestDynamicImportEndToEnd(t *testing.T) {
 	// Test mr.Import on a pre-registered module.
 	vm := js.NewVM()
