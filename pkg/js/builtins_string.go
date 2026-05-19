@@ -299,7 +299,7 @@ func (vm *VM) registerString() {
 			return NewString("")
 		}
 		n := int(args[0].ToNumber())
-		if n < 0 {
+		if n < 0 || n > maxRepeatCount {
 			return NewString("")
 		}
 		if n == 0 || s == "" {
