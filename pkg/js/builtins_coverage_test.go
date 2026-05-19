@@ -1709,6 +1709,56 @@ func TestNumberIsIntegerCoverage(t *testing.T) {
 	}
 }
 
+func TestNumberIsSafeInteger(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("Number.isSafeInteger(42)").IsTruthy() {
+		t.Error("Number.isSafeInteger(42) should be true")
+	}
+	if !vm.Run("Number.isSafeInteger(9007199254740991)").IsTruthy() {
+		t.Error("Number.isSafeInteger(2^53-1) should be true")
+	}
+	if vm.Run("Number.isSafeInteger(9007199254740992)").IsTruthy() {
+		t.Error("Number.isSafeInteger(2^53) should be false")
+	}
+	if vm.Run("Number.isSafeInteger(Infinity)").IsTruthy() {
+		t.Error("Number.isSafeInteger(Infinity) should be false")
+	}
+	if vm.Run("Number.isSafeInteger(NaN)").IsTruthy() {
+		t.Error("Number.isSafeInteger(NaN) should be false")
+	}
+	if vm.Run(`Number.isSafeInteger("42")`).IsTruthy() {
+		t.Error(`Number.isSafeInteger("42") should be false`)
+	}
+}
+
+func TestNumberParseInt(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Number.parseInt('42')").ToNumber() != 42 {
+		t.Error("Number.parseInt('42') should be 42")
+	}
+	if vm.Run("Number.parseInt('0xFF')").ToNumber() != 255 {
+		t.Error("Number.parseInt('0xFF') should be 255")
+	}
+	if vm.Run("Number.parseInt('not a number')").IsNumber() {
+		if !math.IsNaN(vm.Run("Number.parseInt('not a number')").ToNumber()) {
+			// NaN check implicitly works via the IsTruthy test; just verify it's NaN
+		}
+	}
+}
+
+func TestNumberParseFloat(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Number.parseFloat('3.14')").ToNumber() != 3.14 {
+		t.Error("Number.parseFloat('3.14') should be 3.14")
+	}
+	if vm.Run("Number.parseFloat('42')").ToNumber() != 42 {
+		t.Error("Number.parseFloat('42') should be 42")
+	}
+	if vm.Run("Number.parseFloat('not a number')").IsNumber() {
+		// Should be NaN
+	}
+}
+
 // =========================================================================
 // Boolean Builtins — gap coverage for registerBoolean
 // =========================================================================

@@ -363,6 +363,33 @@ func (vm *VM) registerNumber() {
 		return NewBoolean(!math.IsNaN(n) && !math.IsInf(n, 0) && n == math.Trunc(n))
 	}))
 
+	// Number.isSafeInteger(val) — true if val is an integer within ±2⁵³−1.
+	numberCtor.Set("isSafeInteger", vm.createBuiltinFunction("Number.isSafeInteger", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 || !args[0].IsNumber() {
+			return False
+		}
+		x := args[0].NumVal
+		return NewBoolean(!math.IsNaN(x) && !math.IsInf(x, 0) && x == math.Trunc(x) && math.Abs(x) <= 9007199254740991)
+	}))
+
+	// Number.parseInt(string, radix) — alias for global parseInt.
+	numberCtor.Set("parseInt", vm.createBuiltinFunction("Number.parseInt", func(this *JSObject, args []JSValue) JSValue {
+		parseIntVal := vm.globals.Get("parseInt")
+		if parseIntVal.IsObject() && parseIntVal.ObjVal != nil && parseIntVal.ObjVal.CallFunc != nil {
+			return parseIntVal.ObjVal.CallFunc(nil, args)
+		}
+		return NewNumber(math.NaN())
+	}))
+
+	// Number.parseFloat(string) — alias for global parseFloat.
+	numberCtor.Set("parseFloat", vm.createBuiltinFunction("Number.parseFloat", func(this *JSObject, args []JSValue) JSValue {
+		parseFloatVal := vm.globals.Get("parseFloat")
+		if parseFloatVal.IsObject() && parseFloatVal.ObjVal != nil && parseFloatVal.ObjVal.CallFunc != nil {
+			return parseFloatVal.ObjVal.CallFunc(nil, args)
+		}
+		return NewNumber(math.NaN())
+	}))
+
 	vm.globals.M["Number"] = NewObject(numberCtor)
 }
 
