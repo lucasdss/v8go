@@ -78,6 +78,15 @@ A Go-native subset of the ECMA-402 Internationalization API, avoiding the 30MB I
 - Intl.Segmenter — Unicode text segmentation
 - Intl.DisplayNames — locale display name database
 
+## Atomics / SharedArrayBuffer (Compatibility Stubs)
+
+V8Go runs single-threaded per VM — no Worker threads with shared memory. SharedArrayBuffer and Atomics exist as compatibility stubs:
+
+- **SharedArrayBuffer** — identical to ArrayBuffer. Exists for API compatibility; no cross-thread sharing.
+- **Atomics** — all methods operate as regular (non-atomic) operations. Single-threaded execution guarantees correctness without atomic primitives.
+
+This closes the final ECMAScript spec gap at ~99% compatibility.
+
 ### Design principle
 Use Go standard library and `golang.org/x/text` packages as the localization backend. No CGO, no binary bloat. Documented as "Intl Lite" — covers ~80% of real-world Intl usage.
 
