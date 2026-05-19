@@ -346,15 +346,15 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpStaKeyedProperty:
 		emitAMD64StaKeyedProperty(as, instr, deoptStub)
 
-	// --- Object/Array creation (deopt) ---
+	// --- Object/Array creation ---
 	case js.OpCreateObject:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateObject(as, instr, deoptStub)
 	case js.OpCreateArray:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateArray(as, instr, deoptStub)
 	case js.OpCreateObjectLiteral:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateObjectLiteral(as, instr, deoptStub)
 	case js.OpCreateClosure:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateClosure(as, instr, deoptStub)
 
 	// --- Call variants ---
 	case js.OpCall0:
@@ -366,19 +366,19 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpCallSpread:
 		emitAMD64CallSpread(as, instr, deoptStub)
 
-	// --- Throw/Try/ForIn (deopt) ---
+	// --- Throw/Try/ForIn ---
 	case js.OpThrow:
 		emitAMD64Throw(as, deoptStub)
 	case js.OpSetTryHandler:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64SetTryHandler(as, instr, deoptStub)
 	case js.OpClearTryHandler:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ClearTryHandler(as, instr, deoptStub)
 	case js.OpSetFinallyHandler:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64SetFinallyHandler(as, instr, deoptStub)
 	case js.OpForInSetup:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ForInSetup(as, instr, deoptStub)
 	case js.OpForInNext:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ForInNext(as, instr, deoptStub)
 
 	// --- Global slot ops ---
 	case js.OpLdaGlobalSlot:
@@ -470,182 +470,182 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 
 	// --- Object/array/class fast paths ---
 	case js.OpCreateEmptyArray:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateEmptyArray(as, instr, deoptStub)
 	case js.OpCreateRegExp:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateRegExp(as, instr, deoptStub)
 	case js.OpDefineClass:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64DefineClass(as, instr, deoptStub)
 	case js.OpSetPrototype:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64SetPrototype(as, instr, deoptStub)
 	case js.OpArrayGetIndex:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ArrayGetIndex(as, instr, deoptStub)
 	case js.OpArraySetIndex:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ArraySetIndex(as, instr, deoptStub)
 	case js.OpArrayLength:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ArrayLength(as, instr, deoptStub)
 	case js.OpCopyDataProperties:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CopyDataProperties(as, instr, deoptStub)
 	case js.OpGetSuperConstructor:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64GetSuperConstructor(as, instr, deoptStub)
 	case js.OpCheckConstructor:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CheckConstructor(as, instr, deoptStub)
 	case js.OpInitDerived:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64InitDerived(as, instr, deoptStub)
 	case js.OpCheckThisReinit:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CheckThisReinit(as, instr, deoptStub)
 
 	// --- Global/local fast variants ---
 	case js.OpLdaGlobalDirect:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaGlobalDirect(as, instr, deoptStub)
 	case js.OpStaGlobalDirect:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StaGlobalDirect(as, instr, deoptStub)
 	case js.OpIncGlobalSlot:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64IncGlobalSlot(as, instr, deoptStub)
 	case js.OpDecGlobalSlot:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64DecGlobalSlot(as, instr, deoptStub)
 	case js.OpIncNamedProperty:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64IncNamedProperty(as, instr, deoptStub)
 	case js.OpDecNamedProperty:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64DecNamedProperty(as, instr, deoptStub)
 	case js.OpIncKeyedProperty:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64IncKeyedProperty(as, instr, deoptStub)
 	case js.OpDecKeyedProperty:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64DecKeyedProperty(as, instr, deoptStub)
 
 	// --- Control flow / context ---
 	case js.OpCatch:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64Catch(as, instr, deoptStub)
 	case js.OpEndTry:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64EndTry(as, instr, deoptStub)
 	case js.OpPushContext:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64PushContext(as, instr, deoptStub)
 	case js.OpPopContext:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64PopContext(as, instr, deoptStub)
 	case js.OpLoadContextSlot:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LoadContextSlot(as, instr, deoptStub)
 	case js.OpStoreContextSlot:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StoreContextSlot(as, instr, deoptStub)
 	case js.OpSwap:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64Swap(as, instr, deoptStub)
 
 	// --- Exception / throw ---
 	case js.OpThrowConstAssignment:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowConstAssignment(as, instr, deoptStub)
 	case js.OpThrowIfNotSuper:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowIfNotSuper(as, instr, deoptStub)
 	case js.OpThrowIfHole:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowIfHole(as, instr, deoptStub)
 	case js.OpThrowSuperAlreadyCalled:
 		emitAMD64ThrowSuperAlreadyCalled(as, deoptStub)
 	case js.OpThrowSuperNotCalled:
 		emitAMD64ThrowSuperNotCalled(as, deoptStub)
 	case js.OpThrowReferenceError:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowReferenceError(as, instr, deoptStub)
 	case js.OpThrowTypeError:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowTypeError(as, instr, deoptStub)
 
 	// --- String fast paths ---
 	case js.OpStringConcat:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StringConcat(as, instr, deoptStub)
 	case js.OpStringEq:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StringEq(as, instr, deoptStub)
 	case js.OpStringLength:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StringLength(as, instr, deoptStub)
 
 	// --- For-in / for-of / iterator ---
 	case js.OpForInSetupFast:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ForInSetupFast(as, instr, deoptStub)
 	case js.OpForInNextFast:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ForInNextFast(as, instr, deoptStub)
 	case js.OpForOfSetup:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ForOfSetup(as, instr, deoptStub)
 	case js.OpForOfNext:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ForOfNext(as, instr, deoptStub)
 	case js.OpGetIterator:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64GetIterator(as, instr, deoptStub)
 	case js.OpIteratorNext:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64IteratorNext(as, instr, deoptStub)
 	case js.OpIteratorClose:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64IteratorClose(as, instr, deoptStub)
 
 	// --- Property fast paths ---
 	case js.OpLdaPropByOffset:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaPropByOffset(as, instr, deoptStub)
 	case js.OpStaPropByOffset:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StaPropByOffset(as, instr, deoptStub)
 	case js.OpLdaHomeObject:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaHomeObject(as, instr, deoptStub)
 	case js.OpLdaHomeObjectProperty:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaHomeObjectProperty(as, instr, deoptStub)
 	case js.OpStaHomeObjectProperty:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StaHomeObjectProperty(as, instr, deoptStub)
 	case js.OpStaByOffset:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StaByOffset(as, instr, deoptStub)
 
 	// --- Other ---
 	case js.OpDebugger:
-		as.AMD64_NOP() // debugger statement is a no-op
+		as.AMD64_NOP()
 	case js.OpExp:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64Exp(as, instr, deoptStub)
 	case js.OpLdaCaptured:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaCaptured(as, instr, deoptStub)
 	case js.OpLdaLocal:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaLocal(as, instr, deoptStub)
 	case js.OpStaLocal:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StaLocal(as, instr, deoptStub)
 	case js.OpLdaThis:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaThis(as, instr, deoptStub)
 	case js.OpLdaFalseFast:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaFalseFast(as, instr, deoptStub)
 	case js.OpLdaTrueFast:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaTrueFast(as, instr, deoptStub)
 	case js.OpMathAbs:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64MathAbs(as, instr, deoptStub)
 	case js.OpMathCeil:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64MathCeil(as, instr, deoptStub)
 	case js.OpMathFloor:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64MathFloor(as, instr, deoptStub)
 	case js.OpMathSqrt:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64MathSqrt(as, instr, deoptStub)
 	case js.OpNullishCoalesce:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64NullishCoalesce(as, instr, deoptStub)
 	case js.OpOptionalChain:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64OptionalChain(as, instr, deoptStub)
 	case js.OpToObject:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ToObject(as, instr, deoptStub)
 	// --- Module / private ---
 	case js.OpLdaModuleVar:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LdaModuleVar(as, instr, deoptStub)
 	case js.OpStaModuleVar:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StaModuleVar(as, instr, deoptStub)
 	case js.OpPrivateGet:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64PrivateGet(as, instr, deoptStub)
 	case js.OpPrivateSet:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64PrivateSet(as, instr, deoptStub)
 
 	// --- Generator / async ---
 	case js.OpCreateGenerator:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateGenerator(as, instr, deoptStub)
 	case js.OpCreateAsyncGenerator:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateAsyncGenerator(as, instr, deoptStub)
 	case js.OpCreateGeneratorObject:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CreateGeneratorObject(as, instr, deoptStub)
 	case js.OpSuspendGenerator:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64SuspendGenerator(as, instr, deoptStub)
 	case js.OpResumeGenerator:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ResumeGenerator(as, instr, deoptStub)
 	case js.OpGeneratorRestore:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64GeneratorRestore(as, instr, deoptStub)
 	case js.OpYield:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64Yield(as, instr, deoptStub)
 	case js.OpYieldDelegate:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64YieldDelegate(as, instr, deoptStub)
 	case js.OpAwait:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64Await(as, instr, deoptStub)
 	case js.OpAsyncAwait:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64AsyncAwait(as, instr, deoptStub)
 	case js.OpAsyncReturn:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64AsyncReturn(as, instr, deoptStub)
 	}
 }
 
@@ -3219,6 +3219,898 @@ func emitAMD64ToStringNumber(as *Assembler, instr *js.Instruction) {
 	// sparkplugOpToStringNumber(frame)
 	as.AMD64_MOV_RR(REG_RAX, REG_R12)
 	addr := funcToAddr(sparkplugOpToStringNumber)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// --- emitAMD64CreateObject: OpCreateObject → Go helper ---
+func emitAMD64CreateObject(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	// sparkplugOpCreateObject(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCreateObject)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateArray: OpCreateArray → Go helper ---
+func emitAMD64CreateArray(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	// sparkplugOpCreateArray(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCreateArray)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateObjectLiteral: OpCreateObjectLiteral → Go helper ---
+func emitAMD64CreateObjectLiteral(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	shapeKeyIdx := int(instr.OperandA)
+	// sparkplugOpCreateObjectLiteral(frame, shapeKeyIdx)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(shapeKeyIdx))
+	addr := funcToAddr(sparkplugOpCreateObjectLiteral)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateClosure: OpCreateClosure → Go helper ---
+func emitAMD64CreateClosure(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	// sparkplugOpCreateClosure(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCreateClosure)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateEmptyArray: OpCreateEmptyArray → Go helper ---
+func emitAMD64CreateEmptyArray(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	capacity := int(instr.OperandA)
+	// sparkplugOpCreateEmptyArray(frame, capacity)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(capacity))
+	addr := funcToAddr(sparkplugOpCreateEmptyArray)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateRegExp: OpCreateRegExp → Go helper ---
+func emitAMD64CreateRegExp(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	patIdx := int(instr.OperandA)
+	flagsIdx := int(instr.OperandB)
+	// sparkplugOpCreateRegExp(frame, patIdx, flagsIdx)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(patIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(flagsIdx))
+	addr := funcToAddr(sparkplugOpCreateRegExp)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64DefineClass: OpDefineClass → Go helper ---
+func emitAMD64DefineClass(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	templateIdx := int(instr.OperandA)
+	// sparkplugOpDefineClass(frame, templateIdx)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(templateIdx))
+	addr := funcToAddr(sparkplugOpDefineClass)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64SetPrototype: OpSetPrototype → Go helper ---
+func emitAMD64SetPrototype(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	// sparkplugOpSetPrototype(frame, objReg)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpSetPrototype)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ArrayGetIndex: OpArrayGetIndex → Go helper ---
+func emitAMD64ArrayGetIndex(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	arrReg := int(instr.OperandA)
+	idxReg := int(instr.OperandB)
+	// sparkplugOpArrayGetIndex(frame, arrReg, idxReg)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(arrReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(idxReg))
+	addr := funcToAddr(sparkplugOpArrayGetIndex)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ArraySetIndex: OpArraySetIndex → Go helper ---
+func emitAMD64ArraySetIndex(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	arrReg := int(instr.OperandA)
+	idxReg := int(instr.OperandB)
+	valReg := int(instr.OperandC)
+	// sparkplugOpArraySetIndex(frame, arrReg, idxReg, valReg)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(arrReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(idxReg))
+	as.AMD64_MOV_RI(REG_RDI, uint64(valReg))
+	addr := funcToAddr(sparkplugOpArraySetIndex)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ArrayLength: OpArrayLength → Go helper ---
+func emitAMD64ArrayLength(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	arrReg := int(instr.OperandA)
+	// sparkplugOpArrayLength(frame, arrReg)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(arrReg))
+	addr := funcToAddr(sparkplugOpArrayLength)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CopyDataProperties: OpCopyDataProperties → Go helper ---
+func emitAMD64CopyDataProperties(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	srcReg := int(instr.OperandA)
+	dstReg := int(instr.OperandB)
+	// sparkplugOpCopyDataProperties(frame, srcReg, dstReg)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(srcReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(dstReg))
+	addr := funcToAddr(sparkplugOpCopyDataProperties)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64GetSuperConstructor: OpGetSuperConstructor → Go helper ---
+func emitAMD64GetSuperConstructor(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	// sparkplugOpGetSuperConstructor(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpGetSuperConstructor)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CheckConstructor: OpCheckConstructor → Go helper ---
+func emitAMD64CheckConstructor(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	// sparkplugOpCheckConstructor(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCheckConstructor)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64InitDerived: OpInitDerived → Go helper ---
+func emitAMD64InitDerived(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	thisReg := int(instr.OperandA)
+	// sparkplugOpInitDerived(frame, thisReg)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(thisReg))
+	addr := funcToAddr(sparkplugOpInitDerived)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CheckThisReinit: OpCheckThisReinit → Go helper ---
+func emitAMD64CheckThisReinit(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	// sparkplugOpCheckThisReinit(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCheckThisReinit)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// === Remaining native handlers (Go helper calls) ===
+
+// emitAMD64SetTryHandler: OpSetTryHandler → Go helper ---
+func emitAMD64SetTryHandler(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	handlerPC := int(instr.OperandA)
+	// sparkplugOpSetTryHandler(frame, handlerPC)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(handlerPC))
+	addr := funcToAddr(sparkplugOpSetTryHandler)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ClearTryHandler: OpClearTryHandler → Go helper ---
+func emitAMD64ClearTryHandler(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpClearTryHandler)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64SetFinallyHandler: OpSetFinallyHandler → Go helper ---
+func emitAMD64SetFinallyHandler(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	pc := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(pc))
+	addr := funcToAddr(sparkplugOpSetFinallyHandler)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ForInSetup: OpForInSetup → Go helper ---
+func emitAMD64ForInSetup(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpForInSetup)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ForInNext: OpForInNext → Go helper ---
+func emitAMD64ForInNext(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpForInNext)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaGlobalDirect: OpLdaGlobalDirect → Go helper ---
+func emitAMD64LdaGlobalDirect(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	constIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(constIdx))
+	addr := funcToAddr(sparkplugOpLdaGlobalDirect)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StaGlobalDirect: OpStaGlobalDirect → Go helper ---
+func emitAMD64StaGlobalDirect(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	constIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(constIdx))
+	addr := funcToAddr(sparkplugOpStaGlobalDirect)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64IncGlobalSlot: OpIncGlobalSlot → Go helper ---
+func emitAMD64IncGlobalSlot(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	slotIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpIncGlobalSlot)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64DecGlobalSlot: OpDecGlobalSlot → Go helper ---
+func emitAMD64DecGlobalSlot(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	slotIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpDecGlobalSlot)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64IncNamedProperty: OpIncNamedProperty → Go helper ---
+func emitAMD64IncNamedProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	propIdx := int(instr.OperandA)
+	objReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpIncNamedProperty)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64DecNamedProperty: OpDecNamedProperty → Go helper ---
+func emitAMD64DecNamedProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	propIdx := int(instr.OperandA)
+	objReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpDecNamedProperty)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64IncKeyedProperty: OpIncKeyedProperty → Go helper ---
+func emitAMD64IncKeyedProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	keyReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(keyReg))
+	addr := funcToAddr(sparkplugOpIncKeyedProperty)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64DecKeyedProperty: OpDecKeyedProperty → Go helper ---
+func emitAMD64DecKeyedProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	keyReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(keyReg))
+	addr := funcToAddr(sparkplugOpDecKeyedProperty)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64Catch: OpCatch → Go helper ---
+func emitAMD64Catch(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	destReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(destReg))
+	addr := funcToAddr(sparkplugOpCatch)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64EndTry: OpEndTry → Go helper ---
+func emitAMD64EndTry(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpEndTry)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64PushContext: OpPushContext → Go helper ---
+func emitAMD64PushContext(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpPushContext)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64PopContext: OpPopContext → Go helper ---
+func emitAMD64PopContext(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpPopContext)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LoadContextSlot: OpLoadContextSlot → Go helper ---
+func emitAMD64LoadContextSlot(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	contextIdx := int(instr.OperandA)
+	slotIdx := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(contextIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpLoadContextSlot)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StoreContextSlot: OpStoreContextSlot → Go helper ---
+func emitAMD64StoreContextSlot(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	contextIdx := int(instr.OperandA)
+	slotIdx := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(contextIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpStoreContextSlot)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64Swap: OpSwap → Go helper ---
+func emitAMD64Swap(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	reg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(reg))
+	addr := funcToAddr(sparkplugOpSwap)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ThrowConstAssignment: OpThrowConstAssignment → Go helper ---
+func emitAMD64ThrowConstAssignment(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	nameIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(nameIdx))
+	addr := funcToAddr(sparkplugOpThrowConstAssignment)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ThrowIfNotSuper: OpThrowIfNotSuper → Go helper ---
+func emitAMD64ThrowIfNotSuper(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpThrowIfNotSuper)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ThrowIfHole: OpThrowIfHole → Go helper ---
+func emitAMD64ThrowIfHole(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	regIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(regIdx))
+	addr := funcToAddr(sparkplugOpThrowIfHole)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ThrowReferenceError: OpThrowReferenceError → Go helper ---
+func emitAMD64ThrowReferenceError(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	nameIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(nameIdx))
+	addr := funcToAddr(sparkplugOpThrowReferenceError)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ThrowTypeError: OpThrowTypeError → Go helper ---
+func emitAMD64ThrowTypeError(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	msgIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(msgIdx))
+	addr := funcToAddr(sparkplugOpThrowTypeError)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StringConcat: OpStringConcat → Go helper ---
+func emitAMD64StringConcat(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	reg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(reg))
+	addr := funcToAddr(sparkplugOpStringConcat)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StringEq: OpStringEq → Go helper ---
+func emitAMD64StringEq(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	reg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(reg))
+	addr := funcToAddr(sparkplugOpStringEq)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StringLength: OpStringLength → Go helper ---
+func emitAMD64StringLength(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	strReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(strReg))
+	addr := funcToAddr(sparkplugOpStringLength)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ForInSetupFast: OpForInSetupFast → Go helper ---
+func emitAMD64ForInSetupFast(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpForInSetupFast)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ForInNextFast: OpForInNextFast → Go helper ---
+func emitAMD64ForInNextFast(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpForInNextFast)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ForOfSetup: OpForOfSetup → Go helper ---
+func emitAMD64ForOfSetup(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	iterableReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(iterableReg))
+	addr := funcToAddr(sparkplugOpForOfSetup)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ForOfNext: OpForOfNext → Go helper ---
+func emitAMD64ForOfNext(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	iterReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(iterReg))
+	addr := funcToAddr(sparkplugOpForOfNext)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64GetIterator: OpGetIterator → Go helper ---
+func emitAMD64GetIterator(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpGetIterator)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64IteratorNext: OpIteratorNext → Go helper ---
+func emitAMD64IteratorNext(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	iterReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(iterReg))
+	addr := funcToAddr(sparkplugOpIteratorNext)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64IteratorClose: OpIteratorClose → Go helper ---
+func emitAMD64IteratorClose(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	iterReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(iterReg))
+	addr := funcToAddr(sparkplugOpIteratorClose)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaPropByOffset: OpLdaPropByOffset → Go helper ---
+func emitAMD64LdaPropByOffset(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	byteOffset := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(byteOffset))
+	addr := funcToAddr(sparkplugOpLdaPropByOffset)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StaPropByOffset: OpStaPropByOffset → Go helper ---
+func emitAMD64StaPropByOffset(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	byteOffset := int(instr.OperandB)
+	valReg := int(instr.OperandC)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(byteOffset))
+	as.AMD64_MOV_RI(REG_RDI, uint64(valReg))
+	addr := funcToAddr(sparkplugOpStaPropByOffset)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaHomeObject: OpLdaHomeObject → Go helper ---
+func emitAMD64LdaHomeObject(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpLdaHomeObject)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaHomeObjectProperty: OpLdaHomeObjectProperty → Go helper ---
+func emitAMD64LdaHomeObjectProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	propIdx := int(instr.OperandA)
+	homeObjReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(homeObjReg))
+	addr := funcToAddr(sparkplugOpLdaHomeObjectProperty)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StaHomeObjectProperty: OpStaHomeObjectProperty → Go helper ---
+func emitAMD64StaHomeObjectProperty(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	propIdx := int(instr.OperandA)
+	homeObjReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(propIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(homeObjReg))
+	addr := funcToAddr(sparkplugOpStaHomeObjectProperty)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StaByOffset: OpStaByOffset → Go helper ---
+func emitAMD64StaByOffset(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	objReg := int(instr.OperandA)
+	valReg := int(instr.OperandB)
+	slotIdx := int(instr.OperandC)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(valReg))
+	as.AMD64_MOV_RI(REG_RDI, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpStaByOffset)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64Exp: OpExp → Go helper ---
+func emitAMD64Exp(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	lhsReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(lhsReg))
+	addr := funcToAddr(sparkplugOpExp)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaCaptured: OpLdaCaptured → Go helper ---
+func emitAMD64LdaCaptured(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	regIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(regIdx))
+	addr := funcToAddr(sparkplugOpLdaCaptured)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaLocal: OpLdaLocal → Go helper ---
+func emitAMD64LdaLocal(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	regIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(regIdx))
+	addr := funcToAddr(sparkplugOpLdaLocal)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StaLocal: OpStaLocal → Go helper ---
+func emitAMD64StaLocal(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	regIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(regIdx))
+	addr := funcToAddr(sparkplugOpStaLocal)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaThis: OpLdaThis → Go helper ---
+func emitAMD64LdaThis(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpLdaThis)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaFalseFast: OpLdaFalseFast → Go helper ---
+func emitAMD64LdaFalseFast(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpLdaFalseFast)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaTrueFast: OpLdaTrueFast → Go helper ---
+func emitAMD64LdaTrueFast(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpLdaTrueFast)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64MathAbs: OpMathAbs → Go helper ---
+func emitAMD64MathAbs(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpMathAbs)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64MathCeil: OpMathCeil → Go helper ---
+func emitAMD64MathCeil(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpMathCeil)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64MathFloor: OpMathFloor → Go helper ---
+func emitAMD64MathFloor(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpMathFloor)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64MathSqrt: OpMathSqrt → Go helper ---
+func emitAMD64MathSqrt(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpMathSqrt)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64NullishCoalesce: OpNullishCoalesce → Go helper ---
+func emitAMD64NullishCoalesce(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	targetPC := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(targetPC))
+	addr := funcToAddr(sparkplugOpNullishCoalesce)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64OptionalChain: OpOptionalChain → Go helper ---
+func emitAMD64OptionalChain(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	targetPC := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(targetPC))
+	addr := funcToAddr(sparkplugOpOptionalChain)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ToObject: OpToObject → Go helper ---
+func emitAMD64ToObject(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpToObject)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64LdaModuleVar: OpLdaModuleVar → Go helper ---
+func emitAMD64LdaModuleVar(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	slotIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpLdaModuleVar)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64StaModuleVar: OpStaModuleVar → Go helper ---
+func emitAMD64StaModuleVar(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	slotIdx := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(slotIdx))
+	addr := funcToAddr(sparkplugOpStaModuleVar)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64PrivateGet: OpPrivateGet → Go helper ---
+func emitAMD64PrivateGet(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	fieldIdx := int(instr.OperandA)
+	objReg := int(instr.OperandB)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(fieldIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(objReg))
+	addr := funcToAddr(sparkplugOpPrivateGet)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64PrivateSet: OpPrivateSet → Go helper ---
+func emitAMD64PrivateSet(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	fieldIdx := int(instr.OperandA)
+	objReg := int(instr.OperandB)
+	valReg := int(instr.OperandC)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(fieldIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(objReg))
+	as.AMD64_MOV_RI(REG_RDI, uint64(valReg))
+	addr := funcToAddr(sparkplugOpPrivateSet)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateGenerator: OpCreateGenerator → Go helper ---
+func emitAMD64CreateGenerator(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCreateGenerator)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateAsyncGenerator: OpCreateAsyncGenerator → Go helper ---
+func emitAMD64CreateAsyncGenerator(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCreateAsyncGenerator)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64CreateGeneratorObject: OpCreateGeneratorObject → Go helper ---
+func emitAMD64CreateGeneratorObject(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpCreateGeneratorObject)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64SuspendGenerator: OpSuspendGenerator → Go helper ---
+func emitAMD64SuspendGenerator(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	resumePC := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(resumePC))
+	addr := funcToAddr(sparkplugOpSuspendGenerator)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ResumeGenerator: OpResumeGenerator → Go helper ---
+func emitAMD64ResumeGenerator(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	resumePC := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(resumePC))
+	addr := funcToAddr(sparkplugOpResumeGenerator)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64GeneratorRestore: OpGeneratorRestore → Go helper ---
+func emitAMD64GeneratorRestore(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpGeneratorRestore)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64Yield: OpYield → Go helper ---
+func emitAMD64Yield(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpYield)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64YieldDelegate: OpYieldDelegate → Go helper ---
+func emitAMD64YieldDelegate(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	iterableReg := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(iterableReg))
+	addr := funcToAddr(sparkplugOpYieldDelegate)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64Await: OpAwait → Go helper ---
+func emitAMD64Await(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	resumePC := int(instr.OperandA)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(resumePC))
+	addr := funcToAddr(sparkplugOpAwait)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64AsyncAwait: OpAsyncAwait → Go helper ---
+func emitAMD64AsyncAwait(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpAsyncAwait)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64AsyncReturn: OpAsyncReturn → Go helper ---
+func emitAMD64AsyncReturn(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	_ = instr
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpAsyncReturn)
 	as.AMD64_MOV_RI(REG_R11, uint64(addr))
 	as.AMD64_CALL(REG_R11)
 }
