@@ -2003,6 +2003,109 @@ func (vm *VM) registerProxy() {
 		return NewObject(result)
 	}))
 
+	// Proxy prototype with default trap implementations.
+	// These operate on the target argument directly and serve as the default
+	// behavior when a handler does not provide a custom trap.
+	proxyProto := NewJSObject()
+	proxyProto.ConstructorName = "Object"
+
+	// getPrototypeOf(target) → returns the prototype of target
+	proxyProto.Set("getPrototypeOf", vm.createBuiltinFunction("Proxy.getPrototypeOf", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 1 {
+			return Undefined
+		}
+		target := args[0]
+		if !target.IsObject() || target.ObjVal == nil {
+			return Undefined
+		}
+		if target.ObjVal.Prototype != nil {
+			return NewObject(target.ObjVal.Prototype)
+		}
+		return Null
+	}))
+
+	// setPrototypeOf(target, proto) → boolean
+	proxyProto.Set("setPrototypeOf", vm.createBuiltinFunction("Proxy.setPrototypeOf", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 2 {
+			return False
+		}
+		target := args[0]
+		if !target.IsObject() || target.ObjVal == nil {
+			return False
+		}
+		if !args[1].IsObject() || args[1].ObjVal == nil {
+			return False
+		}
+		target.ObjVal.Prototype = args[1].ObjVal
+		return True
+	}))
+
+	// isExtensible(target) → boolean
+	proxyProto.Set("isExtensible", vm.createBuiltinFunction("Proxy.isExtensible", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 1 {
+			return False
+		}
+		target := args[0]
+		if !target.IsObject() || target.ObjVal == nil {
+			return False
+		}
+		return NewBoolean(!target.ObjVal.IsSealed() && !target.ObjVal.IsFrozen())
+	}))
+
+	// preventExtensions(target) → boolean
+	proxyProto.Set("preventExtensions", vm.createBuiltinFunction("Proxy.preventExtensions", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 1 {
+			return False
+		}
+		target := args[0]
+		if !target.IsObject() || target.ObjVal == nil {
+			return False
+		}
+		target.ObjVal.SetSealed()
+		return True
+	}))
+
+	// getOwnPropertyDescriptor(target, prop) → descriptor object or undefined
+	proxyProto.Set("getOwnPropertyDescriptor", vm.createBuiltinFunction("Proxy.getOwnPropertyDescriptor", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 2 {
+			return Undefined
+		}
+		target := args[0]
+		if !target.IsObject() || target.ObjVal == nil {
+			return Undefined
+		}
+		prop := args[1].ToString()
+		val := target.ObjVal.Get(prop)
+		if val.IsUndefined() {
+			return Undefined
+		}
+		desc := NewJSObject()
+		desc.Set("value", val)
+		desc.Set("writable", True)
+		desc.Set("enumerable", True)
+		desc.Set("configurable", True)
+		return NewObject(desc)
+	}))
+
+	// defineProperty(target, prop, descriptor) → boolean
+	proxyProto.Set("defineProperty", vm.createBuiltinFunction("Proxy.defineProperty", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) < 3 {
+			return False
+		}
+		target := args[0]
+		if !target.IsObject() || target.ObjVal == nil {
+			return False
+		}
+		prop := args[1].ToString()
+		if args[2].IsObject() && args[2].ObjVal != nil {
+			val := args[2].ObjVal.Get("value")
+			target.ObjVal.Set(prop, val)
+			return True
+		}
+		return False
+	}))
+
+	proxyCtor.Prototype = proxyProto
 	vm.globals.M["Proxy"] = NewObject(proxyCtor)
 }
 

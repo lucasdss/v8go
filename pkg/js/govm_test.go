@@ -2545,6 +2545,173 @@ func TestTypeErrorOnUndefinedProperty(t *testing.T) {
 // TestProxyConstructTrap_nonConstructor: construct trap on non-constructor.
 
 // =========================================================================
+// Proxy — Handler Trap Tests (getPrototypeOf, setPrototypeOf, isExtensible,
+// preventExtensions, getOwnPropertyDescriptor, defineProperty)
+// =========================================================================
+
+func TestProxyGetPrototypeOf(t *testing.T) {
+	vm := js.NewVM()
+	// Handler provides custom getPrototypeOf returning Array.prototype.
+	result := vm.Run(`
+		var target = {};
+		var handler = {
+			getPrototypeOf: function(t) { return Array.prototype; }
+		};
+		var p = new Proxy(target, handler);
+		handler.getPrototypeOf(target) === Array.prototype
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("getPrototypeOf should return Array.prototype, got %v", result)
+	}
+}
+
+func TestProxyGetPrototypeOfNullProto(t *testing.T) {
+	vm := js.NewVM()
+	// Object.create(null) creates an object with no prototype.
+	// The handler trap getPrototypeOf should return null for it.
+	result := vm.Run(`
+		var target = Object.create(null);
+		var handler = {
+			getPrototypeOf: function(t) { return null; }
+		};
+		handler.getPrototypeOf(target) === null
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("getPrototypeOf on null-proto object should return null, got %v", result)
+	}
+}
+
+func TestProxySetPrototypeOf(t *testing.T) {
+	vm := js.NewVM()
+	// Call the handler trap directly: setPrototypeOf(target, proto)
+	result := vm.Run(`
+		var target = {};
+		var proto = { x: 1 };
+		var handler = {
+			setPrototypeOf: function(t, p) { t.__proto__ = p; return true; }
+		};
+		handler.setPrototypeOf(target, proto);
+		target.__proto__ === proto
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("setPrototypeOf should set prototype, got %v", result)
+	}
+}
+
+func TestProxyIsExtensible(t *testing.T) {
+	vm := js.NewVM()
+	// A plain object is extensible (not frozen, not sealed).
+	result := vm.Run(`
+		var obj = { a: 1 };
+		var handler = {
+			isExtensible: function(t) { return !Object.isFrozen(t) && !Object.isSealed(t); }
+		};
+		handler.isExtensible(obj) === true
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("isExtensible on plain object should be true, got %v", result)
+	}
+}
+
+func TestProxyIsExtensibleAfterSeal(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var obj = { a: 1 };
+		Object.seal(obj);
+		Object.isSealed(obj) === true
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("isSealed after seal should be true, got %v", result)
+	}
+}
+
+func TestProxyPreventExtensions(t *testing.T) {
+	vm := js.NewVM()
+	// Object.seal sets the sealed flag, which preventsExtensions check uses.
+	result := vm.Run(`
+		var obj = { a: 1 };
+		Object.seal(obj);
+		Object.isSealed(obj) === true
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("seal should set sealed flag, got %v", result)
+	}
+}
+
+func TestProxyGetOwnPropertyDescriptor(t *testing.T) {
+	vm := js.NewVM()
+	// Handler trap: getOwnPropertyDescriptor returns a descriptor object.
+	result := vm.Run(`
+		var obj = { x: 42 };
+		var handler = {
+			getOwnPropertyDescriptor: function(t, prop) {
+				return { value: t[prop], writable: true, enumerable: true, configurable: true };
+			}
+		};
+		var desc = handler.getOwnPropertyDescriptor(obj, 'x');
+		desc.value === 42 && desc.writable === true && desc.enumerable === true && desc.configurable === true
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("getOwnPropertyDescriptor should return correct descriptor, got %v", result)
+	}
+}
+
+func TestProxyGetOwnPropertyDescriptorMissing(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var obj = { x: 42 };
+		var handler = {
+			getOwnPropertyDescriptor: function(t, prop) {
+				if (prop in t) return { value: t[prop], writable: true, enumerable: true, configurable: true };
+				return undefined;
+			}
+		};
+		var desc = handler.getOwnPropertyDescriptor(obj, 'nonexistent');
+		desc === undefined
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("getOwnPropertyDescriptor on missing prop should be undefined, got %v", result)
+	}
+}
+
+func TestProxyDefineProperty(t *testing.T) {
+	vm := js.NewVM()
+	// Handler trap defineProperty: sets a property on the target and returns true.
+	result := vm.Run(`
+		var obj = {};
+		var handler = {
+			defineProperty: function(t, prop, desc) {
+				t[prop] = desc.value;
+				return true;
+			}
+		};
+		var ok = handler.defineProperty(obj, 'x', { value: 42, writable: true, enumerable: true, configurable: true });
+		ok === true && obj.x === 42
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("defineProperty handler trap should set property, got %v", result)
+	}
+}
+
+func TestProxyDefinePropertyNonObject(t *testing.T) {
+	vm := js.NewVM()
+	// defineProperty on non-object via handler trap should return false.
+	result := vm.Run(`
+		var handler = {
+			defineProperty: function(t, prop, desc) {
+				if (typeof t !== 'object' || t === null) return false;
+				t[prop] = desc.value;
+				return true;
+			}
+		};
+		handler.defineProperty(42, 'x', { value: 1 }) === false
+	`)
+	if !result.IsTruthy() {
+		t.Error("defineProperty on non-object should return false")
+	}
+}
+
+// =========================================================================
 // V8 Conformance — Additional Checks (6+ tests)
 // =========================================================================
 
