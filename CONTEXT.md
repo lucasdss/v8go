@@ -113,7 +113,9 @@ Remaining:
 Code coverage target: pkg/js @ 73.9% → 80%+ (+6.1% gap)
 New files with low coverage: ssa_inline.go (43.8%), ssa_load_elim.go (26.9%), cpu_arm64.go (0%)
 
-### Phase 13: Coverage Gap + Benchmarks
+### Phase 13-14 Status: Coverage & Feature Gaps (May 2026)
+
+**Coverage**: pkg/js 73.9% → 78.6% (+4.7%), pkg/jit 81.8% → 82.6%. ~120 new tests added across DOM events, FunctionProto, modules, RegExp, and edge cases. Remaining 1.4% gap in disassembler, parser, Gov8Engine DOM bindings, and JIT tier promotion — requires integration-level tests.
 
 **Coverage targets:**
 - Add tests for low-coverage JS functions: FreeObj, AllocObj pool path, equalFold, AST nodeMarker stubs
