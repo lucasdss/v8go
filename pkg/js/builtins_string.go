@@ -1,8 +1,12 @@
 package js
 
 import (
-"strings"
+	"strings"
 )
+
+// maxRepeatCount caps String.prototype.repeat to prevent unbounded
+// allocation DoS. 1<<28 allows up to ~256MB per string.
+const maxRepeatCount = 1 << 28
 
 
 func (vm *VM) registerString() {

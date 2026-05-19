@@ -881,6 +881,12 @@ func isNaN(f float64) bool {
 	return f != f
 }
 
+// isClose checks float64 approximate equality
+func isClose(a, b, eps float64) bool {
+	d := a - b
+	return d < eps && d > -eps
+}
+
 // =========================================================================
 // WeakRef with runtime.AddCleanup — GC-aware weak references
 // =========================================================================
@@ -1188,6 +1194,225 @@ func TestMathMin(t *testing.T) {
 	}
 	if !math.IsInf(vm.Run("Math.min()").ToNumber(), 1) {
 		t.Error("Math.min() should be Infinity")
+	}
+}
+
+func TestMathSqrt(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.sqrt(16)").ToNumber() != 4 {
+		t.Error("Math.sqrt(16) should be 4")
+	}
+	if vm.Run("Math.sqrt(2)").ToNumber() != math.Sqrt(2) {
+		t.Error("Math.sqrt(2) mismatch")
+	}
+	if !math.IsNaN(vm.Run("Math.sqrt(-1)").ToNumber()) {
+		t.Error("Math.sqrt(-1) should be NaN")
+	}
+	if !math.IsNaN(vm.Run("Math.sqrt()").ToNumber()) {
+		t.Error("Math.sqrt() should be NaN")
+	}
+}
+
+func TestMathCbrt(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.cbrt(8)").ToNumber() != 2 {
+		t.Error("Math.cbrt(8) should be 2")
+	}
+	if !math.IsNaN(vm.Run("Math.cbrt()").ToNumber()) {
+		t.Error("Math.cbrt() should be NaN")
+	}
+}
+
+func TestMathTrunc(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.trunc(3.9)").ToNumber() != 3 {
+		t.Error("Math.trunc(3.9) should be 3")
+	}
+	if vm.Run("Math.trunc(-3.1)").ToNumber() != -3 {
+		t.Error("Math.trunc(-3.1) should be -3")
+	}
+}
+
+func TestMathSign(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.sign(5)").ToNumber() != 1 {
+		t.Error("Math.sign(5) should be 1")
+	}
+	if vm.Run("Math.sign(-5)").ToNumber() != -1 {
+		t.Error("Math.sign(-5) should be -1")
+	}
+	if vm.Run("Math.sign(0)").ToNumber() != 0 {
+		t.Error("Math.sign(0) should be 0")
+	}
+	if !math.IsNaN(vm.Run("Math.sign()").ToNumber()) {
+		t.Error("Math.sign() should be NaN")
+	}
+}
+
+func TestMathLog(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.log(Math.E)").ToNumber() != 1 {
+		t.Error("Math.log(Math.E) should be 1")
+	}
+	if !math.IsNaN(vm.Run("Math.log(-1)").ToNumber()) {
+		t.Error("Math.log(-1) should be NaN")
+	}
+}
+
+func TestMathLog2(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.log2(8)").ToNumber() != 3 {
+		t.Error("Math.log2(8) should be 3")
+	}
+}
+
+func TestMathLog10(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.log10(100)").ToNumber() != 2 {
+		t.Error("Math.log10(100) should be 2")
+	}
+}
+
+func TestMathExp(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.exp(0)").ToNumber() != 1 {
+		t.Error("Math.exp(0) should be 1")
+	}
+}
+
+func TestMathExpm1(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.expm1(0)").ToNumber() != 0 {
+		t.Error("Math.expm1(0) should be 0")
+	}
+}
+
+func TestMathTrig(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.sin(0)").ToNumber() != 0 {
+		t.Error("Math.sin(0) should be 0")
+	}
+	if vm.Run("Math.cos(0)").ToNumber() != 1 {
+		t.Error("Math.cos(0) should be 1")
+	}
+	if !isClose(vm.Run("Math.sin(Math.PI / 2)").ToNumber(), 1, 1e-10) {
+		t.Error("Math.sin(pi/2) should be ~1")
+	}
+	if vm.Run("Math.tan(0)").ToNumber() != 0 {
+		t.Error("Math.tan(0) should be 0")
+	}
+}
+
+func TestMathInverseTrig(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.acos(1)").ToNumber() != 0 {
+		t.Error("Math.acos(1) should be 0")
+	}
+	if vm.Run("Math.asin(0)").ToNumber() != 0 {
+		t.Error("Math.asin(0) should be 0")
+	}
+	if vm.Run("Math.atan(0)").ToNumber() != 0 {
+		t.Error("Math.atan(0) should be 0")
+	}
+}
+
+func TestMathHyperbolic(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.sinh(0)").ToNumber() != 0 {
+		t.Error("Math.sinh(0) should be 0")
+	}
+	if vm.Run("Math.cosh(0)").ToNumber() != 1 {
+		t.Error("Math.cosh(0) should be 1")
+	}
+	if vm.Run("Math.tanh(0)").ToNumber() != 0 {
+		t.Error("Math.tanh(0) should be 0")
+	}
+	if vm.Run("Math.asinh(0)").ToNumber() != 0 {
+		t.Error("Math.asinh(0) should be 0")
+	}
+	if vm.Run("Math.acosh(1)").ToNumber() != 0 {
+		t.Error("Math.acosh(1) should be 0")
+	}
+	if vm.Run("Math.atanh(0)").ToNumber() != 0 {
+		t.Error("Math.atanh(0) should be 0")
+	}
+}
+
+func TestMathFround(t *testing.T) {
+	vm := js.NewVM()
+	f := vm.Run("Math.fround(1.337)").ToNumber()
+	if f != float64(float32(1.337)) {
+		t.Errorf("Math.fround(1.337) = %v, expected %v", f, float64(float32(1.337)))
+	}
+}
+
+func TestMathPow(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.pow(2, 10)").ToNumber() != 1024 {
+		t.Error("Math.pow(2, 10) should be 1024")
+	}
+	if vm.Run("Math.pow(3, 2)").ToNumber() != 9 {
+		t.Error("Math.pow(3, 2) should be 9")
+	}
+	if vm.Run("Math.pow()").ToNumber() != 1 {
+		t.Error("Math.pow() should be 1")
+	}
+}
+
+func TestMathAtan2(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.atan2(1, 1)").ToNumber() != math.Atan2(1, 1) {
+		t.Error("Math.atan2(1, 1) mismatch")
+	}
+	if !math.IsNaN(vm.Run("Math.atan2()").ToNumber()) {
+		t.Error("Math.atan2() should be NaN")
+	}
+}
+
+func TestMathRandom(t *testing.T) {
+	vm := js.NewVM()
+	r := vm.Run("Math.random()").ToNumber()
+	if r < 0 || r >= 1 {
+		t.Errorf("Math.random() = %v, expected in [0, 1)", r)
+	}
+}
+
+func TestMathHypot(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.hypot(3, 4)").ToNumber() != 5 {
+		t.Error("Math.hypot(3, 4) should be 5")
+	}
+	if vm.Run("Math.hypot(3, 4, 12)").ToNumber() != 13 {
+		t.Error("Math.hypot(3, 4, 12) should be 13")
+	}
+	if vm.Run("Math.hypot()").ToNumber() != 0 {
+		t.Error("Math.hypot() should be 0")
+	}
+}
+
+func TestMathClz32(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.clz32(1)").ToNumber() != 31 {
+		t.Error("Math.clz32(1) should be 31")
+	}
+	if vm.Run("Math.clz32(0)").ToNumber() != 32 {
+		t.Error("Math.clz32(0) should be 32")
+	}
+	if vm.Run("Math.clz32()").ToNumber() != 32 {
+		t.Error("Math.clz32() should be 32")
+	}
+}
+
+func TestMathImul(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.imul(2, 3)").ToNumber() != 6 {
+		t.Error("Math.imul(2, 3) should be 6")
+	}
+	if vm.Run("Math.imul(0xFFFFFFFE, 5)").ToNumber() != -10 {
+		t.Error("Math.imul(0xFFFFFFFE, 5) should be -10")
+	}
+	if vm.Run("Math.imul()").ToNumber() != 0 {
+		t.Error("Math.imul() should be 0")
 	}
 }
 

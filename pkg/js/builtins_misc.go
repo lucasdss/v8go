@@ -4,6 +4,8 @@ import (
 "encoding/json"
 "fmt"
 "math"
+"math/bits"
+"math/rand"
 "regexp"
 "strconv"
 "strings"
@@ -72,6 +74,249 @@ func (vm *VM) registerMath() {
 			}
 		}
 		return NewNumber(minVal)
+	}))
+
+	// sqrt
+	mathObj.Set("sqrt", vm.createBuiltinFunction("Math.sqrt", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Sqrt(args[0].ToNumber()))
+	}))
+
+	// cbrt
+	mathObj.Set("cbrt", vm.createBuiltinFunction("Math.cbrt", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Cbrt(args[0].ToNumber()))
+	}))
+
+	// trunc
+	mathObj.Set("trunc", vm.createBuiltinFunction("Math.trunc", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Trunc(args[0].ToNumber()))
+	}))
+
+	// sign
+	mathObj.Set("sign", vm.createBuiltinFunction("Math.sign", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		x := args[0].ToNumber()
+		if x == 0 {
+			return NewNumber(x)
+		}
+		if math.IsNaN(x) {
+			return NewNumber(x)
+		}
+		return NewNumber(float64(int64(math.Copysign(1, x))))
+	}))
+
+	// log (natural)
+	mathObj.Set("log", vm.createBuiltinFunction("Math.log", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Log(args[0].ToNumber()))
+	}))
+
+	// log2
+	mathObj.Set("log2", vm.createBuiltinFunction("Math.log2", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Log2(args[0].ToNumber()))
+	}))
+
+	// log10
+	mathObj.Set("log10", vm.createBuiltinFunction("Math.log10", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Log10(args[0].ToNumber()))
+	}))
+
+	// log1p
+	mathObj.Set("log1p", vm.createBuiltinFunction("Math.log1p", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Log1p(args[0].ToNumber()))
+	}))
+
+	// exp
+	mathObj.Set("exp", vm.createBuiltinFunction("Math.exp", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Exp(args[0].ToNumber()))
+	}))
+
+	// expm1
+	mathObj.Set("expm1", vm.createBuiltinFunction("Math.expm1", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Expm1(args[0].ToNumber()))
+	}))
+
+	// cos
+	mathObj.Set("cos", vm.createBuiltinFunction("Math.cos", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Cos(args[0].ToNumber()))
+	}))
+
+	// sin
+	mathObj.Set("sin", vm.createBuiltinFunction("Math.sin", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Sin(args[0].ToNumber()))
+	}))
+
+	// tan
+	mathObj.Set("tan", vm.createBuiltinFunction("Math.tan", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Tan(args[0].ToNumber()))
+	}))
+
+	// acos
+	mathObj.Set("acos", vm.createBuiltinFunction("Math.acos", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Acos(args[0].ToNumber()))
+	}))
+
+	// asin
+	mathObj.Set("asin", vm.createBuiltinFunction("Math.asin", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Asin(args[0].ToNumber()))
+	}))
+
+	// atan
+	mathObj.Set("atan", vm.createBuiltinFunction("Math.atan", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Atan(args[0].ToNumber()))
+	}))
+
+	// cosh
+	mathObj.Set("cosh", vm.createBuiltinFunction("Math.cosh", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Cosh(args[0].ToNumber()))
+	}))
+
+	// sinh
+	mathObj.Set("sinh", vm.createBuiltinFunction("Math.sinh", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Sinh(args[0].ToNumber()))
+	}))
+
+	// tanh
+	mathObj.Set("tanh", vm.createBuiltinFunction("Math.tanh", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Tanh(args[0].ToNumber()))
+	}))
+
+	// acosh
+	mathObj.Set("acosh", vm.createBuiltinFunction("Math.acosh", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Acosh(args[0].ToNumber()))
+	}))
+
+	// asinh
+	mathObj.Set("asinh", vm.createBuiltinFunction("Math.asinh", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Asinh(args[0].ToNumber()))
+	}))
+
+	// atanh
+	mathObj.Set("atanh", vm.createBuiltinFunction("Math.atanh", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Atanh(args[0].ToNumber()))
+	}))
+
+	// fround
+	mathObj.Set("fround", vm.createBuiltinFunction("Math.fround", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(float64(float32(args[0].ToNumber())))
+	}))
+
+	// pow
+	mathObj.Set("pow", vm.createBuiltinFunction("Math.pow", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(1)
+		}
+		return NewNumber(math.Pow(args[0].ToNumber(), args[1].ToNumber()))
+	}))
+
+	// atan2
+	mathObj.Set("atan2", vm.createBuiltinFunction("Math.atan2", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(math.NaN())
+		}
+		return NewNumber(math.Atan2(args[0].ToNumber(), args[1].ToNumber()))
+	}))
+
+	// random
+	mathObj.Set("random", vm.createBuiltinFunction("Math.random", func(this *JSObject, args []JSValue) JSValue {
+		return NewNumber(rand.Float64())
+	}))
+
+	// hypot
+	mathObj.Set("hypot", vm.createBuiltinFunction("Math.hypot", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(0)
+		}
+		var sum float64
+		for _, a := range args {
+			v := a.ToNumber()
+			sum += v * v
+		}
+		return NewNumber(math.Sqrt(sum))
+	}))
+
+	// clz32
+	mathObj.Set("clz32", vm.createBuiltinFunction("Math.clz32", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(32)
+		}
+		return NewNumber(float64(bits.LeadingZeros32(uint32(args[0].ToNumber()))))
+	}))
+
+	// imul
+	mathObj.Set("imul", vm.createBuiltinFunction("Math.imul", func(this *JSObject, args []JSValue) JSValue {
+		if len(args) == 0 {
+			return NewNumber(0)
+		}
+		a := uint32(args[0].ToNumber())
+		b := uint32(args[1].ToNumber())
+		return NewNumber(float64(int32(a * b)))
 	}))
 
 	vm.globals.M["Math"] = NewObject(mathObj)
