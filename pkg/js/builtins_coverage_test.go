@@ -8,6 +8,7 @@ import (
 	"runtime"
 	"testing"
 
+	"github.com/lucasdss/v8go/pkg/dom"
 	js "github.com/lucasdss/v8go/pkg/js"
 )
 
@@ -1966,5 +1967,108 @@ func TestRegExpGlobalFlag(t *testing.T) {
 	`)
 	if result.ToNumber() != 3 {
 		t.Logf("global regexp exec count = %v (may not support while/exec loop)", result.ToNumber())
+	}
+}
+
+// =========================================================================
+// DOM Event Dispatch
+// =========================================================================
+
+func TestDOMDispatchEvent(t *testing.T) {
+	vm := js.NewVM()
+
+	doc := dom.NewDocument()
+	btn := dom.NewElement("button", doc)
+	btn.OnClick = "__global_clicked = true"
+
+	vm.SetElementLookup(func(id string) *dom.Element {
+		if id == "myButton" {
+			return btn
+		}
+		return nil
+	})
+
+	// Use the public DispatchEvent method directly (not through JS —
+	// vm.Run holds the write lock which would deadlock with the RLock
+	// inside DispatchEvent).
+	vm.DispatchEvent("myButton", "click", nil)
+
+	// The onclick handler set __global_clicked = true.
+	clicked := vm.Run("typeof __global_clicked !== 'undefined' && __global_clicked")
+	if !clicked.IsTruthy() {
+		t.Error("onclick handler should have set __global_clicked to true")
+	}
+}
+
+func TestDOMDispatchEventMissingElement(t *testing.T) {
+	vm := js.NewVM()
+	vm.SetElementLookup(func(id string) *dom.Element { return nil })
+
+	// DispatchEvent for a non-existent element is a no-op (no crash).
+	vm.DispatchEvent("nonexistent", "click", nil)
+}
+
+func TestDOMDispatchEventNoHandler(t *testing.T) {
+	vm := js.NewVM()
+	doc := dom.NewDocument()
+	btn := dom.NewElement("button", doc)
+	// No onclick set — dispatch is a no-op.
+
+	vm.SetElementLookup(func(id string) *dom.Element {
+		if id == "noHandlerBtn" {
+			return btn
+		}
+		return nil
+	})
+
+	vm.DispatchEvent("noHandlerBtn", "click", nil)
+}
+
+func TestDOMDispatchEventWithData(t *testing.T) {
+	vm := js.NewVM()
+
+	doc := dom.NewDocument()
+	btn := dom.NewElement("button", doc)
+	// Handler reads event data from __event__ global set by DispatchEvent.
+	btn.OnClick = "__event_data = __event__.detail"
+
+	vm.SetElementLookup(func(id string) *dom.Element {
+		if id == "dataBtn" {
+			return btn
+		}
+		return nil
+	})
+
+	vm.DispatchEvent("dataBtn", "click", map[string]js.JSValue{
+		"detail": js.NewString("test-value"),
+	})
+
+	result := vm.Run("typeof __event_data !== 'undefined' && __event_data")
+	if result.ToString() != "test-value" {
+		t.Errorf("expected '__event_data' to be 'test-value', got %q", result.ToString())
+	}
+}
+
+func TestDOMDispatchEventDOMChangeCallback(t *testing.T) {
+	vm := js.NewVM()
+
+	doc := dom.NewDocument()
+	btn := dom.NewElement("button", doc)
+	btn.OnClick = "1 + 1" // harmless handler
+
+	vm.SetElementLookup(func(id string) *dom.Element {
+		if id == "cbBtn" {
+			return btn
+		}
+		return nil
+	})
+
+	callbackCalled := false
+	vm.SetDOMChangeCallback(func() { callbackCalled = true })
+
+	vm.DispatchEvent("cbBtn", "click", nil)
+
+	if !callbackCalled {
+		t.Error("DOMChangeCallback should have been called after DispatchEvent")
 	}
 }
