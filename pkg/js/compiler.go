@@ -180,7 +180,7 @@ func CompileString(source string) *BytecodeFunction {
 // share the same global scope and should be compiled together.
 func CompileMultiple(sources []string) []*BytecodeFunction {
 	sharedStrings := make(map[string]int)
-	var results []*BytecodeFunction
+	results := make([]*BytecodeFunction, 0, len(sources))
 
 	for _, source := range sources {
 		tokens := NewLexer(source).Tokenize()
@@ -248,7 +248,7 @@ func (c *Compiler) hoistOneFunction(fd *FunctionDeclaration) {
 // paramNames extracts just the names from DefaultParam slice.
 // For destructured params, the name is empty; we extract names from the destructuring pattern.
 func paramNames(params []DefaultParam) []string {
-	var names []string
+	names := make([]string, 0, len(params))
 	for _, p := range params {
 		if p.Destructure != nil {
 			names = append(names, collectDestructuredNames(p.Destructure)...)
@@ -261,7 +261,7 @@ func paramNames(params []DefaultParam) []string {
 
 // collectDestructuredNames extracts variable names from a destructuring pattern recursively.
 func collectDestructuredNames(da *DestructuringAssignment) []string {
-	var names []string
+	names := make([]string, 0, len(da.Elements))
 	for _, elem := range da.Elements {
 		if elem.Nested != nil {
 			names = append(names, collectDestructuredNames(elem.Nested)...)
@@ -1804,7 +1804,7 @@ func (c *Compiler) compileCallExpression(expr *CallExpression) {
 // so the VM can unpack the array at runtime.
 func (c *Compiler) compileCallArgsWithSpread(args []Node, calleeReg int, thisReg uint8) {
 	// Collect fixed (non-spread) args and find the spread arg.
-	fixedArgs := []Node{}
+	fixedArgs := make([]Node, 0, len(args))
 	var spreadArg *SpreadExpression
 	for _, arg := range args {
 		if sp, ok := arg.(*SpreadExpression); ok {
@@ -2443,7 +2443,7 @@ func (c *Compiler) compileDestructuringAssignment(da *DestructuringAssignment) {
 			c.bf.Emit(OpStar, uint8(restObjReg), 0, 0)
 
 			// Collect extracted property names to skip.
-			var extractedKeys []string
+			extractedKeys := make([]string, 0, len(da.Elements))
 			for _, e := range da.Elements {
 				if e.Rest {
 					continue
@@ -2921,7 +2921,8 @@ func truncateToUint8(v int) uint8 {
 // parsing/pre-compilation.
 func assignGlobalSlots(bf *BytecodeFunction) {
 	slotIndex := make(map[string]int)
-	var slots []string
+	// Preallocate for typical case: slots ≤ unique globals ≤ instructions / 2.
+	slots := make([]string, 0, len(bf.Instructions)/4+1)
 
 	// First pass: assign slot indices to all unique global variable names.
 	for _, instr := range bf.Instructions {
