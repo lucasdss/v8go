@@ -15,10 +15,21 @@ import (
 // Allocator's frame buffer. 64 slots covers typical call depth without heap
 // allocation.
 const (
-	allocFrameBufSize = 64
-	allocRegBufSize   = 256 * 8
-	allocObjBufSize   = 64
+	allocFrameBufSize   = 64
+	allocRegBufSize     = 256 * 8
+	allocObjBufSize     = 64
+	allocTempValBufSize = 16
 )
+
+// jsValuePool provides reusable []JSValue slices for temporary values
+// created during expression evaluation (e.g., argument lists, property arrays).
+// Slices with capacity ≤ allocTempValBufSize are returned to the pool.
+var jsValuePool = sync.Pool{
+	New: func() any {
+		s := make([]JSValue, 0, allocTempValBufSize)
+		return &s
+	},
+}
 
 // Allocator pre-allocates buffers for frames, registers, and objects to
 // minimize GC pressure during bytecode execution. All allocation methods
@@ -165,6 +176,27 @@ func (a *Allocator) FreeObj(obj *JSObject) {
 	a.objPool.Put(obj)
 }
 
+// AllocTempValues obtains a []JSValue slice of at least n elements for
+// temporary use during expression evaluation. Slices with capacity ≤
+// allocTempValBufSize come from a sync.Pool; larger slices are heap-allocated.
+func (a *Allocator) AllocTempValues(n int) []JSValue {
+	if n <= allocTempValBufSize {
+		sp := jsValuePool.Get().(*[]JSValue)
+		return (*sp)[:0]
+	}
+	return make([]JSValue, 0, n)
+}
+
+// FreeTempValues returns a []JSValue slice to the pool if it qualifies.
+// Caller must ensure no references to the slice or its elements remain.
+func (a *Allocator) FreeTempValues(vals []JSValue) {
+	if cap(vals) > allocTempValBufSize {
+		return // too large; let GC collect
+	}
+	vals = vals[:0]
+	jsValuePool.Put(&vals)
+}
+
 // Reset rewinds all bump allocators to zero. Called at the start of each
 // top-level execute() call.
 func (a *Allocator) Reset() {
@@ -208,4 +240,14 @@ func (vm *VM) allocObj() *JSObject {
 // freeObj releases a JSObject back to the Allocator.
 func (vm *VM) freeObj(obj *JSObject) {
 	vm.alloc.FreeObj(obj)
+}
+
+// allocTempValues obtains a []JSValue from the Allocator's temporary value pool.
+func (vm *VM) allocTempValues(n int) []JSValue {
+	return vm.alloc.AllocTempValues(n)
+}
+
+// freeTempValues returns a []JSValue to the Allocator's temporary value pool.
+func (vm *VM) freeTempValues(vals []JSValue) {
+	vm.alloc.FreeTempValues(vals)
 }
