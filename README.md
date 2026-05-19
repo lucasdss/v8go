@@ -289,10 +289,12 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | Simple add (`1 + 2`) | 56 ns/op | — | ~2 ns/op |
 | Multi-arithmetic | 112 ns/op | — | ~5 ns/op |
 | Variable access | 54 ns/op | — | ~2 ns/op |
-| Property access (hot) | 71 ns/op | — | ~3 ns/op |
-| Object literal | 221 ns/op | — | ~10 ns/op |
-| Function call | 241 ns/op | — | ~8 ns/op |
-| Array iteration (100) | 1.7 µs | — | ~100 ns |
+| Property access (hot) | 71 ns/op | 77 ns/op | ~3 ns/op |
+| Object literal | 221 ns/op | 108 ns/op | ~10 ns/op |
+| Function call | 241 ns/op | 261 ns/op | ~8 ns/op |
+| Array iteration (100) | 1.7 µs | 21.3 µs | ~100 ns |
+| Loop (100 iter, Sparkplug) | 12.1 µs | 7.0 µs | — |
+| Loop (100 iter, TurboFan) | 12.1 µs | 7.0 µs | — |
 
 **Gap analysis**: V8 is ~20-40x faster for single operations due to Smi tagging (integers never allocate), pointer compression (2x cache density), and C++ inline code. V8Go closes this gap on real workloads where Go↔JS interop overhead dominates — a CGO V8 wrapper adds ~100ns per Go↔JS call, while V8Go's interop is zero-cost (shared memory).
 
