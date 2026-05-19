@@ -5,6 +5,7 @@
 package js_test
 
 import (
+	"strconv"
 	"testing"
 
 	"github.com/lucasdss/v8go/pkg/js"
@@ -258,5 +259,121 @@ func FuzzBytecode(f *testing.F) {
 
 		vm := js.NewVM()
 		vm.Execute(bf)
+	})
+}
+
+// FuzzArray fuzzes array literal parsing and execution.
+func FuzzArray(f *testing.F) {
+	seeds := []string{
+		"[]", "[1]", "[1,2,3]", "[1,,3]", "[...[]]",
+		"[1,2,3,4,5,6,7,8,9,10]",
+	}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Array fuzz panic on %q: %v", string(data), r)
+			}
+		}()
+		vm := js.NewVM()
+		_ = vm.Run("var x = " + string(data))
+	})
+}
+
+// FuzzString fuzzes string literal handling.
+func FuzzString(f *testing.F) {
+	seeds := []string{
+		`""`, `"hello"`, `"line1\nline2"`, `"\u0041"`,
+		`"特别"`, `"\"quoted\""`, `"\\"`,
+	}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("String fuzz panic on %q: %v", string(data), r)
+			}
+		}()
+		vm := js.NewVM()
+		_ = vm.Run(`"` + string(data) + `".length`)
+	})
+}
+
+// FuzzJSON fuzzes JSON parsing.
+func FuzzJSON(f *testing.F) {
+	seeds := []string{"1", "true", `"hello"`, `[]`, `{}`, `[1,2,3]`, `{"a":1}`}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("JSON fuzz panic on %q: %v", string(data), r)
+			}
+		}()
+		vm := js.NewVM()
+		_ = vm.Run("JSON.parse(" + toJSString(string(data)) + ")")
+	})
+}
+
+// toJSString quotes a string for safe embedding in JavaScript source.
+func toJSString(s string) string {
+	return strconv.Quote(s)
+}
+
+// FuzzMath fuzzes mathematical expressions that push numeric boundaries.
+func FuzzMath(f *testing.F) {
+	f.Add([]byte("Math.sqrt(16)"))
+	f.Add([]byte("Math.pow(2, 32)"))
+	f.Add([]byte("1.0 / 0.0"))
+	f.Add([]byte("0.0 / 0.0"))
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Math fuzz panic on %q: %v", string(data), r)
+			}
+		}()
+		vm := js.NewVM()
+		_ = vm.Run(string(data))
+	})
+}
+
+// FuzzObject fuzzes object literal construction.
+func FuzzObject(f *testing.F) {
+	seeds := []string{
+		"{}", `{"a":1}`, `{"a":1,"b":2}`,
+		`{a:1}`, `{get x(){return 1}}`,
+	}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("Object fuzz panic on %q: %v", string(data), r)
+			}
+		}()
+		vm := js.NewVM()
+		_ = vm.Run("var x = " + string(data))
+	})
+}
+
+// FuzzRegExp fuzzes regex compilation and execution.
+func FuzzRegExp(f *testing.F) {
+	seeds := []string{"/hello/", "/ab+c/", `/\\d+/g`, "/[a-z]/i", "/./s"}
+	for _, s := range seeds {
+		f.Add([]byte(s))
+	}
+	f.Fuzz(func(t *testing.T, data []byte) {
+		defer func() {
+			if r := recover(); r != nil {
+				t.Errorf("RegExp fuzz panic on %q: %v", string(data), r)
+			}
+		}()
+		vm := js.NewVM()
+		_ = vm.Run(string(data) + ".test('test')")
 	})
 }
