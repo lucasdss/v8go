@@ -61,6 +61,26 @@
 - **GeneratorMixin** — Suspended generator execution state. Used by generator objects (~2% of objects).
 - **flags** — uint8 bitfield: bit 0 = Frozen, bit 1 = Sealed. Replaces two separate bool fields.
 
+## Intl Lite (Planned)
+
+A Go-native subset of the ECMA-402 Internationalization API, avoiding the 30MB ICU C library dependency.
+
+### Phase 1 (planned)
+- **Intl.getCanonicalLocales** — BCP 47 locale tag normalization
+- **Intl.NumberFormat** — number/currency/percent formatting via `golang.org/x/text/message`
+- **Intl.DateTimeFormat** — date/time formatting via Go `time.Format` with CLDR patterns
+- **Intl.ListFormat** — "A, B, and C" conjunction/disjunction formatting
+- **Intl.RelativeTimeFormat** — "3 days ago" style relative time
+
+### Excluded (require ICU-level Unicode data)
+- Intl.Collator — Unicode Collation Algorithm
+- Intl.PluralRules — CLDR plural rules
+- Intl.Segmenter — Unicode text segmentation
+- Intl.DisplayNames — locale display name database
+
+### Design principle
+Use Go standard library and `golang.org/x/text` packages as the localization backend. No CGO, no binary bloat. Documented as "Intl Lite" — covers ~80% of real-world Intl usage.
+
 ## Code Organization (Phase 10)
 
 - **vm.go** — VM struct, constructors, call stack helpers. 204 lines (was 3222).

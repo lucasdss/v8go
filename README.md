@@ -327,7 +327,7 @@ These ECMAScript features are not yet implemented:
 
 | Feature | ES Version | Status |
 |---------|-----------|--------|
-| `Intl` API | ES2020+ | Not implemented |
+| `Intl` API | ES2020+ | In progress (Go-native subset) |
 | `Atomics` / `SharedArrayBuffer` | ES2017 | Not implemented |
 
 The curated Test262 benchmark covers the implemented features only (58/58 pass).
