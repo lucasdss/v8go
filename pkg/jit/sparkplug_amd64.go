@@ -356,15 +356,15 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpCreateClosure:
 		as.AMD64_JMP(deoptStub) // TODO: native
 
-	// --- Call variants (deopt) ---
+	// --- Call variants ---
 	case js.OpCall0:
-		as.AMD64_JMP(deoptStub) // TODO: native call support
+		emitAMD64CallN(as, instr, 0, deoptStub)
 	case js.OpCall1:
-		as.AMD64_JMP(deoptStub) // TODO: native call support
+		emitAMD64CallN(as, instr, 1, deoptStub)
 	case js.OpCall2:
-		as.AMD64_JMP(deoptStub) // TODO: native call support
+		emitAMD64CallN(as, instr, 2, deoptStub)
 	case js.OpCallSpread:
-		as.AMD64_JMP(deoptStub) // TODO: native call support
+		emitAMD64CallSpread(as, instr, deoptStub)
 
 	// --- Throw/Try/ForIn (deopt) ---
 	case js.OpThrow:
@@ -460,13 +460,13 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 
 	// --- Call fast variants ---
 	case js.OpCallBuiltin:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CallBuiltin(as, instr, deoptStub)
 	case js.OpCallDirect:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64CallDirect(as, instr, deoptStub)
 	case js.OpSuperCall:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64SuperCall(as, instr, deoptStub)
 	case js.OpNew:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64New(as, instr, deoptStub)
 
 	// --- Object/array/class fast paths ---
 	case js.OpCreateEmptyArray:
@@ -536,9 +536,9 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpThrowIfHole:
 		as.AMD64_JMP(deoptStub) // TODO: native
 	case js.OpThrowSuperAlreadyCalled:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowSuperAlreadyCalled(as, deoptStub)
 	case js.OpThrowSuperNotCalled:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ThrowSuperNotCalled(as, deoptStub)
 	case js.OpThrowReferenceError:
 		as.AMD64_JMP(deoptStub) // TODO: native
 	case js.OpThrowTypeError:
@@ -2625,6 +2625,189 @@ func emitAMD64CmpNumber(as *Assembler, instr *js.Instruction) {
 	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
 
 	as.AMD64_Bind(donePath)
+}
+
+// --- emitAMD64CallN: OpCall0/OpCall1/OpCall2 ---
+//
+// nargs=0: sparkplugOpCall0(frame, calleeReg)
+// nargs=1: sparkplugOpCall1(frame, calleeReg, arg1Reg)
+// nargs=2: sparkplugOpCall2(frame, calleeReg, arg1Reg)
+func emitAMD64CallN(as *Assembler, instr *js.Instruction, nargs int, deoptStub *Label) {
+	calleeReg := int(instr.OperandA)
+	calleeSlot := calleeReg * jsValueSize
+	arg1Reg := int(instr.OperandB) // ignored for nargs=0
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Load Regs slice pointer.
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+
+	// Guard: callee must be an object.
+	as.AMD64_MOV_LOAD(REG_R8, REG_R15, int8(calleeSlot+tagWordOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+
+	// Guard: callee.ObjVal != nil.
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(calleeSlot+int(unsafe.Offsetof(js.JSValue{}.ObjVal))))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	// Call Go helper — full call sequence requires interpreter.
+	as.AMD64_Bind(slowPath)
+	switch nargs {
+	case 0:
+		as.AMD64_MOV_RR(REG_RAX, REG_R12)          // RAX = frame
+		as.AMD64_MOV_RI(REG_RBX, uint64(calleeReg)) // RBX = calleeReg
+		addr := funcToAddr(sparkplugOpCall0)
+		as.AMD64_MOV_RI(REG_R11, uint64(addr))
+		as.AMD64_CALL(REG_R11)
+	case 1:
+		as.AMD64_MOV_RR(REG_RAX, REG_R12)          // RAX = frame
+		as.AMD64_MOV_RI(REG_RBX, uint64(calleeReg)) // RBX = calleeReg
+		as.AMD64_MOV_RI(REG_RCX, uint64(arg1Reg))   // RCX = arg1Reg
+		addr := funcToAddr(sparkplugOpCall1)
+		as.AMD64_MOV_RI(REG_R11, uint64(addr))
+		as.AMD64_CALL(REG_R11)
+	case 2:
+		as.AMD64_MOV_RR(REG_RAX, REG_R12)          // RAX = frame
+		as.AMD64_MOV_RI(REG_RBX, uint64(calleeReg)) // RBX = calleeReg
+		as.AMD64_MOV_RI(REG_RCX, uint64(arg1Reg))   // RCX = arg1Reg
+		addr := funcToAddr(sparkplugOpCall2)
+		as.AMD64_MOV_RI(REG_R11, uint64(addr))
+		as.AMD64_CALL(REG_R11)
+	}
+
+	as.AMD64_Bind(done)
+}
+
+// emitAMD64CallSpread: OpCallSpread — call with spread arguments.
+func emitAMD64CallSpread(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	calleeReg := int(instr.OperandA)
+	spreadReg := int(instr.OperandB)
+	fixedCount := int(instr.OperandC)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R8, REG_R15, int8(calleeReg*jsValueSize+tagWordOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0500)
+	as.AMD64_CMP_RR(REG_R8, REG_R13)
+	as.AMD64_JNE(slowPath)
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(calleeReg*jsValueSize+int(unsafe.Offsetof(js.JSValue{}.ObjVal))))
+	as.AMD64_TEST_RR(REG_R9, REG_R9)
+	as.AMD64_JZ(slowPath)
+
+	as.AMD64_Bind(slowPath)
+	// sparkplugOpCallSpread(frame, calleeReg, spreadReg, fixedCount)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(calleeReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(spreadReg))
+	as.AMD64_MOV_RI(REG_RDI, uint64(fixedCount))
+	addr := funcToAddr(sparkplugOpCallSpread)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+
+	as.AMD64_Bind(done)
+}
+
+// emitAMD64CallBuiltin: OpCallBuiltin — call registered Go builtin.
+func emitAMD64CallBuiltin(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	builtinIdx := int(instr.OperandA)
+	argCount := int(instr.OperandB)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	// Guard: object guard not needed for builtins — just call.
+	as.AMD64_Bind(slowPath)
+	// sparkplugOpCallBuiltin(frame, builtinIdx, argCount)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(builtinIdx))
+	as.AMD64_MOV_RI(REG_RCX, uint64(argCount))
+	addr := funcToAddr(sparkplugOpCallBuiltin)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+
+	as.AMD64_Bind(done)
+}
+
+// emitAMD64CallDirect: OpCallDirect — direct call to known function.
+func emitAMD64CallDirect(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	funcReg := int(instr.OperandA)
+	argCount := int(instr.OperandB)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	as.AMD64_Bind(slowPath)
+	// sparkplugOpCallDirect(frame, funcReg, argCount)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(funcReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(argCount))
+	addr := funcToAddr(sparkplugOpCallDirect)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+
+	as.AMD64_Bind(done)
+}
+
+// emitAMD64SuperCall: OpSuperCall — super() call in derived class constructors.
+func emitAMD64SuperCall(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	argCount := int(instr.OperandA)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	as.AMD64_Bind(slowPath)
+	// sparkplugOpSuperCall(frame, argCount)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(argCount))
+	addr := funcToAddr(sparkplugOpSuperCall)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+
+	as.AMD64_Bind(done)
+}
+
+// emitAMD64New: OpNew — new constructor call.
+func emitAMD64New(as *Assembler, instr *js.Instruction, deoptStub *Label) {
+	consReg := int(instr.OperandA)
+	argCount := int(instr.OperandB)
+
+	slowPath := NewLabel()
+	done := NewLabel()
+
+	as.AMD64_Bind(slowPath)
+	// sparkplugOpNew(frame, consReg, argCount)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	as.AMD64_MOV_RI(REG_RBX, uint64(consReg))
+	as.AMD64_MOV_RI(REG_RCX, uint64(argCount))
+	addr := funcToAddr(sparkplugOpNew)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+
+	as.AMD64_Bind(done)
+}
+
+// emitAMD64ThrowSuperAlreadyCalled: throw if super() was already called.
+func emitAMD64ThrowSuperAlreadyCalled(as *Assembler, deoptStub *Label) {
+	// sparkplugOpThrowSuperAlreadyCalled(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpThrowSuperAlreadyCalled)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// emitAMD64ThrowSuperNotCalled: throw if super() was not called.
+func emitAMD64ThrowSuperNotCalled(as *Assembler, deoptStub *Label) {
+	// sparkplugOpThrowSuperNotCalled(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpThrowSuperNotCalled)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
 }
 
 // init sets up the AMD64 Sparkplug compile hook.
