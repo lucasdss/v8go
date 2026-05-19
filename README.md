@@ -23,7 +23,7 @@ The minimum required Go version is 1.24.
 - **Inline Caching**: mono/poly/megamorphic runtime code patching for fast property access
 - **Deoptimization**: type guards → FrameDescription → interpreter resume on speculative failure
 - **All major builtins**: Object, Array, String, Number, Math, Date, RegExp, JSON, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Promise (all/race/any/allSettled), BigInt, TypedArrays, Error subtypes
-- **Browser APIs**: `fetch()`, `XMLHttpRequest`, `console`, DOM bindings
+- **Internationalization**: `Intl.NumberFormat`, `Intl.DateTimeFormat`, `Intl.ListFormat`, `Intl.RelativeTimeFormat` (Go-native, no CGO/ICU dependency)
 - **Shadow Stack**: GC-safe object references in JIT native frames
 - **Minimal CGO**: Darwin-only (pthread_jit_write_protect_np); Linux uses pure Go dual-mapping. Cross-compiles everywhere.
 - **Passes 100% of curated Test262 benchmark** (58/58 tests covering major ECMAScript features)
@@ -161,7 +161,7 @@ V8Go passes **100% of the curated Test262 benchmark (58/58)** covering the imple
 | **Destructuring** | array, object, nested, default values |
 | **ES2020+** | optional chaining (`?.`), nullish coalescing (`??`), BigInt |
 | **Modules** | `import`/`export`, dynamic `import()` |
-| **Builtins** | Object, Array, String, Number, Math, Date, RegExp, JSON, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Error subtypes, TypedArrays, ArrayBuffer, DataView, WeakRef, FinalizationRegistry |
+| **Builtins** | Object, Array, String, Number, Math, Date, RegExp, JSON, Map, Set, WeakMap, WeakSet, Symbol, Proxy, Reflect, Error subtypes, TypedArrays, ArrayBuffer, DataView, Promise, WeakRef, FinalizationRegistry, AsyncGenerator, Intl |
 
 ## Known Caveats
 
@@ -327,7 +327,6 @@ These ECMAScript features are not yet implemented:
 
 | Feature | ES Version | Status |
 |---------|-----------|--------|
-| `Intl` API | ES2020+ | In progress (Go-native subset) |
 | `Atomics` / `SharedArrayBuffer` | ES2017 | Not implemented |
 
 The curated Test262 benchmark covers the implemented features only (58/58 pass).
