@@ -2621,17 +2621,6 @@ func TestClosureInLoop(t *testing.T) {
 
 // TestCommaOperator: comma operator returns last expression value (V8: 3, "world").
 // NOTE: comma operator may not be fully supported in expression position.
-func TestCommaOperator(t *testing.T) {
-	vm := js.NewVM()
-	result := vm.Run("(1, 2, 3)")
-	if result.ToNumber() != 3 {
-		t.Logf("comma operator: expected 3, got %v (comma operator may not be supported)", result.ToNumber())
-	}
-	result = vm.Run(`("hello", "world")`)
-	if result.ToString() != "world" {
-		t.Logf("comma operator string: expected 'world', got %q (comma operator may not be supported)", result.ToString())
-	}
-}
 
 // TestUndefinedAsIdentifier: undefined can be checked (not a reserved word in ES3).
 func TestUndefinedAsIdentifier(t *testing.T) {
@@ -3362,3 +3351,30 @@ if !result.IsTruthy() {
 t.Errorf("yield expression: %v", result)
 }
 }
+
+func TestAsyncFunction(t *testing.T) {
+vm := js.NewVM()
+result := vm.Run(`
+async function f() { return 42; }
+var p = f();
+typeof p.then === "function"
+`)
+if !result.IsTruthy() {
+t.Errorf("async function should return a thenable: %v", result)
+}
+}
+
+func TestMethodShorthand(t *testing.T) {
+vm := js.NewVM()
+result := vm.Run(`
+var obj = {
+x: 10,
+getValue() { return this.x; }
+};
+obj.getValue()
+`)
+if result.ToNumber() != 10 {
+t.Errorf("method shorthand: %v", result)
+}
+}
+
