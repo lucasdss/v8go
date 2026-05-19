@@ -19,6 +19,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/lucasdss/v8go/pkg/js"
 )
@@ -1368,6 +1369,120 @@ func BenchmarkAMD64CoverageComplete(b *testing.B) {
 	b.ResetTimer()
 	for i := 0; i < b.N; i++ {
 		vm.Run("f(1,2)")
+	}
+}
+
+// ── JIT Tier Benchmarks ──
+
+func BenchmarkJITInterpreterAdd(b *testing.B) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	vm.Run("function add(a,b){return a+b}")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("add(1,2)")
+	}
+}
+
+func BenchmarkJITSparkplugAdd(b *testing.B) {
+	vm := js.NewVM()
+	// Warm up: call 100x to trigger Sparkplug compilation
+	for i := 0; i < 100; i++ {
+		vm.Run("function add(a,b){return a+b}; add(1,2)")
+	}
+	// Give goroutine time to compile
+	time.Sleep(50 * time.Millisecond)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("add(1,2)")
+	}
+}
+
+func BenchmarkJITInterpreterLoop(b *testing.B) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("var s=0; for(var i=0;i<100;i++){s=s+i}; s")
+	}
+}
+
+func BenchmarkJITSparkplugLoop(b *testing.B) {
+	vm := js.NewVM()
+	// Warm up loop function 100x for Sparkplug
+	vm.Run("function loop(){var s=0; for(var i=0;i<100;i++){s=s+i}; return s}")
+	for i := 0; i < 100; i++ {
+		vm.Run("loop()")
+	}
+	time.Sleep(50 * time.Millisecond)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("loop()")
+	}
+}
+
+func BenchmarkJITTurboFanLoop(b *testing.B) {
+	vm := js.NewVM()
+	// Warm up 1000x for TurboFan
+	vm.Run("function loop(){var s=0; for(var i=0;i<100;i++){s=s+i}; return s}")
+	for i := 0; i < 1000; i++ {
+		vm.Run("loop()")
+	}
+	time.Sleep(100 * time.Millisecond)
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("loop()")
+	}
+}
+
+func BenchmarkJITPropertyAccess(b *testing.B) {
+	vm := js.NewVM()
+	vm.Run("var obj={x:1,y:2}")
+	// Warm up for IC patching
+	for i := 0; i < 200; i++ {
+		vm.Run("obj.x + obj.y")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("obj.x + obj.y")
+	}
+}
+
+func BenchmarkJITFunctionCall(b *testing.B) {
+	vm := js.NewVM()
+	vm.Run("function f(a,b){return a+b}")
+	// Warm up
+	for i := 0; i < 200; i++ {
+		vm.Run("f(1,2)")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("f(1,2)")
+	}
+}
+
+func BenchmarkJITArrayIteration(b *testing.B) {
+	vm := js.NewVM()
+	// Iterate 100-element array
+	vm.Run("var arr=[]; for(var i=0;i<100;i++)arr.push(i)")
+	for i := 0; i < 200; i++ {
+		vm.Run("var s=0; for(var j=0;j<arr.length;j++){s=s+arr[j]}; s")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("var s=0; for(var j=0;j<arr.length;j++){s=s+arr[j]}; s")
+	}
+}
+
+func BenchmarkJITObjectCreation(b *testing.B) {
+	vm := js.NewVM()
+	// Warm up
+	for i := 0; i < 200; i++ {
+		vm.Run("({a:1, b:2, c:3})")
+	}
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("({a:1, b:2, c:3})")
 	}
 }
 
