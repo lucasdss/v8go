@@ -357,15 +357,27 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 		as.AMD64_JMP(deoptStub) // TODO: native
 
 	// --- Call variants (deopt) ---
-	case js.OpCall0, js.OpCall1, js.OpCall2, js.OpCallSpread:
+	case js.OpCall0:
+		as.AMD64_JMP(deoptStub) // TODO: native call support
+	case js.OpCall1:
+		as.AMD64_JMP(deoptStub) // TODO: native call support
+	case js.OpCall2:
+		as.AMD64_JMP(deoptStub) // TODO: native call support
+	case js.OpCallSpread:
 		as.AMD64_JMP(deoptStub) // TODO: native call support
 
 	// --- Throw/Try/ForIn (deopt) ---
 	case js.OpThrow:
 		emitAMD64Throw(as, deoptStub)
-	case js.OpSetTryHandler, js.OpClearTryHandler, js.OpSetFinallyHandler:
+	case js.OpSetTryHandler:
 		as.AMD64_JMP(deoptStub) // TODO: native
-	case js.OpForInSetup, js.OpForInNext:
+	case js.OpClearTryHandler:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpSetFinallyHandler:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpForInSetup:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpForInNext:
 		as.AMD64_JMP(deoptStub) // TODO: native
 
 	// --- Global slot ops ---
@@ -392,27 +404,248 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpStaGlobal:
 		emitAMD64StaGlobal(as, instr, deoptStub)
 
-	// --- Misc ops (deopt) ---
-	case js.OpExp, js.OpCreateRegExp,
-		js.OpLdaCaptured,
-		js.OpLdaLocal, js.OpStaLocal, js.OpLdaThis,
-		js.OpThrowConstAssignment, js.OpSetPrototype,
-		js.OpCheckConstructor, js.OpYield, js.OpYieldDelegate,
-		js.OpCreateGenerator, js.OpSuperCall,
-		js.OpSwitchOnSmi, js.OpSwitchOnString,
-		js.OpForInStep, js.OpSetHomeObject, js.OpDefineClass,
-		js.OpSuspendGenerator, js.OpResumeGenerator,
-		js.OpAwait, js.OpCreateAsyncGenerator,
-		js.OpLdaModuleVar, js.OpStaModuleVar,
-		js.OpNullishCoalesce, js.OpOptionalChain,
-		js.OpPrivateGet, js.OpPrivateSet,
-		js.OpForOfSetup, js.OpForOfNext,
-		js.OpDebugger:
-		as.AMD64_JMP(deoptStub) // TODO: implement
+	// --- Fast arithmetic variants (no type guards — compiler proven) ---
+	case js.OpAddNumber:
+		emitAMD64AddNumber(as, instr)
+	case js.OpSubNumber:
+		emitAMD64SubNumber(as, instr)
+	case js.OpMulNumber:
+		emitAMD64MulNumber(as, instr)
+	case js.OpDivNumber:
+		emitAMD64DivNumber(as, instr)
+	case js.OpModNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpNegateNumber:
+		emitAMD64NegateNumber(as)
+	case js.OpIncNumber:
+		emitAMD64IncNumber(as, instr)
+	case js.OpDecNumber:
+		emitAMD64DecNumber(as, instr)
+	case js.OpStrictEqNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStrictNotEqNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCmpNumber:
+		emitAMD64CmpNumber(as, instr)
+	case js.OpLessThanNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpGreaterThanNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLessEqNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpGreaterEqNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
 
-	default:
-		// Unsupported opcode: deoptimize to interpreter.
-		as.AMD64_JMP(deoptStub)
+	// --- Bitwise fast variants ---
+	case js.OpBitAndNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpBitOrNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpBitXorNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpBitNotNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpShiftLeftNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpShiftRightNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpShiftRightZeroNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Type conversion fast variants ---
+	case js.OpToBooleanNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpToStringNumber:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Call fast variants ---
+	case js.OpCallBuiltin:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCallDirect:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpSuperCall:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpNew:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Object/array/class fast paths ---
+	case js.OpCreateEmptyArray:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCreateRegExp:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpDefineClass:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpSetPrototype:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpArrayGetIndex:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpArraySetIndex:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpArrayLength:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCopyDataProperties:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpGetSuperConstructor:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCheckConstructor:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpInitDerived:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCheckThisReinit:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Global/local fast variants ---
+	case js.OpLdaGlobalDirect:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStaGlobalDirect:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpIncGlobalSlot:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpDecGlobalSlot:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpIncNamedProperty:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpDecNamedProperty:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpIncKeyedProperty:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpDecKeyedProperty:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Control flow / context ---
+	case js.OpCatch:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpEndTry:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpPushContext:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpPopContext:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLoadContextSlot:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStoreContextSlot:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpSwap:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Exception / throw ---
+	case js.OpThrowConstAssignment:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpThrowIfNotSuper:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpThrowIfHole:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpThrowSuperAlreadyCalled:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpThrowSuperNotCalled:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpThrowReferenceError:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpThrowTypeError:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- String fast paths ---
+	case js.OpStringConcat:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStringEq:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStringLength:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- For-in / for-of / iterator ---
+	case js.OpForInSetupFast:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpForInNextFast:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpForOfSetup:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpForOfNext:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpGetIterator:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpIteratorNext:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpIteratorClose:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Property fast paths ---
+	case js.OpLdaPropByOffset:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStaPropByOffset:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaHomeObject:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaHomeObjectProperty:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStaHomeObjectProperty:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStaByOffset:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Other ---
+	case js.OpDebugger:
+		as.AMD64_NOP() // debugger statement is a no-op
+	case js.OpExp:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaCaptured:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaLocal:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStaLocal:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaThis:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaFalseFast:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpLdaTrueFast:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpMathAbs:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpMathCeil:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpMathFloor:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpMathSqrt:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpNullishCoalesce:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpOptionalChain:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpToObject:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	// --- Module / private ---
+	case js.OpLdaModuleVar:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpStaModuleVar:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpPrivateGet:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpPrivateSet:
+		as.AMD64_JMP(deoptStub) // TODO: native
+
+	// --- Generator / async ---
+	case js.OpCreateGenerator:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCreateAsyncGenerator:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpCreateGeneratorObject:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpSuspendGenerator:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpResumeGenerator:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpGeneratorRestore:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpYield:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpYieldDelegate:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpAwait:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpAsyncAwait:
+		as.AMD64_JMP(deoptStub) // TODO: native
+	case js.OpAsyncReturn:
+		as.AMD64_JMP(deoptStub) // TODO: native
 	}
 }
 
@@ -2188,6 +2421,210 @@ func emitAMD64In(as *Assembler, instr *js.Instruction, deoptStub *Label) {
 	as.AMD64_Bind(slowPath)
 	as.AMD64_JMP(deoptStub)
 	as.AMD64_Bind(done)
+}
+
+// --- Fast Number variant native emitters (no type guards — compiler proven) ---
+
+// emitAMD64AddNumber emits native AMD64 for OpAddNumber (both TagNumber, no guard).
+// Regs[OperandA].NumVal + Acc.NumVal → Acc.
+func emitAMD64AddNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc.NumVal
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))     // Regs[lhs].NumVal
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)  // X0 = Acc.NumVal
+	as.AMD64_MOVQ_XR(REG_X1, REG_R11) // X1 = Regs[lhs].NumVal
+	as.AMD64_ADDSD(REG_X0, REG_X1)    // X0 += X1
+
+	as.AMD64_MOVQ_RX(REG_R9, REG_X0)
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff)) // Acc.NumVal = result
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign)) // tag = TagNumber
+}
+
+// emitAMD64SubNumber emits native AMD64 for OpSubNumber (both TagNumber, no guard).
+// Regs[OperandA].NumVal - Acc.NumVal → Acc.
+func emitAMD64SubNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc.NumVal (RHS)
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))     // Regs[lhs].NumVal (LHS)
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS (Acc)
+	as.AMD64_SUBSD(REG_X0, REG_X1)    // X0 = LHS - RHS
+
+	as.AMD64_MOVQ_RX(REG_R9, REG_X0)
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+}
+
+// emitAMD64MulNumber emits native AMD64 for OpMulNumber (both TagNumber, no guard).
+// Regs[OperandA].NumVal * Acc.NumVal → Acc.
+func emitAMD64MulNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	as.AMD64_MULSD(REG_X0, REG_X1) // X0 *= X1
+
+	as.AMD64_MOVQ_RX(REG_R9, REG_X0)
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+}
+
+// emitAMD64DivNumber emits native AMD64 for OpDivNumber (both TagNumber, no guard).
+// Regs[OperandA].NumVal / Acc.NumVal → Acc.
+func emitAMD64DivNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc (RHS)
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))     // LHS
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS (Acc)
+	as.AMD64_DIVSD(REG_X0, REG_X1)    // X0 = LHS / RHS
+
+	as.AMD64_MOVQ_RX(REG_R9, REG_X0)
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+}
+
+// emitAMD64NegateNumber emits native AMD64 for OpNegateNumber (TagNumber, no guard).
+// -Acc.NumVal → Acc (XOR sign bit).
+func emitAMD64NegateNumber(as *Assembler) {
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff)) // Acc.NumVal
+
+	// XOR sign bit: 0x8000000000000000
+	as.AMD64_MOV_RI(REG_R11, 0x8000000000000000)
+	as.AMD64_XOR_RR(REG_R9, REG_R11) // R9 = -Acc.NumVal (sign bit flipped)
+
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+}
+
+// emitAMD64IncNumber emits native AMD64 for OpIncNumber (TagNumber reg, no guard).
+// Regs[OperandA].NumVal += 1.0 → Acc and Regs[OperandA].
+func emitAMD64IncNumber(as *Assembler, instr *js.Instruction) {
+	reg := int(instr.OperandA)
+	regSlot := reg * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(regSlot+numValOff))
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
+	fbits := math.Float64bits(1.0)
+	as.AMD64_MOV_RI(REG_R11, fbits)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	as.AMD64_ADDSD(REG_X0, REG_X1) // X0 += 1.0
+	as.AMD64_MOVQ_RX(REG_R9, REG_X0)
+
+	// Store to Regs[reg] and Acc.
+	as.AMD64_MOV_STORE(REG_R9, REG_R15, int8(regSlot+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R15, int8(regSlot+tagWordOff))
+	// Copy full Regs[reg] → Acc.
+	for i := 0; i < 64; i += 8 {
+		as.AMD64_MOV_LOAD(REG_RCX, REG_R15, int8(regSlot+i))
+		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+i))
+	}
+}
+
+// emitAMD64DecNumber emits native AMD64 for OpDecNumber (TagNumber reg, no guard).
+// Regs[OperandA].NumVal -= 1.0 → Acc and Regs[OperandA].
+func emitAMD64DecNumber(as *Assembler, instr *js.Instruction) {
+	reg := int(instr.OperandA)
+	regSlot := reg * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R15, int8(regSlot+numValOff))
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
+	fbits := math.Float64bits(1.0)
+	as.AMD64_MOV_RI(REG_R11, fbits)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	as.AMD64_SUBSD(REG_X0, REG_X1) // X0 -= 1.0
+	as.AMD64_MOVQ_RX(REG_R9, REG_X0)
+
+	as.AMD64_MOV_STORE(REG_R9, REG_R15, int8(regSlot+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R15, int8(regSlot+tagWordOff))
+	for i := 0; i < 64; i += 8 {
+		as.AMD64_MOV_LOAD(REG_RCX, REG_R15, int8(regSlot+i))
+		as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+i))
+	}
+}
+
+// emitAMD64CmpNumber emits native AMD64 for OpCmpNumber (both TagNumber, no guard).
+// Compare Regs[OperandA].NumVal vs Acc.NumVal with condition OperandC → boolean Acc.
+func emitAMD64CmpNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+	cond := int(instr.OperandC)
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc.NumVal
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))     // Regs[lhs].NumVal
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS (Acc)
+	as.AMD64_COMISD(REG_X0, REG_X1)   // set EFLAGS from X0 vs X1
+
+	// Set boolean result based on condition (same order as VM cond constants):
+	// 0=LT, 1=LE, 2=EQ, 3=NE, 4=GT, 5=GE
+	// TrueTag = 0x0201 (TagBoolean true), FalseTag = 0x0200 (TagBoolean false)
+	truePath := NewLabel()
+	donePath := NewLabel()
+
+	switch cond {
+	case 0: // LT: LHS < RHS
+		as.AMD64_JL(truePath)
+	case 1: // LE: LHS <= RHS
+		as.AMD64_JLE(truePath)
+	case 2: // EQ: LHS == RHS
+		as.AMD64_JE(truePath)
+	case 3: // NE: LHS != RHS
+		as.AMD64_JNE(truePath)
+	case 4: // GT: LHS > RHS
+		as.AMD64_JG(truePath)
+	case 5: // GE: LHS >= RHS
+		as.AMD64_JGE(truePath)
+	}
+
+	// False.
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset))                        // StrVal[0:8]
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+8))                      // StrVal[8:16]
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))              // NumVal
+	as.AMD64_MOV_RI(REG_RCX, 0x0200)                                             // TagBoolean false
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+	as.AMD64_JMP(donePath)
+
+	as.AMD64_Bind(truePath)
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+8))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0201) // TagBoolean true
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+
+	as.AMD64_Bind(donePath)
 }
 
 // init sets up the AMD64 Sparkplug compile hook.
