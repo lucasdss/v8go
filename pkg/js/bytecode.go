@@ -528,6 +528,7 @@ type BytecodeFunction struct {
 	DeoptCount       int             // deoptimization counter; resets tiers after 5 deopts
 	Generator        bool            // true for generator functions (function*) — 1 byte
 	Async            bool            // true for async functions — 1 byte
+	AsyncGenerator   bool            // true for async generator functions (async function*) — 1 byte
 	IsDerivedConstructor bool        // true for derived class constructors (this uninitialized until super()) — 1 byte
 	HasRestParam     bool            // true if function has a rest parameter — 1 byte
 	RestParamReg     int             // register index for the rest array (valid only if HasRestParam) — 8 bytes

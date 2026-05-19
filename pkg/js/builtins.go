@@ -35,6 +35,14 @@ var DataViewPrototype *JSObject
 // DatePrototype holds the Date.prototype object.
 var DatePrototype *JSObject
 
+// AsyncGeneratorPrototype holds the AsyncGenerator.prototype object.
+var AsyncGeneratorPrototype *JSObject
+
+// AsyncIteratorSymbol is the well-known Symbol.asyncIterator value, stored
+// at registration time so that async generator objects can use its SymVal
+// as the property key for [Symbol.asyncIterator]() lookups.
+var AsyncIteratorSymbol JSValue
+
 // precompiledBuiltins holds bytecode-compiled versions of frequently-called builtins.
 // These are compiled at init time and executed directly by the VM instead of
 // dispatching through Go function wrappers, reducing call overhead.
@@ -239,6 +247,7 @@ func (vm *VM) RegisterBuiltins() {
 	vm.registerEval()
 	vm.registerWeakRef()
 	vm.registerFinalizationRegistry()
+	vm.registerAsyncGenerator()
 }
 
 // registerDOMEvents registers the __goDispatchEvent builtin for inline event handler dispatch.
@@ -1029,8 +1038,71 @@ func (vm *VM) registerSymbol() {
 	symCtor.Set("search", NewSymbol("Symbol.search"))
 	symCtor.Set("split", NewSymbol("Symbol.split"))
 	symCtor.Set("unscopables", NewSymbol("Symbol.unscopables"))
+	asyncIterSym := NewSymbol("Symbol.asyncIterator")
+	symCtor.Set("asyncIterator", asyncIterSym)
+	AsyncIteratorSymbol = asyncIterSym
 
 	vm.globals.M["Symbol"] = NewObject(symCtor)
+}
+
+// registerAsyncGenerator sets up the AsyncGenerator constructor and prototype.
+// AsyncGenerator objects are created by async function* calls. Their .next(),
+// .return(), and .throw() methods return Promises. The [Symbol.asyncIterator]()
+// method returns the async generator itself.
+func (vm *VM) registerAsyncGenerator() {
+	// AsyncGenerator.prototype
+	proto := NewJSObject()
+	proto.ConstructorName = "AsyncGeneratorPrototype"
+
+	// Abstract — real async generators are created by createAsyncGeneratorObject in vm_generator.go.
+	// These prototype methods serve as fallback for any AsyncGenerator objects:
+	// - .next(value) returns Promise<{value, done}> (overridden per-instance)
+	// - .return(value) returns Promise<{value, done}> (overridden per-instance)
+	// - .throw(error) returns Promise<{value, done}> (overridden per-instance)
+	// - [Symbol.asyncIterator]() returns this (overridden per-instance)
+
+	// Fallback .next() — returns Promise that resolves to {value: undefined, done: true}
+	proto.Set("next", vm.createBuiltinFunction("next", func(this *JSObject, args []JSValue) JSValue {
+		return vm.NewPromise(func(resolve func(JSValue), reject func(JSValue)) {
+			resultObj := NewJSObject()
+			resultObj.Set("value", Undefined)
+			resultObj.Set("done", True)
+			resolve(NewObject(resultObj))
+		})
+	}))
+
+	// Fallback .return() — returns Promise that resolves to {value: arg, done: true}
+	proto.Set("return", vm.createBuiltinFunction("return", func(this *JSObject, args []JSValue) JSValue {
+		return vm.NewPromise(func(resolve func(JSValue), reject func(JSValue)) {
+			var value JSValue = Undefined
+			if len(args) > 0 {
+				value = args[0]
+			}
+			resultObj := NewJSObject()
+			resultObj.Set("value", value)
+			resultObj.Set("done", True)
+			resolve(NewObject(resultObj))
+		})
+	}))
+
+	// Fallback .throw() — returns Promise that resolves to {value: undefined, done: true}
+	// (error handling is per-instance)
+	proto.Set("throw", vm.createBuiltinFunction("throw", func(this *JSObject, args []JSValue) JSValue {
+		return vm.NewPromise(func(resolve func(JSValue), reject func(JSValue)) {
+			resultObj := NewJSObject()
+			resultObj.Set("value", Undefined)
+			resultObj.Set("done", True)
+			resolve(NewObject(resultObj))
+		})
+	}))
+
+	// [Symbol.asyncIterator]() — fallback returns this
+	selfProto := NewObject(proto)
+	proto.Set(AsyncIteratorSymbol.SymVal, vm.createBuiltinFunction("[Symbol.asyncIterator]", func(this *JSObject, args []JSValue) JSValue {
+		return selfProto
+	}))
+
+	AsyncGeneratorPrototype = proto
 }
 
 // --- RegExp built-in ---

@@ -172,6 +172,25 @@ func TestJsToGoValueSymbol(t *testing.T) {
 	}
 }
 
+func TestSymbolAsyncIterator(t *testing.T) {
+	vm := NewVM()
+	vm.RegisterBuiltins()
+	result := vm.Run(`typeof Symbol.asyncIterator`)
+	if result.ToString() != "symbol" {
+		t.Errorf("Symbol.asyncIterator should be a symbol, got %q", result.ToString())
+	}
+}
+
+func TestSymbolAsyncIteratorDescription(t *testing.T) {
+	sym := NewSymbol("Symbol.asyncIterator")
+	if !sym.IsSymbol() {
+		t.Fatal("Symbol.asyncIterator should be a Symbol")
+	}
+	if sym.StrVal != "Symbol.asyncIterator" {
+		t.Fatalf("Symbol.asyncIterator description = %q, want %q", sym.StrVal, "Symbol.asyncIterator")
+	}
+}
+
 // Helper function to test isNaN since math.IsNaN requires float64 extraction
 func isNaN(f float64) bool {
 	return f != f
