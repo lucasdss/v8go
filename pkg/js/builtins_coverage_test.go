@@ -128,6 +128,32 @@ func TestTypeErrorMessage(t *testing.T) {
 	}
 }
 
+func TestErrorCause(t *testing.T) {
+	vm := js.NewVM()
+	// ES2022: Error cause from options object.
+	if !vm.Run(`new Error("msg", {cause: 42}).cause === 42`).IsTruthy() {
+		t.Error("Error.cause should be set from options")
+	}
+	if vm.Run(`new Error("msg", {cause: 42}).message`).ToString() != "msg" {
+		t.Error("Error.message should still work with cause option")
+	}
+	if vm.Run(`new Error("msg", {cause: 42}).name`).ToString() != "Error" {
+		t.Error("Error.name should still work with cause option")
+	}
+	// No second argument should not set cause.
+	if !vm.Run(`new Error("msg").cause === undefined`).IsTruthy() {
+		t.Error("Error.cause should be undefined without options")
+	}
+	// Second argument without cause property should not set cause.
+	if !vm.Run(`new Error("msg", {}).cause === undefined`).IsTruthy() {
+		t.Error("Error.cause should be undefined when options has no cause")
+	}
+	// cause can be any value.
+	if vm.Run(`new Error("msg", {cause: "oops"}).cause`).ToString() != "oops" {
+		t.Error("Error.cause should support string values")
+	}
+}
+
 // =========================================================================
 // Promise.race and Promise.all
 // =========================================================================

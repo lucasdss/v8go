@@ -795,6 +795,14 @@ func (vm *VM) registerError() {
 			}
 		}
 		err.Set("stack", NewString(sb.String()))
+		// ES2022: Error cause — if second arg is an object with a `cause` property,
+		// set the cause property on the error.
+		if len(args) > 1 && args[1].IsObject() && args[1].ObjVal != nil {
+			causeVal := args[1].ObjVal.Get("cause")
+			if !causeVal.IsUndefined() {
+				err.Set("cause", causeVal)
+			}
+		}
 		return NewObject(err)
 	}
 
