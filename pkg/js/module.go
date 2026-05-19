@@ -12,6 +12,7 @@ package js
 
 import (
 	"fmt"
+	"net/url"
 	"path"
 	"strings"
 	"sync"
@@ -334,6 +335,13 @@ func (mr *ModuleRegistry) Evaluate(rootPath string) (JSValue, error) {
 			}
 		}
 
+		// Expose import.meta via __moduleGetMeta__ global.
+		// Module code can access import_meta.url and import_meta.resolve(specifier).
+		metaFn := mr.vm.registry.Builtins["__moduleGetMeta__"]
+		if metaFn != nil {
+			mr.vm.SetGlobal("import_meta", metaFn([]JSValue{NewString(m.Path)}))
+		}
+
 		// Execute the module body.
 		if len(execBody) > 0 {
 			execProg := &Program{Body: execBody}
@@ -477,6 +485,31 @@ func (mr *ModuleRegistry) topologicalSort(root *ModuleRecord) ([]*ModuleRecord, 
 // SetGlobal sets a global variable on the backing VM.
 func (mr *ModuleRegistry) SetGlobal(name string, val JSValue) {
 	mr.vm.SetGlobal(name, val)
+}
+
+// resolveSpecifier resolves a module specifier relative to a base URL.
+// Handles relative specifiers (./ or ../) by resolving against the base,
+// and returns bare specifiers as-is (delegating to the module loader).
+// Supports both full URLs (https://...) and plain file paths (main.js).
+func resolveSpecifier(baseURL, specifier string) (string, error) {
+	if strings.HasPrefix(specifier, "./") || strings.HasPrefix(specifier, "../") {
+		u, err := url.Parse(baseURL)
+		if err != nil {
+			return "", err
+		}
+		// If the base is a plain file path (no scheme, no leading /), use path-based
+		// resolution to match the module system's behavior.
+		if u.Scheme == "" && !strings.HasPrefix(baseURL, "/") {
+			base := path.Dir(baseURL)
+			return path.Clean(path.Join(base, specifier)), nil
+		}
+		ref, err := url.Parse(specifier)
+		if err != nil {
+			return "", err
+		}
+		return u.ResolveReference(ref).String(), nil
+	}
+	return specifier, nil
 }
 
 // extractImports scans the AST for ImportDeclaration nodes and returns

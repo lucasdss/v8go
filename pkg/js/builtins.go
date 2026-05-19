@@ -1823,6 +1823,32 @@ func (vm *VM) registerModules() {
 		}
 		return Undefined
 	}
+
+	// __moduleGetMeta__(currentURL) — returns import.meta object for the module
+	// identified by currentURL. Exposes url and resolve(specifier) properties.
+	vm.registry.Builtins["__moduleGetMeta__"] = func(args []JSValue) JSValue {
+		if len(args) < 1 {
+			return Undefined
+		}
+		currentURL := args[0].ToString()
+		meta := NewJSObject()
+
+		meta.Set("url", NewString(currentURL))
+
+		meta.Set("resolve", vm.createBuiltinFunction("import.meta.resolve", func(this *JSObject, args []JSValue) JSValue {
+			if len(args) == 0 {
+				return Undefined
+			}
+			specifier := args[0].ToString()
+			resolved, err := resolveSpecifier(currentURL, specifier)
+			if err != nil {
+				return NewString(specifier)
+			}
+			return NewString(resolved)
+		}))
+
+		return NewObject(meta)
+	}
 }
 
 // registerProxy registers the Proxy constructor.
