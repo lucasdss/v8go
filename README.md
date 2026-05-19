@@ -5,13 +5,13 @@
 [![Coverage](https://img.shields.io/badge/coverage-78.6%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
-V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~98% ECMAScript compatibility** with near-native performance on ARM64.
+V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~95% ECMAScript compatibility** with near-native performance on ARM64.
 
 The minimum required Go version is 1.24.
 
 ## Features
 
-- **Full modern JavaScript support** (ES2022+): classes, async/await, generators, destructuring, optional chaining, nullish coalescing, template literals, spread/rest, ES modules
+- **Broad modern JavaScript support** (ES2022+): classes, async/await, generators, destructuring, optional chaining, nullish coalescing, template literals, spread/rest, ES modules
 - **Polymorphic inlining**: guard chains for 2-4 target shapes, budget-capped at 200 instructions per site
 - **Escape analysis**: JSValue allocation elimination when results don't escape the expression
 - **Load elimination**: redundant property load elimination within basic blocks
@@ -26,7 +26,7 @@ The minimum required Go version is 1.24.
 - **Browser APIs**: `fetch()`, `XMLHttpRequest`, `console`, DOM bindings
 - **Shadow Stack**: GC-safe object references in JIT native frames
 - **Minimal CGO**: Darwin-only (pthread_jit_write_protect_np); Linux uses pure Go dual-mapping. Cross-compiles everywhere.
-- **Passes 100% of self-contained Test262** (58/58 ECMAScript conformance tests)
+- **Passes 100% of curated Test262 benchmark** (58/58 tests covering major ECMAScript features)
 
 ## Basic Example
 
@@ -146,9 +146,9 @@ vm.Run("console.log('Hello from Go!')")
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## ECMAScript Compatibility: ~98%
+## ECMAScript Compatibility: ~95%
 
-V8Go passes **100% of the self-contained Test262 benchmark (58/58)** covering all major ECMAScript features:
+V8Go passes **100% of the curated Test262 benchmark (58/58)** covering the implemented ECMAScript features:
 
 | Category | Features |
 |----------|----------|
@@ -311,7 +311,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 ## Current Status
 
-- All major ES2022+ features implemented and tested
+- Broad ES2022+ feature coverage (see Known ES Spec Gaps below for limitations)
 - Sparkplug JIT active on ARM64 with 196/196 ops native
 - Sparkplug JIT on AMD64 with 196/196 ops listed, 81 native + 115 deopt stubs
 - TurboFan SSA pipeline: 82 ops, escape analysis, load elimination, poly/mono inlining
@@ -320,6 +320,24 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 - Error.stack with source file:line:col positions
 - ARM64 PAC (Apple Silicon) and constant blinding (both tiers) for JIT security
 - Active development: remaining AMD64 op coverage, JSValue representation optimization
+
+## Known ES Spec Gaps
+
+These ECMAScript features are not yet implemented:
+
+| Feature | ES Version | Status |
+|---------|-----------|--------|
+| `import.meta` | ES2020 | Not implemented |
+| `Intl` API | ES2020+ | Not implemented |
+| Class static `{}` blocks | ES2022 | Not implemented |
+| Private methods (`#method()`) | ES2022 | Partial (fields only) |
+| `Error.cause` | ES2022 | Not implemented |
+| `String.prototype.replaceAll` | ES2021 | Not implemented |
+| `Object.hasOwn` | ES2022 | Not implemented |
+| `JSON.stringify` replacer/space | ES5.1 | Not implemented |
+| `Atomics` / `SharedArrayBuffer` | ES2017 | Not implemented |
+
+The curated Test262 benchmark covers the implemented features only (58/58 pass).
 
 ## Architecture
 
