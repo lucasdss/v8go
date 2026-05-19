@@ -227,6 +227,8 @@ type ObjectProperty struct {
 	Shorthand   bool // true for {x} shorthand (equivalent to {x: x})
 	Computed    bool // true for { [expr]: value }
 	ComputedKey Node // the expression for computed key (when Computed is true)
+	IsGetter    bool // get prop() { ... }
+	IsSetter    bool // set prop(v) { ... }
 }
 
 func (*ObjectExpression) nodeMarker() {}

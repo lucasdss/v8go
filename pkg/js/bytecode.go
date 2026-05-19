@@ -71,6 +71,7 @@ const (
 	// Property access
 	OpLdaNamedProperty     // acc = object[constant_property_name]
 	OpStaNamedProperty     // object[constant_property_name] = acc
+	OpDefineAccessorProperty // define accessor (getter/setter): OperandA=propNameIdx, OperandB=valReg, OperandC=flags(0=getter,1=setter)
 	OpLdaKeyedProperty     // acc = object[key_reg]
 	OpStaKeyedProperty     // object[key_reg] = acc
 
@@ -336,6 +337,7 @@ var opcodeNames = map[Opcode]string{
 	OpIn:            "In",
 	OpLdaNamedProperty:   "LdaNamedProperty",
 	OpStaNamedProperty:   "StaNamedProperty",
+	OpDefineAccessorProperty: "DefineAccessorProperty",
 	OpLdaKeyedProperty:   "LdaKeyedProperty",
 	OpStaKeyedProperty:   "StaKeyedProperty",
 	OpJump:          "Jump",

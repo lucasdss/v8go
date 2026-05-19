@@ -20,9 +20,13 @@ const (
 	AttrWritable     PropertyAttr = 1 << 0 // READ_ONLY inverse: can be written
 	AttrEnumerable   PropertyAttr = 1 << 1 // DONT_ENUM inverse: visible in for-in
 	AttrConfigurable PropertyAttr = 1 << 2 // DONT_DELETE inverse: can be deleted/reconfigured
+	AttrAccessor     PropertyAttr = 1 << 3 // accessor property (getter/setter)
 
 	// Default attributes for regular properties (all true).
 	AttrDefault = AttrWritable | AttrEnumerable | AttrConfigurable
+	// AttrAccessorDefault is AttrDefault with accessor flag. Accessor properties
+	// are non-writable by default (the setter is called instead of overwriting).
+	AttrAccessorDefault = AttrAccessor | AttrEnumerable | AttrConfigurable
 )
 
 // PropEntry describes a single property in a Shape.
@@ -89,7 +93,13 @@ func (s *Shape) AddProperty(name string) *Shape {
 
 // AddPropertyWithAttr returns a Shape for the named property with given attributes.
 func (s *Shape) AddPropertyWithAttr(name string, attr PropertyAttr) *Shape {
-	if child, ok := s.Transitions[name]; ok {
+	// Include attrs in the transition key so accessor and data properties
+	// for the same name don't collide.
+	transitionKey := name
+	if attr != AttrDefault {
+		transitionKey = name + "\x00" + string(rune(attr))
+	}
+	if child, ok := s.Transitions[transitionKey]; ok {
 		return child
 	}
 	child := &Shape{
@@ -105,7 +115,7 @@ func (s *Shape) AddPropertyWithAttr(name string, attr PropertyAttr) *Shape {
 	}
 	offset := s.PropertyCount
 	child.Properties[name] = PropEntry{Offset: offset, Attr: attr}
-	s.Transitions[name] = child
+	s.Transitions[transitionKey] = child
 	return child
 }
 

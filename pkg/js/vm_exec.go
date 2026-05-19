@@ -201,7 +201,13 @@ func (vm *VM) executeOne(frame *VMFrame) (shouldReturn bool) {
 			if slotIdx < len(frame.Func.ICVector.Slots) {
 				slot := &frame.Func.ICVector.Slots[slotIdx]
 				if slot.State == ICMonomorphic && obj.Shape == slot.Shape && slot.Offset < obj.propLen() {
-					frame.Acc = obj.propAt(slot.Offset)
+					val := obj.propAt(slot.Offset)
+					// Accessor property: call the getter function.
+					if attr := obj.Shape.GetAttr(slot.Name); attr&AttrAccessor != 0 && val.IsObject() && val.ObjVal.IsCallable() {
+						frame.Acc = val.ObjVal.Call(obj, nil)
+					} else {
+						frame.Acc = val
+					}
 					slot.HitCount++
 					hit = true
 				}
@@ -282,6 +288,7 @@ func init() {
 	opTable[OpIn] = opIn
 	opTable[OpLdaNamedProperty] = opLdaNamedProperty
 	opTable[OpStaNamedProperty] = opStaNamedProperty
+	opTable[OpDefineAccessorProperty] = opDefineAccessorProperty
 	opTable[OpLdaKeyedProperty] = opLdaKeyedProperty
 	opTable[OpStaKeyedProperty] = opStaKeyedProperty
 	opTable[OpJump] = opJump

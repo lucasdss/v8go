@@ -2015,10 +2015,12 @@ func (c *Compiler) compileConditionalExpression(expr *ConditionalExpression) {
 }
 
 func (c *Compiler) compileObjectExpression(expr *ObjectExpression) {
-	// Fast path: if no spread properties, no computed keys, and no shorthands,
-	// pre-build the Shape and use OpCreateObjectLiteral to skip per-property shape transitions.
+	// Fast path: if no spread properties, no computed keys, no shorthands,
+	// and no getters/setters, pre-build the Shape and use OpCreateObjectLiteral
+	// to skip per-property shape transitions.
 	hasSpread := false
 	hasComputed := false
+	hasAccessor := false
 	for _, prop := range expr.Properties {
 		if _, ok := prop.Value.(*SpreadExpression); ok {
 			hasSpread = true
@@ -2026,9 +2028,12 @@ func (c *Compiler) compileObjectExpression(expr *ObjectExpression) {
 		if prop.Computed {
 			hasComputed = true
 		}
+		if prop.IsGetter || prop.IsSetter {
+			hasAccessor = true
+		}
 	}
 
-	if !hasSpread && !hasComputed && len(expr.Properties) > 0 {
+	if !hasSpread && !hasComputed && !hasAccessor && len(expr.Properties) > 0 {
 		// Collect property names and pre-build the Shape.
 		propNames := make([]string, len(expr.Properties))
 		for i, prop := range expr.Properties {
@@ -2125,6 +2130,15 @@ func (c *Compiler) compileObjectExpression(expr *ObjectExpression) {
 			c.bf.Emit(OpStar, uint8(keyReg), 0, 0)
 			c.bf.Emit(OpLdar, uint8(keyReg), 0, 0)
 			c.bf.Emit(OpStaKeyedProperty, uint8(objReg), uint8(valReg), 0)
+		} else if prop.IsGetter || prop.IsSetter {
+			// Accessor property: define getter/setter via SetAccessor.
+			propNameIdx := c.stringConstant(prop.Key)
+			// OperandC: 0 = getter, 1 = setter
+			accessorFlag := uint8(0)
+			if prop.IsSetter {
+				accessorFlag = 1
+			}
+			c.bf.Emit(OpDefineAccessorProperty, uint8(propNameIdx), uint8(valReg), accessorFlag)
 		} else {
 			// Regular property.
 			propNameIdx := c.stringConstant(prop.Key)
