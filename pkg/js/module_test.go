@@ -486,3 +486,23 @@ func TestModuleRegisterAndLink(t *testing.T) {
 		t.Errorf("expected pi=3.14, got %v", result.ObjVal.Get("pi").ToNumber())
 	}
 }
+func TestDynamicImportEndToEnd(t *testing.T) {
+	// Test mr.Import on a pre-registered module.
+	vm := js.NewVM()
+	mr := js.NewModuleRegistry(vm, nil)
+
+	// Register a module directly (no fetch function).
+	mr.Register("math.js", "export const pi = 3.14; export function double(x) { return x * 2; }")
+
+	// Import lazily resolves, links, and evaluates.
+	ns, err := mr.Import("math.js")
+	if err != nil {
+		t.Fatalf("Import failed: %v", err)
+	}
+	if ns.IsObject() && ns.ObjVal != nil {
+		pi := ns.ObjVal.Get("pi")
+		if pi.ToNumber() != 3.14 {
+			t.Errorf("pi = %v, want 3.14", pi)
+		}
+	}
+}

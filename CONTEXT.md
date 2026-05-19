@@ -95,6 +95,34 @@ Performance improvements planned vs Chrome V8 reference:
 - **P-5 Concurrent Compilation** — Implemented: goroutine + semaphore throttling to GOMAXPROCS. No further work needed.
 - **P-6 Recompilation** — Reset IC vector on deopt (after 5 deopts) to collect fresh type feedback. Recompile with new data.
 
+### Phase 12 Status (May 2026)
+
+Implemented:
+- ✅ P-1 Batch 1: AMD64 property ops (12 handlers)
+- ✅ P-2: JSValue escape elimination
+- ✅ P-3: Load elimination
+- ✅ P-4: Polymorphic inlining
+- ✅ P-5: Concurrent compilation (pre-existing)
+- ✅ P-6: IC vector reset on deopt
+- ✅ SEC-1: Constant blinding (both tiers)
+- ✅ SEC-2: ARM64 PAC (Apple Silicon)
+
+Remaining:
+- P-1 Batches 2-4: 97 AMD64 ops (call, object, exceptions, generator, module, misc)
+
+Code coverage target: pkg/js @ 73.9% → 80%+ (+6.1% gap)
+New files with low coverage: ssa_inline.go (43.8%), ssa_load_elim.go (26.9%), cpu_arm64.go (0%)
+
+### Phase 13: Coverage Gap + Benchmarks
+
+**Coverage targets:**
+- Add tests for low-coverage JS functions: FreeObj, AllocObj pool path, equalFold, AST nodeMarker stubs
+- Add TurboFan pipeline tests: escape analysis (scalar replacement), load elimination (redundant load), polymorphic inlining (2-4 shapes)
+
+**Benchmark targets:**
+- Micro-benchmarks per new SSA pass (escape elim, load elim, poly inline)
+- End-to-end TurboFan benchmarks (compilation + execution with/without optimizations)
+
 Security hardening vs Chrome V8 reference:
 
 - **SEC-1 Constant Blinding** — XOR immediate values with random cookie at compile time, XOR back at execution. Both Sparkplug and TurboFan tiers. Prevents JIT spraying attacks.

@@ -6,6 +6,7 @@ package js_test
 import (
 	"math"
 	"runtime"
+	"strings"
 	"testing"
 
 	js "github.com/lucasdss/v8go/pkg/js"
@@ -2053,5 +2054,254 @@ func TestFunctionNameInference(t *testing.T) {
 	`)
 	if result.ToString() != "myFunc" {
 		t.Errorf("myFunc.name = %q, want 'myFunc'", result.ToString())
+	}
+}
+
+// ES Module builtins — error-path coverage for registerModules
+// =========================================================================
+
+func TestModuleImportNoArgs(t *testing.T) {
+	// __import__() with no args should return a rejected Promise.
+	vm := js.NewVM()
+	result := vm.Run("__import__()")
+	if !result.IsObject() || result.ObjVal == nil {
+		t.Fatal("__import__() should return a Promise")
+	}
+	state := result.ObjVal.Get("__promise_state__")
+	if int(state.ToNumber()) != 2 { // PromiseRejected
+		t.Errorf("__import__() with no args should reject, got state %v", state.ToNumber())
+	}
+}
+
+func TestModuleImportNoLoader(t *testing.T) {
+	// __import__ with a URL but no module registry should return a rejected Promise.
+	vm := js.NewVM()
+	result := vm.Run("__import__('some-module.js')")
+	if !result.IsObject() || result.ObjVal == nil {
+		t.Fatal("__import__ should return a Promise")
+	}
+	state := result.ObjVal.Get("__promise_state__")
+	if int(state.ToNumber()) != 2 { // PromiseRejected
+		t.Errorf("__import__ without registry should reject, got state %v", state.ToNumber())
+	}
+}
+
+func TestModuleImportNamespaceNoArgs(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("__moduleImportNamespace__()")
+	if !result.IsUndefined() {
+		t.Errorf("__moduleImportNamespace__() with no args should return undefined, got %v", result)
+	}
+}
+
+func TestModuleImportDefaultNoArgs(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("__moduleImportDefault__()")
+	if !result.IsUndefined() {
+		t.Errorf("__moduleImportDefault__() with no args should return undefined, got %v", result)
+	}
+}
+
+func TestModuleImportNamedNoArgs(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("__moduleImportNamed__()")
+	if !result.IsUndefined() {
+		t.Errorf("__moduleImportNamed__() with no args should return undefined, got %v", result)
+	}
+}
+
+func TestModuleSetGlobal(t *testing.T) {
+	vm := js.NewVM()
+	mr := js.NewModuleRegistry(vm, nil)
+	// Test setting a global from a module registry.
+	mr.SetGlobal("testKey", js.NewNumber(42))
+	// Verify via VM.GetGlobal.
+	val := vm.GetGlobal("testKey")
+	if val.ToNumber() != 42 {
+		t.Errorf("SetGlobal should set the value, got %v", val)
+	}
+}
+func TestRegExpSymbolMatch(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello world hello".match(/hello/g)`)
+	arr := result.ObjVal
+	if arr == nil || arr.Get("0").ToString() != "hello" || arr.Get("1").ToString() != "hello" {
+		t.Errorf("global match failed: %v", result)
+	}
+}
+
+func TestRegExpSymbolMatchNonGlobal(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello world".match(/hello/)`)
+	if !result.IsObject() {
+		t.Error("non-global match should return result array")
+	}
+}
+
+func TestRegExpSymbolSearch(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello world".search(/world/)`)
+	if result.ToNumber() != 6 {
+		t.Errorf("search index = %v, want 6", result)
+	}
+}
+
+func TestRegExpSymbolSearchNotFound(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello".search(/xyz/)`)
+	if result.ToNumber() != -1 {
+		t.Errorf("search not found = %v, want -1", result)
+	}
+}
+
+func TestRegExpSymbolReplace(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello world".replace(/world/, "earth")`)
+	if result.ToString() != "hello earth" {
+		t.Errorf("replace = %v, want 'hello earth'", result)
+	}
+}
+
+func TestRegExpSymbolReplaceGlobal(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"a b a b".replace(/a/g, "x")`)
+	if result.ToString() != "x b x b" {
+		t.Errorf("global replace = %v, want 'x b x b'", result)
+	}
+}
+
+func TestRegExpSymbolReplaceString(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello".replace(/[aeiou]/g, 'X')`)
+	if result.ToString() != "hXllX" {
+		t.Errorf("replace with string = %v, want 'hXllX'", result)
+	}
+}
+
+func TestRegExpSymbolSplit(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"a,b,c".split(/,/)`)
+	arr := result.ObjVal
+	if arr == nil || arr.Get("0").ToString() != "a" || arr.Get("1").ToString() != "b" || arr.Get("2").ToString() != "c" {
+		t.Errorf("split failed: %v", result)
+	}
+}
+
+func TestRegExpSymbolSplitEmpty(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"abc".split(/./)`)
+	arr := result.ObjVal
+	if arr == nil {
+		t.Fatal("split result should be array")
+	}
+	// "abc".split(/./) should produce ["", "", "", ""]
+	if arr.Get("length").ToNumber() != 4 {
+		t.Errorf("split empty: length = %v, want 4", arr.Get("length"))
+	}
+}
+
+// =========================================================================
+// RegExp Flags — dotAll (s), unicode (u), sticky (y), flags string
+// =========================================================================
+
+func TestRegExpDotAllFlag(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`/a.b/s.test("a\nb")`)
+	if !result.IsTruthy() {
+		t.Error("dotAll flag should match newline")
+	}
+}
+
+func TestRegExpUnicodeFlag(t *testing.T) {
+	vm := js.NewVM()
+	// Test the unicode flag property
+	result := vm.Run(`/a/u.unicode`)
+	if !result.IsTruthy() {
+		t.Error("unicode flag should be truthy")
+	}
+	// Without unicode flag
+	if vm.Run(`/a/.unicode`).IsTruthy() {
+		t.Error("regexp without unicode flag should have unicode false")
+	}
+}
+
+func TestRegExpStickyFlag(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var re = /foo/y;
+		re.lastIndex = 2;
+		re.test("..foo..")
+	`)
+	if !result.IsTruthy() {
+		t.Error("sticky flag at correct lastIndex should match")
+	}
+}
+
+func TestRegExpStickyFlagNoMatch(t *testing.T) {
+	vm := js.NewVM()
+	// Sticky with lastIndex > 0: searches substring starting at lastIndex.
+	// If the pattern doesn't appear in that substring, test() returns false.
+	result := vm.Run(`
+		var re = /foo/y;
+		re.lastIndex = 3;
+		re.test("xxfooyy")
+	`)
+	if result.IsTruthy() {
+		t.Error("sticky with no match in substring should be false")
+	}
+}
+
+func TestRegExpFlagsString(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`/foo/gimsuy.flags`)
+	s := result.ToString()
+	if !strings.Contains(s, "g") || !strings.Contains(s, "i") || !strings.Contains(s, "m") || !strings.Contains(s, "s") || !strings.Contains(s, "u") || !strings.Contains(s, "y") {
+		t.Errorf("flags = %q, expected to contain gimsuy", s)
+	}
+}
+
+// =========================================================================
+// RegExp Named Capture Groups
+// =========================================================================
+
+func TestRegExpNamedGroups(t *testing.T) {
+	vm := js.NewVM()
+	// This implementation uses Go's regexp engine which supports
+	// (?P<name>...) syntax for named capture groups.
+	result := vm.Run(`
+		var re = new RegExp('(?P<year>\\d{4})-(?P<month>\\d{2})-(?P<day>\\d{2})');
+		var match = re.exec("2024-01-15");
+		match.groups.year === "2024" && match.groups.month === "01" && match.groups.day === "15"
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("named groups failed: %v", result)
+	}
+}
+
+// =========================================================================
+// RegExp Edge Cases — constructor, RegExp(RegExp), RegExp(RegExp, flags)
+// =========================================================================
+
+func TestRegExpConstructorFromRegExp(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var re1 = /hello/i;
+		var re2 = new RegExp(re1);
+		re2.toString() === "/hello/i"
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("RegExp(RegExp) copy: %v", result)
+	}
+}
+
+func TestRegExpConstructorFromRegExpNewFlags(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var re1 = /hello/i;
+		var re2 = new RegExp(re1, "g");
+		re2.toString() === "/hello/g"
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("RegExp(RegExp, flags) override: %v", result)
 	}
 }

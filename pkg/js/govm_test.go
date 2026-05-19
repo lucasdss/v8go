@@ -3323,3 +3323,42 @@ func TestCompositeOperationEdgeCases(t *testing.T) {
 }
 
 // TestBitwiseOperationsEdgeCases covers bitwise and/or/xor/not.
+
+// --- Coverage gap tests (Phase 14) ---
+
+func TestLogicalAssignmentOperators(t *testing.T) {
+runAndExpectNumber(t, "var x = 1; x &&= 2; x", 2)
+runAndExpectNumber(t, "var x = 0; x &&= 2; x", 0)
+runAndExpectNumber(t, "var x = 0; x ||= 2; x", 2)
+runAndExpectNumber(t, "var x = 1; x ||= 2; x", 1)
+runAndExpectNumber(t, "var x = null; x ??= 2; x", 2)
+runAndExpectNumber(t, "var x = 0; x ??= 2; x", 0)
+}
+
+func TestGeneratorReturnThrow(t *testing.T) {
+vm := js.NewVM()
+result := vm.Run(`
+function* gen() { yield 1; yield 2; yield 3; }
+var g = gen();
+g.next(); g.next();
+var r = g.return(99);
+r.done === true && r.value === 99
+`)
+if !result.IsTruthy() {
+t.Errorf("generator.return() should mark done with value: %v", result)
+}
+}
+
+func TestYieldExpression(t *testing.T) {
+vm := js.NewVM()
+result := vm.Run(`
+function* gen() { var x = yield 1; yield x; }
+var g = gen();
+var a = g.next();
+var b = g.next(42);
+a.value === 1 && !a.done && b.value === 42
+`)
+if !result.IsTruthy() {
+t.Errorf("yield expression: %v", result)
+}
+}
