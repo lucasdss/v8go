@@ -1134,7 +1134,12 @@ func (c *Compiler) compileClassDeclaration(decl *ClassDeclaration) {
 			targetReg = ctorReg
 		}
 		c.bf.Emit(OpLdar, uint8(targetReg), 0, 0)
-		methodNameIdx := c.stringConstant(m.Name)
+		// Private methods stored with '#' prefix (ES2022).
+		name := m.Name
+		if m.IsPrivate {
+			name = "#" + name
+		}
+		methodNameIdx := c.stringConstant(name)
 		c.bf.Emit(OpStaNamedProperty, uint8(methodNameIdx), uint8(methodReg), 255)
 	}
 
@@ -1249,7 +1254,11 @@ func (c *Compiler) compileClassExpression(decl *ClassDeclaration) {
 			targetReg = ctorReg
 		}
 		c.bf.Emit(OpLdar, uint8(targetReg), 0, 0)
-		methodNameIdx := c.stringConstant(m.Name)
+		name := m.Name
+		if m.IsPrivate {
+			name = "#" + name
+		}
+		methodNameIdx := c.stringConstant(name)
 		c.bf.Emit(OpStaNamedProperty, uint8(methodNameIdx), uint8(methodReg), 255)
 	}
 
@@ -1311,6 +1320,8 @@ func (c *Compiler) compileExpression(expr Node) {
 		c.compileCallExpression(e)
 	case *MemberExpression:
 		c.compileMemberExpression(e)
+	case *PrivateMemberExpression:
+		c.compilePrivateMemberExpression(e)
 	case *OptionalMemberExpression:
 		c.compileOptionalMemberExpression(e)
 	case *OptionalCallExpression:
@@ -1515,7 +1526,11 @@ func (c *Compiler) compileUnaryExpression(expr *UnaryExpression) {
 	case "void":
 		c.bf.Emit(OpLdaUndefined, 0, 0, 0)
 	case "delete":
-		if member, ok := expr.Argument.(*MemberExpression); ok {
+		if _, ok := expr.Argument.(*PrivateMemberExpression); ok {
+			// delete obj.#field → SyntaxError in strict mode (private fields cannot be deleted).
+			// For now, just evaluate the object and return true (non-spec but safe).
+			c.bf.Emit(OpLdaTrue, 0, 0, 0)
+		} else if member, ok := expr.Argument.(*MemberExpression); ok {
 			if member.Computed {
 				// delete obj[expr] → OpDeleteKeyed
 				c.compileExpression(member.Object)
@@ -1597,6 +1612,8 @@ func (c *Compiler) compileAssignmentStore(left Node) {
 		c.compileIdentifierStore(target)
 	case *MemberExpression:
 		c.compileMemberAssignment(target)
+	case *PrivateMemberExpression:
+		c.compilePrivateMemberAssignment(target)
 	case *DestructuringAssignment:
 		rhsReg := c.allocReg()
 		c.bf.Emit(OpStar, uint8(rhsReg), 0, 0)
@@ -1761,6 +1778,16 @@ func (c *Compiler) compileMemberAssignment(member *MemberExpression) {
 	}
 }
 
+func (c *Compiler) compilePrivateMemberAssignment(member *PrivateMemberExpression) {
+	// acc contains the value to assign.
+	// Compile object, store private property.
+	regVal := c.allocReg()
+	c.bf.Emit(OpStar, uint8(regVal), 0, 0)
+	c.compileExpression(member.Object)
+	nameIdx := c.stringConstant(member.Property)
+	c.bf.Emit(OpPrivateSet, uint8(nameIdx), 0, uint8(regVal))
+}
+
 func (c *Compiler) compileCallExpression(expr *CallExpression) {
 	// Detect spread arguments.
 	hasSpread := false
@@ -1785,6 +1812,32 @@ func (c *Compiler) compileCallExpression(expr *CallExpression) {
 			slot := c.allocFeedbackSlot()
 			c.bf.Emit(OpLdaNamedProperty, uint8(propName), 0, uint8(slot))
 		}
+		calleeReg := c.allocReg()
+		c.bf.Emit(OpStar, uint8(calleeReg), 0, 0)
+		if hasSpread {
+			c.compileCallArgsWithSpread(expr.Arguments, calleeReg, uint8(thisReg))
+		} else {
+			argRegs := make([]int, len(expr.Arguments))
+			for i := range expr.Arguments {
+				argRegs[i] = c.allocReg()
+			}
+			for i, arg := range expr.Arguments {
+				c.compileExpression(arg)
+				c.bf.Emit(OpStar, uint8(argRegs[i]), 0, 0)
+			}
+			c.bf.Emit(OpCall, uint8(calleeReg), uint8(len(expr.Arguments)), uint8(thisReg))
+		}
+		return
+	}
+
+	// Private member expression calls: obj.#method(args).
+	if privateMember, ok := expr.Callee.(*PrivateMemberExpression); ok {
+		c.compileExpression(privateMember.Object)
+		thisReg := c.allocReg()
+		c.bf.Emit(OpStar, uint8(thisReg), 0, 0)
+		c.bf.Emit(OpLdar, uint8(thisReg), 0, 0)
+		nameIdx := c.stringConstant(privateMember.Property)
+		c.bf.Emit(OpPrivateGet, uint8(nameIdx), 0, 0)
 		calleeReg := c.allocReg()
 		c.bf.Emit(OpStar, uint8(calleeReg), 0, 0)
 		if hasSpread {
@@ -1884,6 +1937,12 @@ func (c *Compiler) compileMemberExpression(expr *MemberExpression) {
 		slot := c.allocFeedbackSlot()
 		c.bf.Emit(OpLdaNamedProperty, uint8(propName), 0, uint8(slot))
 	}
+}
+
+func (c *Compiler) compilePrivateMemberExpression(expr *PrivateMemberExpression) {
+	c.compileExpression(expr.Object)
+	nameIdx := c.stringConstant(expr.Property)
+	c.bf.Emit(OpPrivateGet, uint8(nameIdx), 0, 0)
 }
 
 func (c *Compiler) compileOptionalMemberExpression(expr *OptionalMemberExpression) {

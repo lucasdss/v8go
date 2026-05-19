@@ -279,6 +279,63 @@ func opStaNamedProperty(vm *VM, frame *VMFrame, instr Instruction) {
 	}
 }
 
+// opPrivateGet loads a private field/method (#field) from an object.
+// OperandA = constant-pool index for the private name (without # prefix).
+// The # prefix is added by the handler. Stores result in frame.Acc.
+func opPrivateGet(vm *VM, frame *VMFrame, instr Instruction) {
+	fieldIdx := int(instr.OperandA)
+
+	var fieldName string
+	if fieldIdx < len(frame.Func.ConstantNames) {
+		fieldName = frame.Func.ConstantNames[fieldIdx]
+	} else if fieldIdx < len(frame.Func.Constants) {
+		fieldName = frame.Func.Constants[fieldIdx].ToString()
+	}
+
+	if !frame.Acc.IsObject() || frame.Acc.ObjVal == nil {
+		frame.Thrown = NewString("TypeError: Cannot read private member #" + fieldName + " from an object whose class did not declare it")
+		frame.ShouldReturn = true
+		return
+	}
+
+	obj := frame.Acc.ObjVal
+	val := obj.Get("#" + fieldName)
+	if val.Tag == TagUndefined {
+		frame.Thrown = NewString("TypeError: Cannot read private member #" + fieldName + " from an object whose class did not declare it")
+		frame.ShouldReturn = true
+		return
+	}
+	frame.Acc = val
+}
+
+// opPrivateSet stores a value to a private field (#field) on an object.
+// OperandA = constant-pool index for the private name (without # prefix).
+// OperandC = register holding the value to store.
+func opPrivateSet(vm *VM, frame *VMFrame, instr Instruction) {
+	fieldIdx := int(instr.OperandA)
+
+	var fieldName string
+	if fieldIdx < len(frame.Func.ConstantNames) {
+		fieldName = frame.Func.ConstantNames[fieldIdx]
+	} else if fieldIdx < len(frame.Func.Constants) {
+		fieldName = frame.Func.Constants[fieldIdx].ToString()
+	}
+
+	if !frame.Acc.IsObject() || frame.Acc.ObjVal == nil {
+		frame.Thrown = NewString("TypeError: Cannot write private member #" + fieldName + " to an object whose class did not declare it")
+		frame.ShouldReturn = true
+		return
+	}
+
+	val := Undefined
+	if int(instr.OperandC) < len(frame.Regs) {
+		val = frame.Regs[int(instr.OperandC)]
+	}
+
+	obj := frame.Acc.ObjVal
+	obj.Set("#"+fieldName, val)
+}
+
 // opDefineAccessorProperty defines an accessor property (getter/setter) on an object.
 // OperandA = constant-pool index for property name string.
 // OperandB = register holding the accessor function.

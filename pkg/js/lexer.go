@@ -144,6 +144,9 @@ const (
 
 	TokDotDotDot // ... (spread operator)
 	TokRegExp    // /pattern/flags
+
+	// Private field/method prefix (ES2022)
+	TokHash // #
 )
 
 var tokenKindNames = map[TokenKind]string{
@@ -171,6 +174,7 @@ var tokenKindNames = map[TokenKind]string{
 	TokArrow:     "=>",
 	TokDotDotDot: "...",
 	TokRegExp:    "RegExp",
+	TokHash:      "#",
 	TokPlus:      "+",
 	TokMinus:     "-",
 	TokStar:      "*",
@@ -326,7 +330,7 @@ func (l *Lexer) updateRegExpContext(kind TokenKind) {
 	case TokIdentifier, TokNumber, TokBigInt, TokString, TokRParen, TokRBracket,
 		TokTrue, TokFalse, TokNull, TokUndefined,
 		TokPlusPlus, TokMinusMinus,
-		TokThis, TokRBrace, TokTemplateEnd:
+		TokThis, TokRBrace, TokTemplateEnd, TokHash:
 		l.expectRegExp = false
 	// Tokens that appear at the START of an expression: next / is REGEXP
 	default:
@@ -606,6 +610,9 @@ func (l *Lexer) nextToken() Token {
 		}
 		l.advance()
 		return Token{Kind: TokGt, Value: ">", Line: startLine, Column: startCol, StartPos: startPos, EndPos: l.pos}
+	case '#':
+		l.advance()
+		return Token{Kind: TokHash, Value: "#", Line: startLine, Column: startCol, StartPos: startPos, EndPos: l.pos}
 	case '&':
 		if l.pos+1 < len(l.src) && l.src[l.pos+1] == '&' {
 			l.advance()

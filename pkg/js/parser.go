@@ -897,13 +897,19 @@ func (p *Parser) parseClassDeclaration() *ClassDeclaration {
 
 		method := p.parseClassMethod()
 
+		// Skip field declarations (#field = value or #field;) — not methods.
+		if method.Body == nil {
+			continue
+		}
+
 		// Reject 'arguments' and 'eval' as method names (strict mode).
 		if !method.Computed && (method.Name == "arguments" || method.Name == "eval") {
 			p.addError("'" + method.Name + "' may not be used as a method name in strict mode")
 		}
 
 		// Check for duplicate method names (get/set pairs with same name are allowed).
-		if !method.Computed && method.Name != "" && method.Name != "constructor" {
+		// Private methods (#foo) don't conflict with public methods (foo).
+		if !method.Computed && method.Name != "" && method.Name != "constructor" && !method.IsPrivate {
 			if method.Getter {
 				if seenGetters[method.Name] {
 					p.addError("duplicate getter method '" + method.Name + "' in class")
@@ -955,19 +961,43 @@ func (p *Parser) parseClassMethod() ClassMethod {
 		method.Static = true
 	}
 
-	// Check for getter/setter: get foo() or set foo(v)
+	// Check for getter/setter: get foo() or set foo(v) or get #foo() or set #foo(v).
 	if p.peek().Kind == TokGet && p.peekN(1).Kind != TokLParen {
-		// "get" followed by an identifier (not "get()"), so it's a getter.
 		p.advance()
 		method.Getter = true
 	} else if p.peek().Kind == TokSet && p.peekN(1).Kind != TokLParen {
-		// "set" followed by an identifier (not "set()"), so it's a setter.
 		p.advance()
 		method.Setter = true
 	}
 
-	// Method name.
-	if p.peek().Kind == TokIdentifier {
+	// Private method or getter/setter: #identifier or get #identifier or set #identifier.
+	// Also handles private field declarations (#identifier = value or #identifier;).
+	if p.peek().Kind == TokHash {
+		p.advance() // consume #
+		if p.peek().Kind != TokIdentifier {
+			p.addError("expected private name after #")
+			return method
+		}
+		method.Name = p.advance().Value
+		method.IsPrivate = true
+		// If the private name is followed by '=', it's a field declaration, not a method.
+		// Private fields are stored as properties with '#' prefix; we skip the initializer
+		// here since field initialization requires a different compiler pipeline.
+		if p.peek().Kind == TokEq || p.peek().Kind == TokSemicolon {
+			// Field declaration: #field = value; or #field;
+			// Consume the initializer expression and semicolon if present.
+			if p.peek().Kind == TokEq {
+				p.advance()              // consume =
+				p.parseExpression()      // skip initializer
+			}
+			if p.peek().Kind == TokSemicolon {
+				p.advance() // consume ;
+			}
+			// Return method with empty body so the caller knows to skip it.
+			method.Body = nil
+			return method
+		}
+	} else if p.peek().Kind == TokIdentifier {
 		method.Name = p.advance().Value
 	} else if p.peek().Kind == TokString {
 		method.Name = p.advance().Value
@@ -1402,6 +1432,15 @@ func (p *Parser) parsePrefix() Node {
 	case TokClass:
 		// class expression: class { ... } or class Name { ... }
 		return p.parseClassDeclaration()
+	case TokHash:
+		p.advance()
+		if p.peek().Kind == TokIdentifier {
+			name := p.advance().Value
+			p.addError("private name '#" + name + "' is not allowed outside a class body")
+		} else {
+			p.addError("'#' not expected")
+		}
+		return &Literal{Value: Undefined}
 	default:
 		// Skip unknown token and return a placeholder.
 		p.advance()
@@ -1477,6 +1516,17 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 			}
 		}
 		propTok := p.peek()
+		// Private member access: obj.#name
+		if propTok.Kind == TokHash {
+			p.advance() // consume #
+			identTok := p.peek()
+			if identTok.Kind != TokIdentifier && identTok.Value == "" {
+				p.addError("expected private name after #")
+				return left
+			}
+			p.advance()
+			return &PrivateMemberExpression{Object: left, Property: identTok.Value}
+		}
 		// After ., any token with a string value can be a property name
 		// (e.g., Array.of, obj.class, obj.async — keywords become identifiers in dot access).
 		if propTok.Kind != TokIdentifier && propTok.Value == "" {
@@ -1499,6 +1549,15 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 	case TokQuestionDot:
 		p.advance()
 		startPos := op.StartPos
+		// Private optional access: obj?.#member
+		if p.peek().Kind == TokHash {
+			p.advance() // consume #
+			identTok := p.peek()
+			if identTok.Kind == TokIdentifier {
+				p.advance()
+			}
+			return &OptionalMemberExpression{Object: left, Property: &Identifier{Name: identTok.Value}, Computed: false, StartPos: startPos, EndPos: identTok.EndPos}
+		}
 		if p.peek().Kind == TokLBracket {
 			p.advance()
 			prop := p.parseExpression()

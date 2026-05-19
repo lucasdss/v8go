@@ -419,6 +419,7 @@ type ClassMethod struct {
 	Setter      bool  // set foo(v) { ... }
 	Computed    bool  // [expr]() { ... }
 	ComputedKey Node  // expression for computed key
+	IsPrivate   bool  // #method() { ... }
 	Params      []DefaultParam
 	Body        *BlockStatement
 }
@@ -466,3 +467,11 @@ func (*ImportExpression) nodeMarker() {}
 type SuperExpression struct{}
 
 func (*SuperExpression) nodeMarker() {}
+
+// PrivateMemberExpression: obj.#name (ES2022 private field/method access).
+type PrivateMemberExpression struct {
+	Object   Node
+	Property string // private name without # prefix
+}
+
+func (*PrivateMemberExpression) nodeMarker() {}

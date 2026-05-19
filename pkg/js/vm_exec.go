@@ -288,6 +288,8 @@ func init() {
 	opTable[OpIn] = opIn
 	opTable[OpLdaNamedProperty] = opLdaNamedProperty
 	opTable[OpStaNamedProperty] = opStaNamedProperty
+	opTable[OpPrivateGet] = opPrivateGet
+	opTable[OpPrivateSet] = opPrivateSet
 	opTable[OpDefineAccessorProperty] = opDefineAccessorProperty
 	opTable[OpLdaKeyedProperty] = opLdaKeyedProperty
 	opTable[OpStaKeyedProperty] = opStaKeyedProperty
