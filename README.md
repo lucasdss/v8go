@@ -2,7 +2,7 @@
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/lucasdss/v8go.svg)](https://pkg.go.dev/github.com/lucasdss/v8go)
 [![Tests](https://img.shields.io/badge/tests-2370+-blue)](https://github.com/lucasdss/v8go)
-[![Coverage](https://img.shields.io/badge/coverage-78.6%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
+[![Coverage](https://img.shields.io/badge/coverage-80.0%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
 V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~99%+ ECMAScript compatibility** with near-native performance on ARM64.
@@ -245,13 +245,13 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 |--------|-------|
 | **Total lines** | 68,000+ (155 Go files) |
 | **pkg/jit coverage** | **82.6%** (exceeds 80% gate) |
-| **pkg/js coverage** | **78.6%** (exceeds 75% baseline) |
+| **pkg/js coverage** | **80.0%** (meets 80% gate) |
 | **Tests** | 2,370+ across 8 packages |
 | **Benchmarks** | 23 (interpreter, JIT compilation, SSA passes) |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
 | **Static analysis** | clean (go vet, gosec ≤12 pre-existing) |
-| **Fuzz tests** | 4 (assembler, IC, helpers, GC bridge) |
+| **Fuzz tests** | 9 (parser, VM, bytecode, Array, String, JSON, Math, Object, RegExp) |
 
 Quality gates enforced by `Makefile`:
 ```bash
