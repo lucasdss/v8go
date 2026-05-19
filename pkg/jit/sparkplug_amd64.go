@@ -414,7 +414,7 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpDivNumber:
 		emitAMD64DivNumber(as, instr)
 	case js.OpModNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ModNumber(as, instr)
 	case js.OpNegateNumber:
 		emitAMD64NegateNumber(as)
 	case js.OpIncNumber:
@@ -422,41 +422,41 @@ func emitAMD64SparkplugOp(as *Assembler, instr *js.Instruction, bf *js.BytecodeF
 	case js.OpDecNumber:
 		emitAMD64DecNumber(as, instr)
 	case js.OpStrictEqNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StrictEqNumber(as, instr)
 	case js.OpStrictNotEqNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64StrictNotEqNumber(as, instr)
 	case js.OpCmpNumber:
 		emitAMD64CmpNumber(as, instr)
 	case js.OpLessThanNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LessThanNumber(as, instr)
 	case js.OpGreaterThanNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64GreaterThanNumber(as, instr)
 	case js.OpLessEqNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64LessEqNumber(as, instr)
 	case js.OpGreaterEqNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64GreaterEqNumber(as, instr)
 
 	// --- Bitwise fast variants ---
 	case js.OpBitAndNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64BitAndNumber(as, instr)
 	case js.OpBitOrNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64BitOrNumber(as, instr)
 	case js.OpBitXorNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64BitXorNumber(as, instr)
 	case js.OpBitNotNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64BitNotNumber(as, instr)
 	case js.OpShiftLeftNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ShiftLeftNumber(as, instr)
 	case js.OpShiftRightNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ShiftRightNumber(as, instr)
 	case js.OpShiftRightZeroNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ShiftRightZeroNumber(as, instr)
 
 	// --- Type conversion fast variants ---
 	case js.OpToBooleanNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ToBooleanNumber(as, instr)
 	case js.OpToStringNumber:
-		as.AMD64_JMP(deoptStub) // TODO: native
+		emitAMD64ToStringNumber(as, instr)
 
 	// --- Call fast variants ---
 	case js.OpCallBuiltin:
@@ -2806,6 +2806,419 @@ func emitAMD64ThrowSuperNotCalled(as *Assembler, deoptStub *Label) {
 	// sparkplugOpThrowSuperNotCalled(frame)
 	as.AMD64_MOV_RR(REG_RAX, REG_R12)
 	addr := funcToAddr(sparkplugOpThrowSuperNotCalled)
+	as.AMD64_MOV_RI(REG_R11, uint64(addr))
+	as.AMD64_CALL(REG_R11)
+}
+
+// --- emitAMD64ModNumber: OpModNumber (no type guard — compiler proven) ---
+// Regs[OperandA].NumVal % Acc.NumVal → Acc.
+func emitAMD64ModNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc (RHS/divisor)
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))    // LHS (dividend)
+
+	// Convert to int64: X0=LHS, X1=RHS
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS (dividend)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS (divisor)
+
+	// Guard: divisor zero → NaN
+	as.AMD64_XORPD(REG_X2, REG_X2)
+	as.AMD64_COMISD(REG_X1, REG_X2)
+	zeroDiv := NewLabel()
+	as.AMD64_JE(zeroDiv)
+
+	// Truncate to int64 (CVTTSD2SI truncates toward zero)
+	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)  // R9 = int64(LHS)
+	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(RHS)
+
+	// Handle INT64_MIN / -1 overflow
+	as.AMD64_MOV_RR(REG_RAX, REG_R9) // RAX = dividend
+	as.AMD64_MOV_RI(REG_RCX, math.MaxUint64) // RCX = -1
+	as.AMD64_CMP_RR(REG_R11, REG_RCX)
+	noOverflow := NewLabel()
+	as.AMD64_JNE(noOverflow)
+	// INT64_MIN % -1 = 0
+	as.AMD64_XOR_RR(REG_R9, REG_R9)
+	modDone := NewLabel()
+	as.AMD64_JMP(modDone)
+	as.AMD64_Bind(noOverflow)
+	// CQO: sign-extend RAX → RDX:RAX
+	as.AMD64_CQO()
+	// IDIV: RDX = remainder
+	as.AMD64_IDIV_RR(REG_R11)
+	as.AMD64_MOV_RR(REG_R9, REG_RDX) // R9 = remainder
+	as.AMD64_Bind(modDone)
+
+	as.AMD64_CVTSI2SD(REG_X3, REG_R9)
+	as.AMD64_MOVQ_RX(REG_R9, REG_X3)
+
+	storeResult := NewLabel()
+	as.AMD64_JMP(storeResult)
+
+	as.AMD64_Bind(zeroDiv)
+	as.AMD64_MOV_RI(REG_R9, uint64(math.Float64bits(math.NaN())))
+
+	as.AMD64_Bind(storeResult)
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+}
+
+// emitAMD64StrictEqNumber: OpStrictEqNumber (no type guard).
+// Regs[OperandA].NumVal === Acc.NumVal → boolean Acc.
+func emitAMD64StrictEqNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS
+	as.AMD64_COMISD(REG_X0, REG_X1)
+
+	truePath := NewLabel()
+	donePath := NewLabel()
+
+	// NaN check: PF=1 → false
+	as.AMD64_JP(donePath) // false path after donePath is set to false
+	as.AMD64_JE(truePath)
+
+	// False: Comisd ZF=0
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0200)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+	as.AMD64_JMP(donePath)
+
+	as.AMD64_Bind(truePath)
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0201)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+
+	as.AMD64_Bind(donePath)
+}
+
+// emitAMD64StrictNotEqNumber: OpStrictNotEqNumber (no type guard).
+func emitAMD64StrictNotEqNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)
+	as.AMD64_COMISD(REG_X0, REG_X1)
+
+	truePath := NewLabel()
+	donePath := NewLabel()
+
+	// NaN (PF=1) → not equal → true
+	as.AMD64_JP(truePath)
+	// Equal (ZF=1) → false
+	as.AMD64_JE(donePath) // will be false
+
+	// Not equal → true
+	as.AMD64_JMP(truePath)
+
+	// False path
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0200)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+	as.AMD64_JMP(donePath)
+
+	as.AMD64_Bind(truePath)
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0201)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+
+	as.AMD64_Bind(donePath)
+}
+
+// emitAMD64LessThanNumber: OpLessThanNumber (no type guard).
+func emitAMD64LessThanNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+	emitAMD64NumberCmp(as, lhsSlot, 0) // cond=0: LT
+}
+
+// emitAMD64GreaterThanNumber: OpGreaterThanNumber (no type guard).
+func emitAMD64GreaterThanNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+	emitAMD64NumberCmp(as, lhsSlot, 4) // cond=4: GT
+}
+
+// emitAMD64LessEqNumber: OpLessEqNumber (no type guard).
+func emitAMD64LessEqNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+	emitAMD64NumberCmp(as, lhsSlot, 1) // cond=1: LE
+}
+
+// emitAMD64GreaterEqNumber: OpGreaterEqNumber (no type guard).
+func emitAMD64GreaterEqNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	lhsSlot := lhs * jsValueSize
+	emitAMD64NumberCmp(as, lhsSlot, 5) // cond=5: GE
+}
+
+// emitAMD64NumberCmp: shared number comparison helper (no type guard).
+// cond: 0=LT, 1=LE, 2=EQ, 3=NE, 4=GT, 5=GE
+func emitAMD64NumberCmp(as *Assembler, lhsSlot int, cond int) {
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc (RHS)
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))    // LHS
+
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS
+	as.AMD64_COMISD(REG_X0, REG_X1)
+
+	truePath := NewLabel()
+	donePath := NewLabel()
+
+	// For all ordered comparisons: NaN is always false
+	as.AMD64_JP(donePath) // NaN → false
+
+	switch cond {
+	case 0: // LT
+		as.AMD64_JB(truePath)
+	case 1: // LE
+		as.AMD64_JBE(truePath)
+	case 4: // GT
+		as.AMD64_JA(truePath)
+	case 5: // GE
+		as.AMD64_JAE(truePath)
+	}
+
+	// False
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0200)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+	as.AMD64_JMP(donePath)
+
+	as.AMD64_Bind(truePath)
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0201)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+
+	as.AMD64_Bind(donePath)
+}
+
+// emitAMD64BitAndNumber: OpBitAndNumber (no type guard).
+func emitAMD64BitAndNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	emitAMD64BitwiseNumber(as, lhs, 0)
+}
+
+// emitAMD64BitOrNumber: OpBitOrNumber (no type guard).
+func emitAMD64BitOrNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	emitAMD64BitwiseNumber(as, lhs, 1)
+}
+
+// emitAMD64BitXorNumber: OpBitXorNumber (no type guard).
+func emitAMD64BitXorNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	emitAMD64BitwiseNumber(as, lhs, 2)
+}
+
+// emitAMD64BitwiseNumber: shared bitwise helper (no type guard).
+// op: 0=AND, 1=OR, 2=XOR
+func emitAMD64BitwiseNumber(as *Assembler, lhs int, op int) {
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc.NumVal
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))    // Regs[lhs].NumVal
+
+	// Convert float64 → int64 (truncate).
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
+	as.AMD64_MOVQ_XR(REG_X1, REG_R11)
+	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)  // R9 = int64(Acc)
+	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(LHS)
+
+	// Mask to 32-bit (JS ToInt32 semantics).
+	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
+	as.AMD64_AND_RR(REG_R9, REG_RDX)
+	as.AMD64_AND_RR(REG_R11, REG_RDX)
+
+	// Bitwise operation.
+	switch op {
+	case 0:
+		as.AMD64_AND_RR(REG_R9, REG_R11)
+	case 1:
+		as.AMD64_OR_RR(REG_R9, REG_R11)
+	case 2:
+		as.AMD64_XOR_RR(REG_R9, REG_R11)
+	}
+
+	// Convert int64 → float64.
+	as.AMD64_CVTSI2SD(REG_X2, REG_R9)
+	as.AMD64_MOVQ_RX(REG_R9, REG_X2)
+
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+
+	// Zero ObjVal and StrVal.
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+8))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+int(unsafe.Offsetof(js.JSValue{}.ObjVal))))
+}
+
+// emitAMD64BitNotNumber: OpBitNotNumber (no type guard, unary).
+func emitAMD64BitNotNumber(as *Assembler, instr *js.Instruction) {
+	_ = instr
+
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
+
+	// Convert float64 → int64.
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
+	as.AMD64_CVTTSD2SI(REG_R9, REG_X0)
+
+	// Mask to 32-bit and NOT.
+	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
+	as.AMD64_AND_RR(REG_R9, REG_RDX)
+	as.AMD64_NOT_R(REG_R9)
+
+	// Convert back to float64.
+	as.AMD64_CVTSI2SD(REG_X1, REG_R9)
+	as.AMD64_MOVQ_RX(REG_R9, REG_X1)
+
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+8))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+int(unsafe.Offsetof(js.JSValue{}.ObjVal))))
+}
+
+// emitAMD64ShiftLeftNumber: OpShiftLeftNumber (no type guard).
+func emitAMD64ShiftLeftNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	emitAMD64ShiftNumber(as, lhs, 0)
+}
+
+// emitAMD64ShiftRightNumber: OpShiftRightNumber (no type guard).
+func emitAMD64ShiftRightNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	emitAMD64ShiftNumber(as, lhs, 1)
+}
+
+// emitAMD64ShiftRightZeroNumber: OpShiftRightZeroNumber (no type guard).
+func emitAMD64ShiftRightZeroNumber(as *Assembler, instr *js.Instruction) {
+	lhs := int(instr.OperandA)
+	emitAMD64ShiftNumber(as, lhs, 2)
+}
+
+// emitAMD64ShiftNumber: shared shift helper (no type guard).
+// op: 0=SHL, 1=SAR, 2=SHR
+func emitAMD64ShiftNumber(as *Assembler, lhs int, op int) {
+	lhsSlot := lhs * jsValueSize
+
+	as.AMD64_MOV_LOAD(REG_R15, REG_R12, int8(regsOff))
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))   // Acc (RHS = shift count)
+	as.AMD64_MOV_LOAD(REG_R11, REG_R15, int8(lhsSlot+numValOff))    // LHS (value to shift)
+
+	// Convert to int64.
+	as.AMD64_MOVQ_XR(REG_X0, REG_R11) // X0 = LHS value
+	as.AMD64_MOVQ_XR(REG_X1, REG_R9)  // X1 = RHS shift count
+	as.AMD64_CVTTSD2SI(REG_R9, REG_X0) // R9 = int64(LHS value)
+	as.AMD64_CVTTSD2SI(REG_R11, REG_X1) // R11 = int64(RHS shift count)
+
+	// Mask value to 32 bits (JS ToInt32 semantics).
+	as.AMD64_MOV_RI(REG_RDX, 0xFFFFFFFF)
+	as.AMD64_AND_RR(REG_R9, REG_RDX)
+
+	// Mask shift count to 5 bits.
+	as.AMD64_MOV_RI(REG_RCX, 0x1F)
+	as.AMD64_AND_RR(REG_R11, REG_RCX)
+	// Move shift count to CL.
+	as.AMD64_MOV_RR(REG_RCX, REG_R11)
+
+	switch op {
+	case 0:
+		as.AMD64_SHL_CL(REG_R9)
+	case 1:
+		as.AMD64_SAR_CL(REG_R9)
+	case 2:
+		as.AMD64_SHR_CL(REG_R9)
+	}
+
+	// Convert back to float64.
+	as.AMD64_CVTSI2SD(REG_X2, REG_R9)
+	as.AMD64_MOVQ_RX(REG_R9, REG_X2)
+
+	as.AMD64_MOV_STORE(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_R13, 0x0300)
+	as.AMD64_MOV_STORE(REG_R13, REG_R12, int8(accTagAlign))
+
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+8))
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+int(unsafe.Offsetof(js.JSValue{}.ObjVal))))
+}
+
+// emitAMD64ToBooleanNumber: OpToBooleanNumber (no type guard).
+// Convert number to boolean: 0/NaN → false, otherwise true.
+func emitAMD64ToBooleanNumber(as *Assembler, instr *js.Instruction) {
+	_ = instr
+
+	as.AMD64_MOV_LOAD(REG_R9, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOVQ_XR(REG_X0, REG_R9)
+	as.AMD64_XORPD(REG_X1, REG_X1)
+	as.AMD64_COMISD(REG_X0, REG_X1)
+
+	truePath := NewLabel()
+	donePath := NewLabel()
+
+	// NaN (PF=1) → false
+	as.AMD64_JP(donePath)
+	// 0.0 (ZF=1) → false
+	as.AMD64_JE(donePath)
+	// Non-zero → true
+	as.AMD64_JMP(truePath)
+
+	// False path (falls through from above)
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0200)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+	as.AMD64_JMP(donePath)
+
+	as.AMD64_Bind(truePath)
+	as.AMD64_XOR_RR(REG_RCX, REG_RCX)
+	// Store 1 in NumVal (for BoolVal convention: low byte of tag is BoolVal).
+	as.AMD64_MOV_RI(REG_RCX, 1)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accOffset+numValOff))
+	as.AMD64_MOV_RI(REG_RCX, 0x0201)
+	as.AMD64_MOV_STORE(REG_RCX, REG_R12, int8(accTagAlign))
+
+	as.AMD64_Bind(donePath)
+}
+
+// emitAMD64ToStringNumber: OpToStringNumber (no type guard).
+// Convert number to string → requires Go helper for string allocation.
+func emitAMD64ToStringNumber(as *Assembler, instr *js.Instruction) {
+	_ = instr
+	// sparkplugOpToStringNumber(frame)
+	as.AMD64_MOV_RR(REG_RAX, REG_R12)
+	addr := funcToAddr(sparkplugOpToStringNumber)
 	as.AMD64_MOV_RI(REG_R11, uint64(addr))
 	as.AMD64_CALL(REG_R11)
 }
