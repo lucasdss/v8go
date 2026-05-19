@@ -18,7 +18,7 @@ The minimum required Go version is 1.24.
 - **AMD64 Sparkplug**: 40+ native opcode handlers (property, call, arithmetic, comparison, control flow)
 - **Constant blinding**: random cookie XOR for immediate values to prevent JIT spraying
 - **ARM64 PAC**: pointer authentication on Apple Silicon (ARMv8.3+) for JIT frame protection
-- **Multi-tier JIT compiler**: Sparkplug baseline (185/185 ops ARM64) + TurboFan optimizing (SSA IR, type specialization, speculative inlining)
+- **Multi-tier JIT compiler**: Sparkplug baseline (196/196 ops ARM64) + TurboFan optimizing (SSA IR, GVN, escape analysis, inlining, algebraic simplification)
 - **Hidden Classes (Shapes)**: V8-style transition tree with slack tracking, inline property storage, and dictionary mode fallback
 - **Inline Caching**: mono/poly/megamorphic runtime code patching for fast property access
 - **Deoptimization**: type guards → FrameDescription → interpreter resume on speculative failure
@@ -122,8 +122,8 @@ vm.Run("console.log('Hello from Go!')")
 ┌──────────────────────────────────────────────────────────────┐
 │                TIER 2: TurboFan Optimizing JIT               │
 │  Bytecode + Feedback → SSA Sea-of-Nodes IR (82 ops lowered) │
-│  Type specialization, escape analysis, load elimination      │
-│  Poly/mono inlining, linear scan register allocation          │
+│  Type specialization, escape analysis, load elimination,     │
+│  GVN (CSE + algebraic simplification), poly/mono inlining    │
 └───────────────────┬──────────────────────────────────────────┘
                     │ type guard fails
                     ▼
@@ -220,7 +220,7 @@ These are host-provided functions, not part of ECMAScript. V8Go provides stub im
 
 ### Can you implement (feature X)?
 
-V8Go is under active development. The roadmap includes: AMD64 JIT completion (remaining 100+ ops), full TurboFan escape analysis for objects, runtime/jit GC registration, and JSValue representation optimization. Features are implemented in dependency order.
+V8Go is under active development. The roadmap includes: Test262 expansion, JIT frame tracking in Error.stack, and JSValue representation optimization. Features are implemented in dependency order.
 
 ## Performance
 
@@ -266,7 +266,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | **Language** | Go (34K lines, 155 files) | C++ (2M+ lines) |
 | **Interpreter** | Ignition-style register VM (197 main ops, 375 total) | Ignition register VM |
 | **Baseline JIT** | Sparkplug (196/196 ops ARM64, 186/196 ops AMD64) | Sparkplug (ARM64/x86-64) |
-| **Optimizing JIT** | TurboFan (82 SSA ops, escape analysis, load elim, poly/mono inlining) | Maglev + TurboFan |
+| **Optimizing JIT** | TurboFan (82 SSA ops, GVN, escape analysis, load elim, poly/mono inlining) | Maglev + TurboFan |
 | **Hidden Classes** | Shapes + transition tree + slack tracking | Maps + transitions + slack |
 | **Inline Caching** | mono/poly/mega with runtime code patching | mono/poly/mega with code patching |
 | **Deoptimization** | FrameDescription + DeoptInputData, tier reset at 5 deopts | Deoptimizer + TranslationArrays |
@@ -315,7 +315,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 - Broad ES2022+ feature coverage (see Known ES Spec Gaps below for limitations)
 - Sparkplug JIT active on ARM64 with 196/196 ops native
 - Sparkplug AMD64: 186/196 ops native (inline or Go helpers), 0 deopt stubs
-- TurboFan SSA pipeline: 82 ops, escape analysis, load elimination, poly/mono inlining
+- TurboFan SSA pipeline: 82 ops, GVN, escape analysis, load elimination, poly/mono inlining, algebraic simplification
 - Deoptimization wired and tested; tier reset + IC vector reset on 5 consecutive deopts
 - W^X dual-mapping on Linux (pure Go), MAP_JIT on Darwin
 - Error.stack with source file:line:col positions
