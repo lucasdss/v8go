@@ -284,9 +284,15 @@ func (vm *VM) callMethod(callee JSValue, thisObj *JSObject, args []JSValue) JSVa
 
 	// User-defined bytecode function.
 	if obj.Bytecode != nil {
+		// Async generator (async function*): return an AsyncGenerator object.
+		if obj.Bytecode.AsyncGenerator {
+			return vm.createAsyncGeneratorObject(obj.Bytecode, thisObj, args)
+		}
+		// Async function: return a Promise.
 		if obj.Bytecode.Async {
 			return vm.createAsyncFunction(obj.Bytecode, thisObj, args)
 		}
+		// Sync generator: return a Generator object.
 		if obj.Bytecode.Generator {
 			return vm.createGeneratorObject(obj.Bytecode, thisObj, args)
 		}

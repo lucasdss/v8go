@@ -299,6 +299,72 @@ func (vm *VM) createGeneratorObject(bf *BytecodeFunction, thisObj *JSObject, arg
 	return NewObject(genObj)
 }
 
+// createAsyncGeneratorObject creates an async generator object from bytecode.
+// Used for async function* — returns an AsyncGenerator object (not a Promise).
+// The async generator's .next(), .return(), .throw() methods each return a Promise
+// that resolves with {value, done}.
+// The [Symbol.asyncIterator]() method returns the object itself.
+func (vm *VM) createAsyncGeneratorObject(bf *BytecodeFunction, thisObj *JSObject, args []JSValue) JSValue {
+	// Create underlying sync generator.
+	genVal := vm.createGeneratorObject(bf, thisObj, args)
+	if !genVal.IsObject() || genVal.ObjVal == nil {
+		return Undefined
+	}
+	genObj := genVal.ObjVal
+
+	// Create async generator wrapper object.
+	asyncGenObj := NewJSObject()
+	asyncGenObj.ConstructorName = "AsyncGenerator"
+
+	// Extract sync generator methods.
+	genNext := genObj.Get("next")
+	genReturn := genObj.Get("return")
+	genThrow := genObj.Get("throw")
+
+	// Helper: wrap a generator method call result in a Promise.
+	wrapInPromise := func(method JSValue, args []JSValue) JSValue {
+		return vm.NewPromise(func(resolve func(JSValue), reject func(JSValue)) {
+			var result JSValue
+			if method.IsObject() && method.ObjVal != nil && method.ObjVal.isCallable() {
+				result = method.ObjVal.Call(genObj, args)
+			} else {
+				reject(NewString("AsyncGenerator: method is not callable"))
+				return
+			}
+			resolve(result)
+		})
+	}
+
+	// .next(value) — returns Promise<{value, done}>
+	asyncGenObj.Set("next", vm.createBuiltinFunction("next", func(this *JSObject, args []JSValue) JSValue {
+		return wrapInPromise(genNext, args)
+	}))
+
+	// .return(value) — returns Promise<{value, done}>
+	asyncGenObj.Set("return", vm.createBuiltinFunction("return", func(this *JSObject, args []JSValue) JSValue {
+		return wrapInPromise(genReturn, args)
+	}))
+
+	// .throw(error) — returns Promise<{value, done}> (rejects if error)
+	asyncGenObj.Set("throw", vm.createBuiltinFunction("throw", func(this *JSObject, args []JSValue) JSValue {
+		return wrapInPromise(genThrow, args)
+	}))
+
+	// [Symbol.asyncIterator]() — returns this.
+	// Use the SymVal of the well-known AsyncIteratorSymbol as the property key,
+	// so that JS code doing g[Symbol.asyncIterator]() resolves correctly.
+	selfRef := NewObject(asyncGenObj)
+	asyncGenObj.Set(AsyncIteratorSymbol.SymVal, vm.createBuiltinFunction("[Symbol.asyncIterator]", func(this *JSObject, args []JSValue) JSValue {
+		return selfRef
+	}))
+
+	if AsyncGeneratorPrototype != nil {
+		asyncGenObj.Prototype = AsyncGeneratorPrototype
+	}
+
+	return NewObject(asyncGenObj)
+}
+
 // createAsyncFunction wraps an async bytecode function to return a Promise.
 // Async functions are compiled as generators (function*). This function creates
 // the generator, then drives it via a recursive Promise chain (the "spawn" pattern).

@@ -1719,8 +1719,15 @@ func sparkplugOpResumeGenerator(frame *js.VMFrame, resumePC int) {
 func sparkplugOpGetIterator(frame *js.VMFrame) {
 	if frame.Acc.IsObject() && frame.Acc.ObjVal != nil {
 		obj := frame.Acc.ObjVal
-		// Look for Symbol.iterator or "Symbol(Symbol.iterator)" property.
-		for _, key := range []string{"Symbol(Symbol.iterator)", "Symbol.iterator", "@@iterator"} {
+		// Look for Symbol.iterator, Symbol.asyncIterator, or common string variants.
+		for _, key := range []string{
+			"Symbol(Symbol.iterator)", "Symbol.iterator", "@@iterator",
+			"Symbol(Symbol.asyncIterator)", "Symbol.asyncIterator",
+			js.AsyncIteratorSymbol.SymVal,
+		} {
+			if key == "" {
+				continue
+			}
 			it := obj.Get(key)
 			if it.Tag != js.TagUndefined && it.IsObject() && it.ObjVal != nil {
 				frame.Acc = it

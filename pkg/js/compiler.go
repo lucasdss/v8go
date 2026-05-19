@@ -235,6 +235,9 @@ func (c *Compiler) hoistOneFunction(fd *FunctionDeclaration) {
 	if fd.Async {
 		innerBF.Async = true
 	}
+	if fd.Generator && fd.Async {
+		innerBF.AsyncGenerator = true
+	}
 	templateObj := NewJSObject()
 	templateObj.ConstructorName = "Function"
 	templateObj.Bytecode = innerBF
@@ -1039,6 +1042,9 @@ func (c *Compiler) compileFunctionDeclaration(decl *FunctionDeclaration) {
 	}
 	if decl.Async {
 		innerBF.Async = true
+	}
+	if decl.Generator && decl.Async {
+		innerBF.AsyncGenerator = true
 	}
 
 	// Register the function in the VM by storing bytecode on a global.
@@ -2271,6 +2277,9 @@ func (c *Compiler) compileFunctionExpression(expr *FunctionExpression) {
 	}
 	if expr.Async {
 		innerBF.Async = true
+	}
+	if expr.Generator && expr.Async {
+		innerBF.AsyncGenerator = true
 	}
 	templateObj := NewJSObject()
 	templateObj.ConstructorName = "Function"
