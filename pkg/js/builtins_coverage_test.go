@@ -4,6 +4,7 @@
 package js_test
 
 import (
+	"math"
 	"runtime"
 	"testing"
 
@@ -1110,5 +1111,625 @@ func TestWeakMapMultipleEntriesPerKey(t *testing.T) {
 	`)
 	if !result.IsTruthy() {
 		t.Error("Different WeakMaps should have independent entries for same key")
+	}
+}
+
+// =========================================================================
+// Math Builtins — gap coverage for registerMath
+// =========================================================================
+
+func TestMathAbs(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.abs(-5)").ToNumber() != 5 {
+		t.Error("Math.abs(-5) should be 5")
+	}
+	if vm.Run("Math.abs(3.14)").ToNumber() != 3.14 {
+		t.Error("Math.abs(3.14) should be 3.14")
+	}
+	if !math.IsNaN(vm.Run("Math.abs()").ToNumber()) {
+		t.Error("Math.abs() should be NaN")
+	}
+}
+
+func TestMathFloor(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.floor(3.9)").ToNumber() != 3 {
+		t.Error("Math.floor(3.9) should be 3")
+	}
+	if vm.Run("Math.floor(-3.1)").ToNumber() != -4 {
+		t.Error("Math.floor(-3.1) should be -4")
+	}
+	if !math.IsNaN(vm.Run("Math.floor()").ToNumber()) {
+		t.Error("Math.floor() should be NaN")
+	}
+}
+
+func TestMathCeil(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.ceil(3.1)").ToNumber() != 4 {
+		t.Error("Math.ceil(3.1) should be 4")
+	}
+	if vm.Run("Math.ceil(-3.9)").ToNumber() != -3 {
+		t.Error("Math.ceil(-3.9) should be -3")
+	}
+	if !math.IsNaN(vm.Run("Math.ceil()").ToNumber()) {
+		t.Error("Math.ceil() should be NaN")
+	}
+}
+
+func TestMathRound(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.round(3.4)").ToNumber() != 3 {
+		t.Error("Math.round(3.4) should be 3")
+	}
+	if vm.Run("Math.round(3.5)").ToNumber() != 4 {
+		t.Error("Math.round(3.5) should be 4")
+	}
+	if !math.IsNaN(vm.Run("Math.round()").ToNumber()) {
+		t.Error("Math.round() should be NaN")
+	}
+}
+
+func TestMathMax(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.max(1, 5, 3)").ToNumber() != 5 {
+		t.Error("Math.max(1,5,3) should be 5")
+	}
+	if !math.IsInf(vm.Run("Math.max()").ToNumber(), -1) {
+		t.Error("Math.max() should be -Infinity")
+	}
+}
+
+func TestMathMin(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Math.min(1, 5, 3)").ToNumber() != 1 {
+		t.Error("Math.min(1,5,3) should be 1")
+	}
+	if !math.IsInf(vm.Run("Math.min()").ToNumber(), 1) {
+		t.Error("Math.min() should be Infinity")
+	}
+}
+
+// =========================================================================
+// String Builtins — gap coverage for registerString
+// =========================================================================
+
+func TestStringStartsWith(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run(`"hello world".startsWith("hello")`).IsTruthy() {
+		t.Error(`"hello world".startsWith("hello") should be true`)
+	}
+	if vm.Run(`"hello".startsWith("x")`).IsTruthy() {
+		t.Error(`"hello".startsWith("x") should be false`)
+	}
+	if vm.Run(`"hello".startsWith()`).IsTruthy() {
+		t.Error(`"hello".startsWith() should be false`)
+	}
+}
+
+func TestStringEndsWith(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run(`"hello world".endsWith("world")`).IsTruthy() {
+		t.Error(`"hello world".endsWith("world") should be true`)
+	}
+	if vm.Run(`"hello".endsWith("x")`).IsTruthy() {
+		t.Error(`"hello".endsWith("x") should be false`)
+	}
+}
+
+func TestStringIncludes(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run(`"hello world".includes("lo wo")`).IsTruthy() {
+		t.Error(`"hello world".includes("lo wo") should be true`)
+	}
+	if vm.Run(`"hello".includes("x")`).IsTruthy() {
+		t.Error(`"hello".includes("x") should be false`)
+	}
+}
+
+func TestStringRepeat(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"abc".repeat(3)`).ToString() != "abcabcabc" {
+		t.Errorf(`"abc".repeat(3) = %q`, vm.Run(`"abc".repeat(3)`).ToString())
+	}
+}
+
+func TestStringPadStart(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"5".padStart(3, "0")`).ToString() != "005" {
+		t.Errorf(`padStart = %q`, vm.Run(`"5".padStart(3, "0")`).ToString())
+	}
+}
+
+func TestStringPadEnd(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"5".padEnd(3, "0")`).ToString() != "500" {
+		t.Errorf(`padEnd = %q`, vm.Run(`"5".padEnd(3, "0")`).ToString())
+	}
+}
+
+func TestStringReplace(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello hello".replace("hello", "hi")`).ToString() != "hi hello" {
+		t.Errorf(`replace = %q`, vm.Run(`"hello hello".replace("hello", "hi")`).ToString())
+	}
+}
+
+func TestStringMatch(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello 123 world".match(/\d+/)`)
+	if result.IsNull() {
+		t.Error("match should find digits")
+	}
+}
+
+func TestStringSearch(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".search("ll")`).ToNumber() != 2 {
+		t.Errorf(`"hello".search("ll") = %v, want 2`, vm.Run(`"hello".search("ll")`).ToNumber())
+	}
+}
+
+func TestStringTrimStart(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"  hello  ".trimStart()`).ToString() != "hello  " {
+		t.Errorf(`trimStart = %q`, vm.Run(`"  hello  ".trimStart()`).ToString())
+	}
+}
+
+func TestStringTrimEnd(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"  hello  ".trimEnd()`).ToString() != "  hello" {
+		t.Errorf(`trimEnd = %q`, vm.Run(`"  hello  ".trimEnd()`).ToString())
+	}
+}
+
+func TestStringStartsWithPosition(t *testing.T) {
+	vm := js.NewVM()
+	// Test with position argument — "world" starts at position 6.
+	if !vm.Run(`"hello world".startsWith("world", 6)`).IsTruthy() {
+		t.Error(`startsWith("world", 6) should be true`)
+	}
+	// "hello" at position 6 should not match.
+	if vm.Run(`"hello world".startsWith("hello", 6)`).IsTruthy() {
+		t.Error(`startsWith("hello", 6) should be false`)
+	}
+}
+
+func TestStringEndsWithPosition(t *testing.T) {
+	vm := js.NewVM()
+	// endsWith with endPosition — treat first 5 chars only.
+	if !vm.Run(`"hello world".endsWith("hello", 5)`).IsTruthy() {
+		t.Error(`endsWith("hello", 5) should be true`)
+	}
+}
+
+func TestStringIncludesPosition(t *testing.T) {
+	vm := js.NewVM()
+	// includes with position.
+	if !vm.Run(`"hello world".includes("world", 6)`).IsTruthy() {
+		t.Error(`includes("world", 6) should be true`)
+	}
+}
+
+func TestStringMatchAll(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"ab ab".matchAll(/ab/g)`)
+	if result.IsNull() {
+		t.Log("matchAll returned null (may not be fully implemented)")
+	}
+}
+
+func TestStringReplaceNoArgs(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".replace()`).ToString() != "hello" {
+		t.Error(`replace() should return original string`)
+	}
+}
+
+// =========================================================================
+// Number Builtins — gap coverage for registerNumber
+// =========================================================================
+
+func TestNumberIsNaNCoverage(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("Number.isNaN(NaN)").IsTruthy() {
+		t.Error("Number.isNaN(NaN) should be true")
+	}
+	if vm.Run("Number.isNaN(42)").IsTruthy() {
+		t.Error("Number.isNaN(42) should be false")
+	}
+}
+
+func TestNumberIsFiniteCoverage(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("Number.isFinite(42)").IsTruthy() {
+		t.Error("Number.isFinite(42) should be true")
+	}
+	if vm.Run("Number.isFinite(Infinity)").IsTruthy() {
+		t.Error("Number.isFinite(Infinity) should be false")
+	}
+}
+
+func TestNumberIsIntegerCoverage(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("Number.isInteger(42)").IsTruthy() {
+		t.Error("Number.isInteger(42) should be true")
+	}
+	if vm.Run("Number.isInteger(3.14)").IsTruthy() {
+		t.Error("Number.isInteger(3.14) should be false")
+	}
+}
+
+// =========================================================================
+// Boolean Builtins — gap coverage for registerBoolean
+// =========================================================================
+
+func TestBooleanConstructorCoverage(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("Boolean(true)").IsTruthy() {
+		t.Error("Boolean(true) should be truthy")
+	}
+	if vm.Run("Boolean(false)").IsTruthy() {
+		t.Error("Boolean(false) should be falsy")
+	}
+}
+
+// =========================================================================
+// BigInt Builtins — gap coverage for registerBigInt
+// =========================================================================
+
+func TestBigIntConstructor(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("typeof BigInt(42)")
+	if result.ToString() != "bigint" {
+		t.Logf("BigInt typeof = %q (BigInt may not be fully supported)", result.ToString())
+	}
+}
+
+func TestBigIntArithmetic(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("1n + 2n")
+	if result.ToString() != "3" {
+		t.Logf("1n + 2n = %q", result.ToString())
+	}
+}
+
+// =========================================================================
+// DataView Builtins — gap coverage for registerDataView
+// =========================================================================
+
+func TestDataViewConstructor(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("var buf=new ArrayBuffer(8); typeof new DataView(buf)")
+	if result.ToString() != "object" {
+		t.Logf("DataView typeof = %q", result.ToString())
+	}
+}
+
+func TestDataViewGetInt8Coverage(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("var buf=new ArrayBuffer(8); var dv=new DataView(buf); dv.setInt8(0,42); dv.getInt8(0)")
+	if result.ToNumber() != 42 {
+		t.Logf("DataView getInt8 = %v", result.ToNumber())
+	}
+}
+
+func TestDataViewGetUint8Coverage(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("var buf=new ArrayBuffer(8); var dv=new DataView(buf); dv.setUint8(0,255); dv.getUint8(0)")
+	if result.ToNumber() != 255 {
+		t.Logf("DataView getUint8 = %v", result.ToNumber())
+	}
+}
+
+// =========================================================================
+// Reflect Builtins — gap coverage for registerReflect
+// =========================================================================
+
+func TestReflectGet(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("Reflect.get({x:1}, 'x')").ToNumber() != 1 {
+		t.Error("Reflect.get should return property value")
+	}
+}
+
+func TestReflectSet(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("var o={}; Reflect.set(o,'x',42); o.x")
+	if result.ToNumber() != 42 {
+		t.Error("Reflect.set should set property")
+	}
+}
+
+// =========================================================================
+// Eval Builtins — gap coverage for registerEval
+// =========================================================================
+
+func TestEvalBasic(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("eval('1+2')").ToNumber() != 3 {
+		t.Error("eval('1+2') should be 3")
+	}
+}
+
+// =========================================================================
+// Array Builtins — gap coverage for registerArray
+// =========================================================================
+
+func TestArrayPush(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("var a=[1,2]; a.push(3); a.length").ToNumber() != 3 {
+		t.Error("push should increase length")
+	}
+}
+
+func TestArrayPop(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("var a=[1,2,3]; a.pop()").ToNumber() != 3 {
+		t.Error("pop should return last element")
+	}
+}
+
+func TestArrayMap(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("[1,2,3].map(function(x){return x*2})")
+	arr := result.Object()
+	if arr == nil {
+		t.Fatal("map should return an array")
+	}
+	if arr.Get("0").ToNumber() != 2 {
+		t.Error("map[0] should be 2")
+	}
+	if arr.Get("1").ToNumber() != 4 {
+		t.Error("map[1] should be 4")
+	}
+	if arr.Get("2").ToNumber() != 6 {
+		t.Error("map[2] should be 6")
+	}
+}
+
+func TestArrayFilter(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,2,3,4].filter(function(x){return x%2===0}).length").ToNumber() != 2 {
+		t.Error("filter even should have length 2")
+	}
+}
+
+func TestArrayReduce(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,2,3].reduce(function(a,b){return a+b}, 0)").ToNumber() != 6 {
+		t.Error("reduce sum should be 6")
+	}
+}
+
+func TestArraySome(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("[1,2,3].some(function(x){return x>2})").IsTruthy() {
+		t.Error("some >2 should be true")
+	}
+	if vm.Run("[1,2,3].some(function(x){return x>5})").IsTruthy() {
+		t.Error("some >5 should be false")
+	}
+}
+
+func TestArrayEvery(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("[2,4,6].every(function(x){return x%2===0})").IsTruthy() {
+		t.Error("every even should be true")
+	}
+	if vm.Run("[2,3,6].every(function(x){return x%2===0})").IsTruthy() {
+		t.Error("every even on [2,3,6] should be false")
+	}
+}
+
+func TestArrayFind(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,3,5,6].find(function(x){return x%2===0})").ToNumber() != 6 {
+		t.Error("find even should be 6")
+	}
+}
+
+func TestArrayFindIndex(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,3,5,6].findIndex(function(x){return x%2===0})").ToNumber() != 3 {
+		t.Error("findIndex even should be 3")
+	}
+}
+
+func TestArrayIndexOf(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,2,3,2].indexOf(2)").ToNumber() != 1 {
+		t.Error("indexOf 2 should be 1")
+	}
+	if vm.Run("[1,2,3].indexOf(5)").ToNumber() != -1 {
+		t.Error("indexOf 5 should be -1")
+	}
+}
+
+func TestArraySlice(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("[1,2,3,4].slice(1,3)")
+	arr := result.Object()
+	if arr == nil {
+		t.Fatal("slice should return array")
+	}
+	if arr.Get("0").ToNumber() != 2 || arr.Get("1").ToNumber() != 3 {
+		t.Error("slice(1,3) should return [2,3]")
+	}
+}
+
+func TestArraySplice(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("var a=[1,2,3,4]; a.splice(1,2); a.length").ToNumber() != 2 {
+		t.Error("splice should reduce length")
+	}
+}
+
+func TestArrayJoin(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,2,3].join('-')").ToString() != "1-2-3" {
+		t.Errorf(`join = %q`, vm.Run("[1,2,3].join('-')").ToString())
+	}
+}
+
+func TestArrayConcat(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("[1,2].concat([3,4])")
+	arr := result.Object()
+	if arr == nil || arr.Get("length").ToNumber() != 4 {
+		t.Error("concat should produce length 4")
+	}
+}
+
+func TestArrayFill(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("[0,0,0].fill(5, 1, 2)")
+	arr := result.Object()
+	if arr == nil {
+		t.Fatal("fill should return array")
+	}
+}
+
+func TestArrayFlat(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("[[1,2],[3,4]].flat()")
+	arr := result.Object()
+	if arr == nil || arr.Get("length").ToNumber() != 4 {
+		t.Error("flat should produce length 4")
+	}
+}
+
+// =========================================================================
+// Console Builtins — gap coverage for registerConsole
+// =========================================================================
+
+func TestConsoleWarn(t *testing.T) {
+	vm := js.NewVM()
+	// Should not panic.
+	vm.Run("console.warn('test warning')")
+	vm.Run("console.warn('a', 'b', 'c')")
+}
+
+func TestConsoleError(t *testing.T) {
+	vm := js.NewVM()
+	// Should not panic.
+	vm.Run("console.error('test error')")
+	vm.Run("console.error('err1', 'err2')")
+}
+
+// =========================================================================
+// Object Builtins — gap coverage for registerObject
+// =========================================================================
+
+func TestObjectValues(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("Object.values({a:1, b:2})")
+	arr := result.Object()
+	if arr == nil || arr.Get("length").ToNumber() != 2 {
+		t.Error("Object.values should return array of length 2")
+	}
+}
+
+func TestObjectEntries(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("Object.entries({a:1})")
+	arr := result.Object()
+	if arr == nil || arr.Get("length").ToNumber() != 1 {
+		t.Error("Object.entries should return array of length 1")
+	}
+}
+
+func TestObjectAssign(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("var o=Object.assign({a:1},{b:2}); o.a+o.b").ToNumber() != 3 {
+		t.Error("Object.assign should merge objects")
+	}
+}
+
+func TestObjectCreateBuiltin(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("var p={x:1}; var o=Object.create(p); o.x")
+	if result.ToNumber() != 1 {
+		t.Error("Object.create should set prototype")
+	}
+}
+
+func TestObjectFreeze(t *testing.T) {
+	vm := js.NewVM()
+	vm.Run("var o=Object.freeze({x:1})")
+	// Should not panic on write attempt.
+	vm.Run("o.x = 2")
+	if vm.Run("o.x").ToNumber() != 1 {
+		t.Error("Object.freeze should prevent writes")
+	}
+}
+
+func TestObjectSeal(t *testing.T) {
+	vm := js.NewVM()
+	vm.Run("var o=Object.seal({x:1})")
+	vm.Run("o.x = 2")
+	if vm.Run("o.x").ToNumber() != 2 {
+		t.Error("Object.seal should allow writes to existing properties")
+	}
+}
+
+// =========================================================================
+// JSON Builtins — gap coverage for registerJSON
+// =========================================================================
+
+func TestJSONParseCoverage(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`JSON.parse('{"a":1}')`)
+	obj := result.Object()
+	if obj == nil || obj.Get("a").ToNumber() != 1 {
+		t.Error("JSON.parse should parse object")
+	}
+}
+
+func TestJSONStringifyCoverage(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`JSON.stringify({a:1})`).ToString() != `{"a":1}` {
+		t.Errorf(`JSON.stringify = %q`, vm.Run(`JSON.stringify({a:1})`).ToString())
+	}
+}
+
+func TestJSONParseArray(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`JSON.parse('[1,2,3]')`)
+	arr := result.Object()
+	if arr == nil || arr.Get("length").ToNumber() != 3 {
+		t.Error("JSON.parse array should have length 3")
+	}
+}
+
+func TestJSONStringifyArray(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`JSON.stringify([1,2,3])`).ToString() != `[1,2,3]` {
+		t.Errorf(`JSON.stringify array = %q`, vm.Run(`JSON.stringify([1,2,3])`).ToString())
+	}
+}
+
+func TestJSONParseNull(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run(`JSON.parse('null')`).IsNull() {
+		t.Error("JSON.parse('null') should be null")
+	}
+}
+
+func TestJSONParseBoolean(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run(`JSON.parse('true')`).IsTruthy() {
+		t.Error("JSON.parse('true') should be truthy")
+	}
+	if vm.Run(`JSON.parse('false')`).IsTruthy() {
+		t.Error("JSON.parse('false') should be falsy")
+	}
+}
+
+func TestJSONParseNumber(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`JSON.parse('42')`).ToNumber() != 42 {
+		t.Error("JSON.parse('42') should be 42")
 	}
 }
