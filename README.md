@@ -5,7 +5,7 @@
 [![Coverage](https://img.shields.io/badge/coverage-78.6%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
-V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~96% ECMAScript compatibility** with near-native performance on ARM64.
+V8Go is a clean-room implementation of the V8 JavaScript engine written entirely in Go. It provides a multi-tier JIT compiler (Sparkplug + TurboFan), Hidden Classes (Shapes), Inline Caching, and deoptimization — delivering **~97% ECMAScript compatibility** with near-native performance on ARM64.
 
 The minimum required Go version is 1.24.
 
@@ -146,7 +146,7 @@ vm.Run("console.log('Hello from Go!')")
 └──────────────────────────────────────────────────────────────┘
 ```
 
-## ECMAScript Compatibility: ~96%
+## ECMAScript Compatibility: ~97%
 
 V8Go passes **100% of the curated Test262 benchmark (58/58)** covering the implemented ECMAScript features:
 
@@ -155,7 +155,7 @@ V8Go passes **100% of the curated Test262 benchmark (58/58)** covering the imple
 | **Expressions** | arithmetic, comparison, bitwise, logical, ternary, `typeof`, `instanceof`, `in`, `delete` |
 | **Statements** | `if/else`, `for`, `while`, `do/while`, `switch`, `try/catch/finally`, `throw` |
 | **Functions** | declarations, expressions, arrow functions, default/rest params, closures |
-| **Classes** | constructors, methods, getters/setters, static, `extends`, `super`, static methods |
+| **Classes** | constructors, methods, getters/setters, static, `extends`, `super`, static methods, static `{}` blocks |
 | **Async** | `async/await`, Promise, `Promise.all/race/any/allSettled` |
 | **Generators** | `function*`, `yield`, `yield*`, iterator protocol |
 | **Destructuring** | array, object, nested, default values |
@@ -328,7 +328,6 @@ These ECMAScript features are not yet implemented:
 | Feature | ES Version | Status |
 |---------|-----------|--------|
 | `Intl` API | ES2020+ | Not implemented |
-| Class static `{}` blocks | ES2022 | In progress |
 | Private methods (`#method()`) | ES2022 | Partial (fields only) |
 | `Atomics` / `SharedArrayBuffer` | ES2017 | Not implemented |
 | `Symbol.asyncIterator` / `for-await-of` | ES2018 | Not implemented |
