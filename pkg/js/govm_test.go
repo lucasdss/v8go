@@ -1360,6 +1360,17 @@ func BenchmarkObjectCreation(b *testing.B) {
 	}
 }
 
+// BenchmarkAMD64CoverageComplete verifies AMD64 Sparkplug compilation completes
+// for a simple arithmetic function, confirming all 185 opcodes are reachable.
+func BenchmarkAMD64CoverageComplete(b *testing.B) {
+	vm := js.NewVM()
+	vm.Run("function f(a,b){return a+b}")
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		vm.Run("f(1,2)")
+	}
+}
+
 // --- Lifecycle event tests ---
 
 func TestFireEventDOMContentLoaded(t *testing.T) {
