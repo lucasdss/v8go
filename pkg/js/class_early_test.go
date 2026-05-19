@@ -244,3 +244,91 @@ func TestClassBodyStrictMode(t *testing.T) {
 		t.Log("octal in class body not yet caught (strict mode inside methods not fully propagated)")
 	}
 }
+
+// --- Static initialization blocks (ES2022) ---
+
+func TestClassStaticBlockBasic(t *testing.T) {
+	// static block sets a property on the class constructor.
+	vm := js.NewVM()
+	result := vm.Run(`
+		class Foo {
+			static {
+				this.x = 42;
+			}
+		}
+		Foo.x
+	`)
+	got := result.ToNumber()
+	if got != 42 {
+		t.Errorf("static block basic: Foo.x = %v, want 42", got)
+	}
+}
+
+func TestClassStaticBlockMultiple(t *testing.T) {
+	// multiple static blocks run in order.
+	vm := js.NewVM()
+	result := vm.Run(`
+		class Bar {
+			static { this.x = 1; }
+			static { this.x = this.x * 2; }
+			static { this.x = this.x + 3; }
+		}
+		Bar.x
+	`)
+	got := result.ToNumber()
+	if got != 5 {
+		t.Errorf("multi static block: Bar.x = %v, want 5", got)
+	}
+}
+
+func TestClassStaticBlockThisIsConstructor(t *testing.T) {
+	// this inside static block is the class constructor.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var captured;
+		class C {
+			static {
+				captured = this;
+			}
+		}
+		captured === C ? 1 : 0
+	`)
+	got := result.ToNumber()
+	if got != 1 {
+		t.Errorf("static block this: captured === C = %v, want 1", got)
+	}
+}
+
+func TestClassStaticBlockWithMethods(t *testing.T) {
+	// static block can call static methods.
+	vm := js.NewVM()
+	result := vm.Run(`
+		class Calc {
+			static half() { return 50; }
+			static {
+				this.value = this.half();
+			}
+		}
+		Calc.value
+	`)
+	got := result.ToNumber()
+	if got != 50 {
+		t.Errorf("static block with method: Calc.value = %v, want 50", got)
+	}
+}
+
+func TestClassStaticBlockClassExpression(t *testing.T) {
+	// static blocks also work in anonymous class expressions.
+	vm := js.NewVM()
+	result := vm.Run(`
+		var x = 0;
+		var C = class {
+			static { x = 1; }
+		};
+		x
+	`)
+	got := result.ToNumber()
+	if got != 1 {
+		t.Errorf("static block class expr: x = %v, want 1", got)
+	}
+}
