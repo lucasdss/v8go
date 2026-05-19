@@ -216,7 +216,13 @@ func opCreateClosure(vm *VM, frame *VMFrame, instr Instruction) {
 		closure := NewJSObject()
 		closure.ConstructorName = frame.Acc.ObjVal.ConstructorName
 		closure.Bytecode = frame.Acc.ObjVal.Bytecode
+		if FunctionPrototype != nil {
+			closure.Prototype = FunctionPrototype
+		}
 		closure.Set("length", NewNumber(float64(frame.Acc.ObjVal.Bytecode.NumParams)))
+		if frame.Acc.ObjVal.Bytecode.Name != "" {
+			closure.Set("name", NewString(frame.Acc.ObjVal.Bytecode.Name))
+		}
 		env := NewJSObject()
 		for i, val := range frame.Regs {
 			env.Set(intKey(i), val)

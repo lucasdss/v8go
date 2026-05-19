@@ -878,7 +878,7 @@ func (vm *VM) registerFunctionProto() {
 			return this.CallFunc(thisArg, callArgs)
 		}
 		if this.Bytecode != nil {
-			return callBytecodeFunction(this.Bytecode, callArgs)
+			return callBytecodeFunction(this.Bytecode, thisArg, callArgs)
 		}
 		return Undefined
 	}))
@@ -903,7 +903,7 @@ func (vm *VM) registerFunctionProto() {
 			return this.CallFunc(thisArg, callArgs)
 		}
 		if this.Bytecode != nil {
-			return callBytecodeFunction(this.Bytecode, callArgs)
+			return callBytecodeFunction(this.Bytecode, thisArg, callArgs)
 		}
 		return Undefined
 	}))
@@ -923,15 +923,19 @@ func (vm *VM) registerFunctionProto() {
 				return this.CallFunc(thisArg, allArgs)
 			}
 			if this.Bytecode != nil {
-				return callBytecodeFunction(this.Bytecode, allArgs)
+				return callBytecodeFunction(this.Bytecode, thisArg, allArgs)
 			}
 			return Undefined
 		}
 		return NewObject(bound)
 	}))
 
-	// Attach prototype to all function objects (ObjectPrototype for now).
-	_ = fnProto
+	fnProto.Set("toString", vm.createBuiltinFunction("Function.toString", func(this *JSObject, args []JSValue) JSValue {
+		return NewString("function " + this.ConstructorName + "() { [native code] }")
+	}))
+
+	// Wire Function.prototype to all bytecode function objects and the Function constructor.
+	FunctionPrototype = fnProto
 }
 
 

@@ -471,13 +471,13 @@ func (obj *JSObject) Call(this *JSObject, args []JSValue) JSValue {
 		return obj.CallFunc(this, args)
 	}
 	if obj.Bytecode != nil {
-		return callBytecodeFunction(obj.Bytecode, args)
+		return callBytecodeFunction(obj.Bytecode, this, args)
 	}
 	return Undefined
 }
 
-// callBytecodeFunction executes bytecode with given arguments using a full VM frame.
-func callBytecodeFunction(bf *BytecodeFunction, args []JSValue) JSValue {
+// callBytecodeFunction executes bytecode with given arguments and this binding.
+func callBytecodeFunction(bf *BytecodeFunction, thisArg *JSObject, args []JSValue) JSValue {
 	// Create a minimal VM to execute the bytecode properly.
 	vm := &VM{
 		alloc:      NewAllocator(),
@@ -493,6 +493,11 @@ func callBytecodeFunction(bf *BytecodeFunction, args []JSValue) JSValue {
 		Func:      bf,
 		Regs:      regs,
 		HandlerPC: -1,
+	}
+	if thisArg != nil {
+		frame.This = NewObject(thisArg)
+	} else {
+		frame.This = Undefined
 	}
 	for i, arg := range args {
 		if i < len(frame.Regs) {
@@ -520,3 +525,6 @@ var ObjectPrototype = &JSObject{
 
 // ArrayPrototype holds the Array.prototype object (populated by RegisterBuiltins).
 var ArrayPrototype *JSObject
+
+// FunctionPrototype holds the Function.prototype object with call/apply/bind/toString.
+var FunctionPrototype *JSObject

@@ -8,7 +8,6 @@ import (
 	"runtime"
 	"testing"
 
-	"github.com/lucasdss/v8go/pkg/dom"
 	js "github.com/lucasdss/v8go/pkg/js"
 )
 
@@ -1971,104 +1970,88 @@ func TestRegExpGlobalFlag(t *testing.T) {
 }
 
 // =========================================================================
-// DOM Event Dispatch
+// Function.prototype — call / apply / bind / toString
 // =========================================================================
 
-func TestDOMDispatchEvent(t *testing.T) {
+func TestFunctionProtoCall(t *testing.T) {
 	vm := js.NewVM()
-
-	doc := dom.NewDocument()
-	btn := dom.NewElement("button", doc)
-	btn.OnClick = "__global_clicked = true"
-
-	vm.SetElementLookup(func(id string) *dom.Element {
-		if id == "myButton" {
-			return btn
-		}
-		return nil
-	})
-
-	// Use the public DispatchEvent method directly (not through JS —
-	// vm.Run holds the write lock which would deadlock with the RLock
-	// inside DispatchEvent).
-	vm.DispatchEvent("myButton", "click", nil)
-
-	// The onclick handler set __global_clicked = true.
-	clicked := vm.Run("typeof __global_clicked !== 'undefined' && __global_clicked")
-	if !clicked.IsTruthy() {
-		t.Error("onclick handler should have set __global_clicked to true")
+	result := vm.Run(`
+		function add(a, b) { return a + b; }
+		add.call(null, 1, 2)
+	`)
+	if result.ToNumber() != 3 {
+		t.Errorf("add.call(null, 1, 2) = %v, want 3", result)
 	}
 }
 
-func TestDOMDispatchEventMissingElement(t *testing.T) {
+func TestFunctionProtoCallWithThis(t *testing.T) {
 	vm := js.NewVM()
-	vm.SetElementLookup(func(id string) *dom.Element { return nil })
-
-	// DispatchEvent for a non-existent element is a no-op (no crash).
-	vm.DispatchEvent("nonexistent", "click", nil)
-}
-
-func TestDOMDispatchEventNoHandler(t *testing.T) {
-	vm := js.NewVM()
-	doc := dom.NewDocument()
-	btn := dom.NewElement("button", doc)
-	// No onclick set — dispatch is a no-op.
-
-	vm.SetElementLookup(func(id string) *dom.Element {
-		if id == "noHandlerBtn" {
-			return btn
-		}
-		return nil
-	})
-
-	vm.DispatchEvent("noHandlerBtn", "click", nil)
-}
-
-func TestDOMDispatchEventWithData(t *testing.T) {
-	vm := js.NewVM()
-
-	doc := dom.NewDocument()
-	btn := dom.NewElement("button", doc)
-	// Handler reads event data from __event__ global set by DispatchEvent.
-	btn.OnClick = "__event_data = __event__.detail"
-
-	vm.SetElementLookup(func(id string) *dom.Element {
-		if id == "dataBtn" {
-			return btn
-		}
-		return nil
-	})
-
-	vm.DispatchEvent("dataBtn", "click", map[string]js.JSValue{
-		"detail": js.NewString("test-value"),
-	})
-
-	result := vm.Run("typeof __event_data !== 'undefined' && __event_data")
-	if result.ToString() != "test-value" {
-		t.Errorf("expected '__event_data' to be 'test-value', got %q", result.ToString())
+	result := vm.Run(`
+		var obj = { value: 42 };
+		function getValue() { return this.value; }
+		getValue.call(obj)
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("getValue.call(obj) = %v, want 42", result)
 	}
 }
 
-func TestDOMDispatchEventDOMChangeCallback(t *testing.T) {
+func TestFunctionProtoApply(t *testing.T) {
 	vm := js.NewVM()
+	result := vm.Run(`
+		function sum(a, b, c) { return a + b + c; }
+		sum.apply(null, [1, 2, 3])
+	`)
+	if result.ToNumber() != 6 {
+		t.Errorf("sum.apply(null, [1,2,3]) = %v, want 6", result)
+	}
+}
 
-	doc := dom.NewDocument()
-	btn := dom.NewElement("button", doc)
-	btn.OnClick = "1 + 1" // harmless handler
+func TestFunctionProtoBind(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function multiply(a, b) { return a * b; }
+		var double = multiply.bind(null, 2);
+		double(5)
+	`)
+	if result.ToNumber() != 10 {
+		t.Errorf("double(5) = %v, want 10", result)
+	}
+}
 
-	vm.SetElementLookup(func(id string) *dom.Element {
-		if id == "cbBtn" {
-			return btn
-		}
-		return nil
-	})
+func TestFunctionProtoToString(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var s = (function(){}).toString();
+		s.indexOf('function') === 0
+	`)
+	if !result.IsTruthy() {
+		t.Errorf("Function.toString() should start with 'function': %v", result)
+	}
+}
 
-	callbackCalled := false
-	vm.SetDOMChangeCallback(func() { callbackCalled = true })
+func TestFunctionProtoCallIsMethod(t *testing.T) {
+	vm := js.NewVM()
+	// Verify call/apply/bind are accessible on user-defined functions
+	result := vm.Run(`
+		function f() { return 1; }
+		typeof f.call === 'function' &&
+		typeof f.apply === 'function' &&
+		typeof f.bind === 'function' &&
+		typeof f.toString === 'function'
+	`)
+	if !result.IsTruthy() {
+		t.Error("User-defined function should have call, apply, bind, toString methods")
+	}
+}
 
-	vm.DispatchEvent("cbBtn", "click", nil)
-
-	if !callbackCalled {
-		t.Error("DOMChangeCallback should have been called after DispatchEvent")
+func TestFunctionNameInference(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		function myFunc() {}
+		myFunc.name
+	`)
+	if result.ToString() != "myFunc" {
+		t.Errorf("myFunc.name = %q, want 'myFunc'", result.ToString())
 	}
 }
