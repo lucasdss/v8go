@@ -248,6 +248,7 @@ func (vm *VM) RegisterBuiltins() {
 	vm.registerWeakRef()
 	vm.registerFinalizationRegistry()
 	vm.registerAsyncGenerator()
+	vm.registerIntl()
 }
 
 // registerDOMEvents registers the __goDispatchEvent builtin for inline event handler dispatch.
