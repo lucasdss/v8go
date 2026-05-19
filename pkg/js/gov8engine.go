@@ -88,63 +88,65 @@ func (e *Gov8Engine) SetStyleTransitionHook(fn func(el *dom.Element, prop, oldVa
 // object in the VM, and executes the handler code. Returns true if a handler
 // was found and executed.
 func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bool {
-	e.mu.Lock()
-	if e.vm == nil || elem == nil {
-		e.mu.Unlock()
-		return false
-	}
-	handlerCode := elem.GetEventHandler(eventType)
-	if handlerCode == "" {
-		e.mu.Unlock()
-		return false
-	}
+	// Locked section: validate inputs and prepare the event context.
+	// We release the lock before running handler code because the handler
+	// may trigger notifyDOMChange which also acquires the lock.
+	var handlerCode string
+	vm := func() *VM {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if e.vm == nil || elem == nil {
+			return nil
+		}
+		handlerCode = elem.GetEventHandler(eventType)
+		if handlerCode == "" {
+			return nil
+		}
 
-	// Ensure the document object is available as a global so handler code
-	// can use document.getElementById and other DOM APIs.
-	if _, hasDoc := e.vm.globals.M["document"]; !hasDoc {
-		docObj := NewJSObject()
-		docObj.Set("getElementById", NewObject(builtinFunc("getElementById", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.registry.Builtins["__goGetElementById"](args)
-		})))
-		docObj.Set("createElement", NewObject(builtinFunc("createElement", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.registry.Builtins["__goCreateElement"](args)
-		})))
-		docObj.Set("querySelector", NewObject(builtinFunc("querySelector", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.registry.Builtins["__goQuerySelector"](args)
-		})))
-		docObj.Set("querySelectorAll", NewObject(builtinFunc("querySelectorAll", func(this *JSObject, args []JSValue) JSValue {
-			return e.vm.registry.Builtins["__goQuerySelectorAll"](args)
-		})))
-		e.vm.globals.M["document"] = NewObject(docObj)
-	}
+		// Ensure the document object is available as a global so handler code
+		// can use document.getElementById and other DOM APIs.
+		if _, hasDoc := e.vm.globals.M["document"]; !hasDoc {
+			docObj := NewJSObject()
+			docObj.Set("getElementById", NewObject(builtinFunc("getElementById", func(this *JSObject, args []JSValue) JSValue {
+				return e.vm.registry.Builtins["__goGetElementById"](args)
+			})))
+			docObj.Set("createElement", NewObject(builtinFunc("createElement", func(this *JSObject, args []JSValue) JSValue {
+				return e.vm.registry.Builtins["__goCreateElement"](args)
+			})))
+			docObj.Set("querySelector", NewObject(builtinFunc("querySelector", func(this *JSObject, args []JSValue) JSValue {
+				return e.vm.registry.Builtins["__goQuerySelector"](args)
+			})))
+			docObj.Set("querySelectorAll", NewObject(builtinFunc("querySelectorAll", func(this *JSObject, args []JSValue) JSValue {
+				return e.vm.registry.Builtins["__goQuerySelectorAll"](args)
+			})))
+			e.vm.globals.M["document"] = NewObject(docObj)
+		}
 
-	// Build synthetic event object.
-	eventObj := NewJSObject()
-	eventObj.Set("type", NewString(eventType))
-	targetID := elem.GetAttribute("id")
-	if targetID == "" {
-		targetID = elem.LocalName
-	}
-	targetVal := e.elementToGov8Value(elem)
-	if targetVal.ObjVal != nil {
-		eventObj.Set("target", targetVal)
-	} else {
-		eventObj.Set("target", NewString(targetID))
-	}
-	eventObj.Set("preventDefault", NewObject(builtinFunc("preventDefault", func(this *JSObject, args []JSValue) JSValue {
-		return Undefined
-	})))
+		// Build synthetic event object.
+		eventObj := NewJSObject()
+		eventObj.Set("type", NewString(eventType))
+		targetID := elem.GetAttribute("id")
+		if targetID == "" {
+			targetID = elem.LocalName
+		}
+		targetVal := e.elementToGov8Value(elem)
+		if targetVal.ObjVal != nil {
+			eventObj.Set("target", targetVal)
+		} else {
+			eventObj.Set("target", NewString(targetID))
+		}
+		eventObj.Set("preventDefault", NewObject(builtinFunc("preventDefault", func(this *JSObject, args []JSValue) JSValue {
+			return Undefined
+		})))
 
-	e.vm.globals.M["__event__"] = NewObject(eventObj)
+		e.vm.globals.M["__event__"] = NewObject(eventObj)
+		return e.vm
+	}()
 
-	// Release lock before running handler code — the handler may trigger
-	// notifyDOMChange which also acquires the lock.
-	// Snapshot vm pointer to guard against Close() during execution.
-	vm := e.vm
-	e.mu.Unlock()
 	if vm == nil {
 		return false
 	}
+
 	result := vm.Run(handlerCode)
 	// Store last error for diagnostics. Undefined result with console errors
 	// indicates a parse/runtime error in the handler code.
@@ -166,8 +168,8 @@ func (e *Gov8Engine) DispatchInlineEvent(elem *dom.Element, eventType string) bo
 // notifyDOMChange invokes the DOM change callback if set.
 func (e *Gov8Engine) notifyDOMChange() {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	cb := e.domChangeCallback
-	e.mu.Unlock()
 	if cb != nil {
 		cb()
 	}
@@ -274,20 +276,24 @@ func (e *Gov8Engine) bindDOM() {
 func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 	e.init()
 
-	// Guard against Close() nilling e.vm between init and use.
-	e.mu.Lock()
-	if e.vm == nil {
-		e.mu.Unlock()
+	// Snapshot vm under lock, then release before doing any work.
+	// The lock must not be held during vm.Run() or notifyDOMChange()
+	// as they may trigger callbacks that re-enter the lock.
+	vm := func() *VM {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return e.vm
+	}()
+	if vm == nil {
 		return Undefined, fmt.Errorf("engine closed")
 	}
-	e.mu.Unlock()
 
 	// setTimeout/setInterval are host-provided functions (not part of ECMAScript).
 	// They return stub implementations; full event loop support was removed with QuickJS.
 	setTimeoutDef := `var setTimeout = function(fn, ms) { return 0; }; var setInterval = function(fn, ms) { return 0; };`
 
 	// Wire document.addEventListener and window.onload lifecycle events.
-	e.vm.registry.Builtins["__goAddEventListener"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__goAddEventListener"] = func(args []JSValue) JSValue {
 		if len(args) < 2 {
 			return Undefined
 		}
@@ -296,18 +302,18 @@ func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 		if !callback.IsObject() || callback.ObjVal == nil || !callback.ObjVal.isCallable() {
 			return Undefined
 		}
-		e.vm.AddEventListener(eventType, callback)
+		vm.AddEventListener(eventType, callback)
 		return Undefined
 	}
-	e.vm.registry.Builtins["__goSetOnload"] = func(args []JSValue) JSValue {
+	vm.registry.Builtins["__goSetOnload"] = func(args []JSValue) JSValue {
 		if len(args) == 0 {
 			return Undefined
 		}
-		e.vm.SetOnloadHandler(args[0])
+		vm.SetOnloadHandler(args[0])
 		return Undefined
 	}
-	e.vm.registry.Builtins["__goGetOnload"] = func(args []JSValue) JSValue {
-		return e.vm.GetOnloadHandler()
+	vm.registry.Builtins["__goGetOnload"] = func(args []JSValue) JSValue {
+		return vm.GetOnloadHandler()
 	}
 
 	// Wrap in try-catch for error isolation.
@@ -321,7 +327,7 @@ func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 	`, setTimeoutDef, source)
 
 	// Define window.onload as a getter/setter via Object.defineProperty.
-	_ = e.vm.Run(`Object.defineProperty(globalThis, 'onload', {
+	_ = vm.Run(`Object.defineProperty(globalThis, 'onload', {
 		get: __goGetOnload,
 		set: __goSetOnload,
 		configurable: true,
@@ -329,16 +335,16 @@ func (e *Gov8Engine) Execute(source string) (JSValue, error) {
 	});`)
 
 	// Register console log function (once, under lock).
-	e.vm.Lock()
-	e.vm.registry.Builtins["__golog"] = func(args []JSValue) JSValue {
+	vm.Lock()
+	vm.registry.Builtins["__golog"] = func(args []JSValue) JSValue {
 		if len(args) > 0 && e.consoleLogFn != nil {
 			e.consoleLogFn(args[0].ToString())
 		}
 		return Undefined
 	}
-	e.vm.Unlock()
+	vm.Unlock()
 
-	result := e.vm.Run(wrapped)
+	result := vm.Run(wrapped)
 
 	// Always trigger repaint after JS execution (DOM may have changed).
 	e.notifyDOMChange()
@@ -372,22 +378,27 @@ func (e *Gov8Engine) SetDOMHeap(heap *dom.DOMHeap) {
 
 // CollectGarbage triggers a full GC cycle: DOM pre-GC → JS GC → DOM post-GC.
 func (e *Gov8Engine) CollectGarbage() {
-	e.mu.Lock()
-	heap := e.heap
-	e.mu.Unlock()
+	var heap *dom.DOMHeap
+	func() {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		heap = e.heap
+	}()
 
 	if heap != nil {
 		heap.RunPreGC()
 	}
 
 	// JS-side GC: reset the VM state (reinitialize on next use).
-	e.mu.Lock()
-	if e.vm != nil {
-		// The VM doesn't have a built-in GC — resetting purges accumulated state.
-		e.vm = nil
-		e.initialized = false
-	}
-	e.mu.Unlock()
+	func() {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		if e.vm != nil {
+			// The VM doesn't have a built-in GC — resetting purges accumulated state.
+			e.vm = nil
+			e.initialized = false
+		}
+	}()
 
 	if heap != nil {
 		heap.RunPostGC()
@@ -397,8 +408,8 @@ func (e *Gov8Engine) CollectGarbage() {
 // ConsoleLogs returns accumulated console output from the V8Go VM.
 func (e *Gov8Engine) ConsoleLogs() []string {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	vm := e.vm
-	e.mu.Unlock()
 	if vm == nil {
 		return nil
 	}
@@ -411,8 +422,8 @@ func (e *Gov8Engine) ConsoleLogs() []string {
 // Returns Undefined if the variable does not exist or the VM is not initialized.
 func (e *Gov8Engine) GetGlobal(name string) JSValue {
 	e.mu.Lock()
+	defer e.mu.Unlock()
 	vm := e.vm
-	e.mu.Unlock()
 	if vm == nil {
 		return Undefined
 	}
@@ -426,9 +437,13 @@ func (e *Gov8Engine) GetGlobal(name string) JSValue {
 // Called by the browser after DOM parse and after subresource loading complete.
 func (e *Gov8Engine) FireEvent(eventType string, data map[string]JSValue) {
 	e.init()
-	e.mu.Lock()
-	vm := e.vm
-	e.mu.Unlock()
+
+	// Snapshot vm under lock, release before firing (callbacks may re-enter).
+	vm := func() *VM {
+		e.mu.Lock()
+		defer e.mu.Unlock()
+		return e.vm
+	}()
 	if vm == nil {
 		return
 	}

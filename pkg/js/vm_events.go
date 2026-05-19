@@ -112,9 +112,11 @@ func (vm *VM) DispatchEvent(targetID, eventType string, eventData map[string]JSV
 	})))
 
 	// Store event object as a global for handler code to access.
-	vm.mu.Lock()
-	vm.globals.Set("__event__", NewObject(eventObj))
-	vm.mu.Unlock()
+	func() {
+		vm.mu.Lock()
+		defer vm.mu.Unlock()
+		vm.globals.Set("__event__", NewObject(eventObj))
+	}()
 
 	// Run the handler code in the VM.
 	_ = vm.Run(handlerCode)
