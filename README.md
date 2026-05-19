@@ -189,7 +189,7 @@ Each VM gets a unique `RealmID`. Cross-realm `instanceof` falls back to `Constru
 
 ### How fast is it?
 
-For single operations, the interpreter runs at ~56 ns/op (Apple M3). The Sparkplug JIT (Tier 1) activates after 100 calls and provides 3-10x speedup on hot loops. TurboFan (Tier 2) activates at 1000 calls with escape analysis, load elimination, and poly/mono inlining.
+For single operations, the interpreter runs at ~56 ns/op (Apple M3). Sparkplug JIT (Tier 1) activates after 100 calls. TurboFan (Tier 2) activates at 1000 calls with escape analysis, load elimination, and poly/mono inlining. See the [Performance Comparison](#performance-comparison-apple-m3) table for V8Go vs Chrome V8 speed comparison.
 
 | Benchmark | Interpreter | Sparkplug | Notes |
 |-----------|-------------|-----------|-------|
@@ -262,22 +262,39 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 | Aspect | V8Go | Chrome V8 |
 |--------|------|-----------|
-| **Language** | Go (34K lines) | C++ (2M+ lines) |
-| **Interpreter** | Ignition-style register VM (197 ops) | Ignition register VM |
-| **Baseline JIT** | Sparkplug (185/185 ops ARM64) | Sparkplug (ARM64/x86-64) |
-| **Optimizing JIT** | TurboFan (82 SSA ops, poly/mono inlining, escape analysis) | Maglev + TurboFan |
+| **Language** | Go (34K lines, 155 files) | C++ (2M+ lines) |
+| **Interpreter** | Ignition-style register VM (197 main ops, 375 total) | Ignition register VM |
+| **Baseline JIT** | Sparkplug (196/196 ops ARM64, 73/196 ops AMD64) | Sparkplug (ARM64/x86-64) |
+| **Optimizing JIT** | TurboFan (82 SSA ops, escape analysis, load elim, poly/mono inlining) | Maglev + TurboFan |
 | **Hidden Classes** | Shapes + transition tree + slack tracking | Maps + transitions + slack |
-| **Inline Caching** | mono/poly/mega with runtime patching | mono/poly/mega with code patching |
-| **Deoptimization** | FrameDescription + DeoptInputData | Deoptimizer + TranslationArrays |
+| **Inline Caching** | mono/poly/mega with runtime code patching | mono/poly/mega with code patching |
+| **Deoptimization** | FrameDescription + DeoptInputData, tier reset at 5 deopts | Deoptimizer + TranslationArrays |
 | **GC** | Go GC (safe, managed) + Shadow Stack | Orinoco generational GC |
 | **Memory model** | Go managed heap, no pointer arithmetic | Raw pointers, Smi tagging, pointer compression |
-| **W^X** | Dual-mapped: memfd_create + RW/RX mappings (Linux), MAP_JIT + pthread_jit (Darwin) | RWX pages + W^X on macOS |
+| **W^X** | Dual-mapped: memfd_create (Linux), MAP_JIT + pthread_jit (Darwin) | RWX pages + W^X on macOS |
+| **Security hardening** | ARM64 PAC (Apple Silicon), constant blinding | CFI, sandbox, W^X hardening |
+| **Test suite** | 1,480+ tests, 23 benchmarks, Test262 (58/58) | Test262 (~45K tests), Web Platform Tests |
 | **Peak speed** | ~25% of V8 (estimate) | Baseline |
 | **Safety** | Go memory safety, no use-after-free | V8 sandbox, CFI, W^X hardening |
 | **Portability** | Go cross-compile (GOOS/GOARCH) | Platform-specific builds |
+| **Build time** | ~3s (pure Go) | ~30min (C++ from source) |
 | **Deploy** | `go get github.com/lucasdss/v8go` | CGO + V8 static library (~50MB) |
 
 **Why not faster than 25% of V8?** Chrome V8 uses raw C++ pointer arithmetic, Smi tagging to avoid heap allocations for numbers, and a generational garbage collector optimized over 15 years. V8Go runs within Go's managed runtime — JSValues are struct-copied (56 bytes), the GC is Go's concurrent mark-sweep, and pointer compression is not possible. The escape analysis pass eliminates intermediate JSValues in TurboFan-compiled code. The tradeoff is **Go safety and simplicity** over absolute peak performance. For server-side JavaScript execution where Go integration matters more than microbenchmark speed, V8Go provides a compelling alternative.
+
+### Performance Comparison (Apple M3)
+
+| Benchmark | V8Go (interpreter) | V8Go (JIT) | Chrome V8 |
+|-----------|-------------------|------------|-----------|
+| Simple add (`1 + 2`) | 56 ns/op | — | ~2 ns/op |
+| Multi-arithmetic | 112 ns/op | — | ~5 ns/op |
+| Variable access | 54 ns/op | — | ~2 ns/op |
+| Property access (hot) | 71 ns/op | — | ~3 ns/op |
+| Object literal | 221 ns/op | — | ~10 ns/op |
+| Function call | 241 ns/op | — | ~8 ns/op |
+| Array iteration (100) | 1.7 µs | — | ~100 ns |
+
+**Gap analysis**: V8 is ~20-40x faster for single operations due to Smi tagging (integers never allocate), pointer compression (2x cache density), and C++ inline code. V8Go closes this gap on real workloads where Go↔JS interop overhead dominates — a CGO V8 wrapper adds ~100ns per Go↔JS call, while V8Go's interop is zero-cost (shared memory).
 
 ## Packages
 
