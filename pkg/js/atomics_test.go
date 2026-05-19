@@ -335,3 +335,92 @@ func TestAtomicsType(t *testing.T) {
 		t.Errorf("typeof Atomics: expected 'object', got %v", result)
 	}
 }
+
+// TestAtomicsValidationErrors exercises the error paths in validateAtomicsArgs:
+// too few arguments, non-object first arg, and non-typed-array first arg.
+func TestAtomicsValidationErrors(t *testing.T) {
+	vm := js.NewVM()
+	// Too few args: Atomics.add() with only 0 or 1 arg returns 0.
+	if r := vm.Run("Atomics.add()"); r.ToNumber() != 0 {
+		t.Errorf("Atomics.add() = %v, want 0", r)
+	}
+	if r := vm.Run("Atomics.add(undefined)"); r.ToNumber() != 0 {
+		t.Errorf("Atomics.add(undefined) = %v, want 0", r)
+	}
+	// Non-object first arg
+	if r := vm.Run("Atomics.add(42, 0, 1)"); r.ToNumber() != 0 {
+		t.Errorf("Atomics.add(42, 0, 1) = %v, want 0", r)
+	}
+	// Non-typed-array object (plain object)
+	if r := vm.Run("Atomics.add({}, 0, 1)"); r.ToNumber() != 0 {
+		t.Errorf("Atomics.add({}, 0, 1) = %v, want 0", r)
+	}
+	// Atomics.add with null
+	if r := vm.Run("Atomics.add(null, 0, 1)"); r.ToNumber() != 0 {
+		t.Errorf("Atomics.add(null, 0, 1) = %v, want 0", r)
+	}
+}
+
+// TestAtomicsDetectKindVariants exercises detectKind through all TypedArray
+// variants used with Atomics operations. Each TypedArray constructor name maps
+// to a different typedArrayKind constant, so this covers all switch branches
+// in detectKind.
+func TestAtomicsDetectKindVariants(t *testing.T) {
+	vm := js.NewVM()
+	tests := []struct {
+		ta      string
+		byteLen int
+		initial string
+		delta   string
+		wantOld string
+	}{
+		{"Int8Array", 1, "1", "1", "1"},
+		{"Uint8Array", 1, "1", "1", "1"},
+		{"Uint8ClampedArray", 1, "1", "1", "1"},
+		{"Int16Array", 2, "1", "1", "1"},
+		{"Uint16Array", 2, "1", "1", "1"},
+		{"Int32Array", 4, "1", "1", "1"},
+		{"Uint32Array", 4, "1", "1", "1"},
+		{"Float32Array", 4, "1.5", "0.5", "1.5"},
+		{"Float64Array", 8, "1.5", "0.5", "1.5"},
+	}
+	for _, tt := range tests {
+		t.Run(tt.ta, func(t *testing.T) {
+			src := "var sab = new SharedArrayBuffer(" + itoa(tt.byteLen) + ");" +
+				"var view = new " + tt.ta + "(sab);" +
+				"view[0] = " + tt.initial + ";" +
+				"Atomics.add(view, 0, " + tt.delta + ")"
+			result := vm.Run(src)
+			got := result.ToNumber()
+			want := float64(0)
+			if tt.wantOld == "1.5" {
+				want = 1.5
+			} else {
+				want = 1
+			}
+			if got != want {
+				t.Errorf("%s Atomics.add: expected old=%v, got %v", tt.ta, want, got)
+			}
+		})
+	}
+}
+
+func itoa(n int) string {
+	if n == 0 {
+		return "0"
+	}
+	s := ""
+	neg := false
+	if n < 0 {
+		neg = true
+		n = -n
+	}
+	for n > 0 {
+		s = string(rune('0'+n%10)) + s
+		n /= 10
+	}
+	if neg {
+		s = "-" + s
+	}
+	return s
+}

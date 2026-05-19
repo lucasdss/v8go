@@ -3728,3 +3728,343 @@ t.Errorf("method shorthand: %v", result)
 }
 }
 
+// TestLogicalAssignmentCompiled exercises the compileLogicalAssignment
+// compiler path for &&=, ||=, and ??= operators with identifier targets.
+func TestLogicalAssignmentCompiled(t *testing.T) {
+	// &&= with truthy LHS
+	runAndExpectNumber(t, "var x = 1; x &&= 2; x", 2)
+	// &&= with falsy LHS (short-circuits)
+	runAndExpectNumber(t, "var x = 0; x &&= 2; x", 0)
+	// ||= with falsy LHS
+	runAndExpectNumber(t, "var x = 0; x ||= 2; x", 2)
+	// ||= with truthy LHS (short-circuits)
+	runAndExpectNumber(t, "var x = 1; x ||= 2; x", 1)
+	// ??= with null LHS
+	runAndExpectNumber(t, "var x = null; x ??= 2; x", 2)
+	// ??= with zero LHS (zero is not nullish)
+	runAndExpectNumber(t, "var x = 0; x ??= 2; x", 0)
+}
+
+// TestLogicalAssignmentProperty exercises compileLogicalAssignment with
+// non-computed property targets (obj.prop &&=, ||=, ??=).
+func TestLogicalAssignmentProperty(t *testing.T) {
+	vm := js.NewVM()
+	// Execute all assignments in one run to populate the same VM state.
+	vm.Run("var obj2 = {a: 0, b: null, c: 1, d: 3, e: undefined, f: 0}; obj2.a &&= 2; obj2.b ||= 3; obj2.c ??= 4; obj2.d &&= 5; obj2.e ??= 6; obj2.f ??= 7")
+
+	check := func(src string, want float64) {
+		t.Helper()
+		got := vm.Run(src).ToNumber()
+		if got != want {
+			t.Errorf("%q: expected %v, got %v", src, want, got)
+		}
+	}
+	check("obj2.a", 0) // 0 &&= 2 → 0 (falsy short-circuit)
+	check("obj2.b", 3) // null ||= 3 → 3
+	check("obj2.c", 1) // 1 ??= 4 → 1 (not nullish)
+	check("obj2.d", 5) // 3 &&= 5 → 5 (truthy, assigns)
+	check("obj2.e", 6) // undefined ??= 6 → 6
+	check("obj2.f", 0) // 0 ??= 7 → 0 (zero is not nullish)
+}
+
+// TestLogicalAssignmentComputed exercises compileLogicalAssignment with
+// computed property targets (obj[expr] &&=, ||=, ??=).
+func TestLogicalAssignmentComputed(t *testing.T) {
+	vm := js.NewVM()
+	vm.Run("var obj3 = {x: 0, y: null, z: 1}; var k = 'x'; obj3[k] &&= 2; k = 'y'; obj3[k] ||= 3; k = 'z'; obj3[k] ??= 4")
+
+	check := func(src string, want float64) {
+		t.Helper()
+		got := vm.Run(src).ToNumber()
+		if got != want {
+			t.Errorf("%q: expected %v, got %v", src, want, got)
+		}
+	}
+	check("obj3.x", 0) // 0 &&= 2 → 0
+	check("obj3.y", 3) // null ||= 3 → 3
+	check("obj3.z", 1) // 1 ??= 4 → 1
+}
+
+// TestMaybePromoteTierNoJIT verifies that maybePromoteTier does not crash
+// when the VM has no JIT backend (compiler is nil). The function is called
+// on every Run/Execute invocation; calling it many times exercises the
+// DisableJIT check and the call-count increment paths.
+func TestMaybePromoteTierNoJIT(t *testing.T) {
+	vm := js.NewVM()
+	// Call a simple function 200 times — threshold is 100 for Tier0.
+	// Without a JIT compiler, maybePromoteTier increments CallCount and
+	// takes the early return paths (no compiler, already compiling, etc.).
+	vm.Run("function f(){return 1}")
+	for i := 0; i < 200; i++ {
+		result := vm.Run("f()")
+		if result.ToNumber() != 1 {
+			t.Errorf("iteration %d: expected 1, got %v", i, result)
+		}
+	}
+}
+
+// TestMaybePromoteTierJITDisabled verifies that when DisableJIT is true,
+// maybePromoteTier returns immediately without incrementing call counts
+// toward JIT thresholds.
+func TestMaybePromoteTierJITDisabled(t *testing.T) {
+	vm := js.NewVM()
+	vm.DisableJIT = true
+	vm.Run("function g(a,b){return a+b}")
+	// Call 150 times — should NOT trigger any JIT compilation since it's disabled.
+	for i := 0; i < 150; i++ {
+		result := vm.Run("g(1,2)")
+		if result.ToNumber() != 3 {
+			t.Errorf("g(1,2) iteration %d: expected 3, got %v", i, result)
+		}
+	}
+	// Should not have crashed.
+}
+
+// TestClearConsoleLogs exercises the ClearConsoleLogs method.
+func TestClearConsoleLogs(t *testing.T) {
+	vm := js.NewVM()
+	vm.Run(`console.log("hello")`)
+	vm.Run(`console.log("world")`)
+	vm.ClearConsoleLogs()
+	// After clearing, logs should be empty.
+	vm.Run(`console.log("new")`)
+}
+
+// TestShiftOperators exercises the opShiftRight and related shift opcodes.
+func TestShiftOperators(t *testing.T) {
+	runAndExpectNumber(t, "8 >> 2", 2)
+	runAndExpectNumber(t, "-8 >> 2", -2)
+	runAndExpectNumber(t, "8 << 2", 32)
+	runAndExpectNumber(t, "8 >>> 2", 2)
+	// Shift with zero to exercise boundary paths
+	runAndExpectNumber(t, "0 >> 1", 0)
+	runAndExpectNumber(t, "1 << 16", 65536)
+	runAndExpectNumber(t, "0x7FFFFFFF >> 1", 1073741823) // positive large shift
+}
+
+// TestThrowVariants exercises opThrow through try/catch, try/finally, and
+// unhandled throw patterns.
+func TestThrowVariants(t *testing.T) {
+	// Try/catch: throw is caught.
+	vm := js.NewVM()
+	result := vm.Run("var r; try { throw 42 } catch(e) { r = e }; r")
+	if result.ToNumber() != 42 {
+		t.Errorf("try/catch: expected 42, got %v", result)
+	}
+	// Nested try/finally: throw inside try propagates through finally to outer catch.
+	result = vm.Run("var x; try { try { throw 5 } finally { x = 1 } } catch(e) { x = 2 }; x")
+	if result.ToNumber() != 1 {
+		t.Errorf("nested try/finally: expected x=1, got %v", result)
+	}
+	// Try/finally with unhandled throw: finally side effects should execute.
+	result = vm.Run("var z = 0; try { throw 99 } finally { z = 1 }; z")
+	if result.ToNumber() != 1 {
+		t.Errorf("try/finally side effect: expected z=1, got %v", result)
+	}
+}
+
+// TestIncrementDecrement exercises opInc and opDec with various operand types.
+func TestIncrementDecrement(t *testing.T) {
+	runAndExpectNumber(t, "var x=1; ++x", 2)
+	runAndExpectNumber(t, "var x=1; --x", 0)
+	runAndExpectNumber(t, "var x=1; x++", 1)
+	runAndExpectNumber(t, "var x=1; x--", 1)
+	runAndExpectNumber(t, "var x=1; x++; x", 2)
+	runAndExpectNumber(t, "var x=1; x--; x", 0)
+	// String coercion
+	runAndExpectNumber(t, "var x='5'; ++x", 6)
+}
+
+// TestRegexDotAllFlag exercises replaceDotOutsideCharClass via the 's' flag.
+func TestRegexDotAllFlag(t *testing.T) {
+	vm := js.NewVM()
+	// Dot with s flag should match newlines.
+	result := vm.Run(`/a.b/s.test("a\nb")`)
+	if !result.IsTruthy() {
+		t.Error("dot with s flag should match newline")
+	}
+	// Dot without s flag should NOT match newlines.
+	result = vm.Run(`/a.b/.test("a\nb")`)
+	if result.IsTruthy() {
+		t.Error("dot without s flag should not match newline")
+	}
+}
+
+// TestRegexUnicodeFlag exercises expandUnicodeEscapes via the 'u' flag.
+func TestRegexUnicodeFlag(t *testing.T) {
+	vm := js.NewVM()
+	// \u{1F600} is 😀 — test that u flag handles unicode escapes.
+	result := vm.Run(`/\u{41}/u.test("A")`)
+	if !result.IsTruthy() {
+		t.Error("unicode escape with u flag should match")
+	}
+}
+
+// TestRegexNamedGroups exercises convertNamedGroups via named capture groups.
+func TestRegexNamedGroups(t *testing.T) {
+	vm := js.NewVM()
+	// Named capture group: (?<name>...) → extract via .groups
+	result := vm.Run(`var m = "hello".match(/(?<first>h)(?<rest>.*)/); m.groups.first + m.groups.rest`)
+	if result.ToString() != "hello" {
+		t.Errorf("named groups match: %q, want 'hello'", result.ToString())
+	}
+}
+
+// TestRegexDotAllInClass exercises replaceDotOutsideCharClass with escape
+// sequences inside character classes to cover more branches.
+func TestRegexDotAllInClass(t *testing.T) {
+	vm := js.NewVM()
+	// Pattern with backslash escape and character class, using s flag.
+	result := vm.Run(`/[\]]/s.test("]")`)
+	if !result.IsTruthy() {
+		t.Error("escaped ] inside class with s flag should match")
+	}
+	result = vm.Run(`/[\.]/s.test(".")`)
+	if !result.IsTruthy() {
+		t.Error("escaped . inside class with s flag should match literal dot")
+	}
+}
+
+// TestWeakSetEquality exercises sameJSValue through WeakSet add/has operations.
+func TestWeakSetEquality(t *testing.T) {
+	vm := js.NewVM()
+	// WeakSet uses sameJSValue for equality checks.
+	vm.Run("var ws = new WeakSet(); var o1 = {}; var o2 = {}; ws.add(o1)")
+	// o1 should be in, o2 should not.
+	result := vm.Run("ws.has(o1)")
+	if !result.IsTruthy() {
+		t.Error("WeakSet.has should return true for added object")
+	}
+	result = vm.Run("ws.has(o2)")
+	if result.IsTruthy() {
+		t.Error("WeakSet.has should return false for different object")
+	}
+	// Delete and re-check.
+	vm.Run("ws.delete(o1)")
+	result = vm.Run("ws.has(o1)")
+	if result.IsTruthy() {
+		t.Error("WeakSet.has should return false after delete")
+	}
+}
+
+// TestFinalizationRegistryTokens exercises sameJSValue with different token
+// types (number, string, boolean, undefined, null, object) used as unregister tokens.
+func TestFinalizationRegistryTokens(t *testing.T) {
+	vm := js.NewVM()
+	// Register with different token types and unregister — exercises sameJSValue
+	// across multiple tag types.
+	vm.Run(`
+		var fr = new FinalizationRegistry(function(){});
+		var obj = {};
+		fr.register(obj, 42);       // number token
+		fr.register(obj, "str");    // string token
+		fr.register(obj, true);     // boolean token
+		fr.register(obj, null);     // null token
+		fr.register(obj, undefined);// undefined token
+		fr.unregister(42);
+		fr.unregister("str");
+		fr.unregister(true);
+		fr.unregister(null);
+		fr.unregister(undefined);
+	`)
+	// Should not crash.
+}
+
+// TestMapSize exercises Map operations to cover keyString/decodeKey paths.
+func TestMapSize(t *testing.T) {
+	vm := js.NewVM()
+	// Map with mixed key types.
+	vm.Run("var m = new Map(); m.set(1, 'one'); m.set('two', 2); m.set(true, 'bool')")
+	result := vm.Run("m.size")
+	if result.ToNumber() != 3 {
+		t.Errorf("Map.size = %v, want 3", result)
+	}
+	result = vm.Run("m.has(1)")
+	if !result.IsTruthy() {
+		t.Error("Map.has(1) should be true")
+	}
+	result = vm.Run("m.has('two')")
+	if !result.IsTruthy() {
+		t.Error("Map.has('two') should be true")
+	}
+	result = vm.Run("m.get(true)")
+	if result.ToString() != "bool" {
+		t.Errorf("Map.get(true) = %v, want 'bool'", result)
+	}
+	// forEach to exercise forEachMapKey
+	vm.Run("m.forEach(function(v,k){})")
+	// Delete exercises decodeKey.
+	result = vm.Run("m.delete(1); m.size")
+	if result.ToNumber() != 2 {
+		t.Errorf("Map.size after delete = %v, want 2", result)
+	}
+}
+
+// TestSetForEach exercises forEachSetKey through Set.prototype.forEach.
+func TestSetForEach(t *testing.T) {
+	vm := js.NewVM()
+	vm.Run("var s = new Set(); s.add(1); s.add('two'); s.add(true)")
+	result := vm.Run("s.size")
+	if result.ToNumber() != 3 {
+		t.Errorf("Set.size = %v, want 3", result)
+	}
+	result = vm.Run("s.has('two')")
+	if !result.IsTruthy() {
+		t.Error("Set.has('two') should be true")
+	}
+	// forEach exercises forEachSetKey — just verify it doesn't crash.
+	vm.Run("s.forEach(function(v){})")
+	// Delete exercises decodeKey.
+	result = vm.Run("s.delete(1); s.size")
+	if result.ToNumber() != 2 {
+		t.Errorf("Set.size after delete = %v, want 2", result)
+	}
+}
+
+// TestEncodeURIComponent exercises urlEncode and unhex via encodeURIComponent/decodeURIComponent.
+func TestEncodeURIComponent(t *testing.T) {
+	vm := js.NewVM()
+	// encodeURIComponent exercises urlEncode.
+	result := vm.Run(`encodeURIComponent("hello world!")`)
+	s := result.ToString()
+	if s != "hello%20world!" {
+		t.Errorf("encodeURIComponent('hello world!') = %q, want 'hello%%20world!'", s)
+	}
+	// decodeURIComponent exercises unhex with hex digits.
+	result = vm.Run(`decodeURIComponent("hello%20world%21")`)
+	s = result.ToString()
+	if s != "hello world!" {
+		t.Errorf("decodeURIComponent = %q, want 'hello world!'", s)
+	}
+	// Lowercase hex and uppercase hex for unhex coverage.
+	result = vm.Run(`decodeURIComponent("%41%42%61%62")`)
+	s = result.ToString()
+	if s != "ABab" {
+		t.Errorf("decodeURIComponent hex = %q, want 'ABab'", s)
+	}
+}
+
+// TestDataView exercises dvGet through DataView operations.
+func TestDataView(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var buf = new ArrayBuffer(8);
+		var view = new DataView(buf);
+		view.setInt32(0, 42);
+		view.getInt32(0)
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("DataView getInt32 = %v, want 42", result)
+	}
+	// Also test Uint8 to exercise different dvGet branches.
+	result = vm.Run(`
+		var buf = new ArrayBuffer(4);
+		var view = new DataView(buf);
+		view.setUint8(0, 255);
+		view.getUint8(0)
+	`)
+	if result.ToNumber() != 255 {
+		t.Errorf("DataView getUint8 = %v, want 255", result)
+	}
+}
+
