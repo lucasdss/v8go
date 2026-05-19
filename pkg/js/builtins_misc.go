@@ -410,12 +410,59 @@ func (vm *VM) registerJSON() {
 		return jsonNodeToJSValue(&result)
 	}))
 
-	// JSON.stringify(value) — converts JS value to JSON string.
+	// JSON.stringify(value, replacer?, space?) — converts JS value to JSON string.
 	jsonObj.Set("stringify", vm.createBuiltinFunction("JSON.stringify", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return NewString("undefined")
 		}
-		result := jsToJSON(args[0])
+		value := args[0]
+
+		// Parse replacer (second argument).
+		var replacerFn func(key string, val JSValue) JSValue
+		var whitelist map[string]bool
+		if len(args) > 1 && args[1].IsObject() && args[1].ObjVal != nil {
+			replacerObj := args[1].ObjVal
+			if replacerObj.isCallable() {
+				// Function replacer: called with (key, value) for each entry.
+				replacerFn = func(key string, val JSValue) JSValue {
+					return replacerObj.Call(nil, []JSValue{NewString(key), val})
+				}
+			} else if lenVal := replacerObj.Get("length"); lenVal.IsNumber() {
+				// Array whitelist: only include keys present in the array.
+				whitelist = make(map[string]bool)
+				n := int(lenVal.ToNumber())
+				for i := 0; i < n; i++ {
+					k := replacerObj.Get(intKey(i)).ToString()
+					if k != "" {
+						whitelist[k] = true
+					}
+				}
+			}
+		}
+
+		// Parse space (third argument) for indentation.
+		indent := ""
+		if len(args) > 2 {
+			spaceArg := args[2]
+			if spaceArg.IsNumber() {
+				n := int(spaceArg.ToNumber())
+				if n < 0 {
+					n = 0
+				}
+				if n > 10 {
+					n = 10
+				}
+				indent = strings.Repeat(" ", n)
+			} else if spaceArg.IsString() {
+				s := spaceArg.ToString()
+				if len(s) > 10 {
+					s = s[:10]
+				}
+				indent = s
+			}
+		}
+
+		result := jsToJSONWithReplacer(value, replacerFn, whitelist, indent)
 		return NewString(result)
 	}))
 
@@ -670,6 +717,121 @@ func jsToJSON(v JSValue) string {
 			}
 		}
 		return "{" + strings.Join(parts, ",") + "}"
+	}
+	return "null"
+}
+
+// jsToJSONWithReplacer serializes a JSValue to JSON with optional replacer function
+// or whitelist array and optional indentation.
+func jsToJSONWithReplacer(v JSValue, replacer func(key string, val JSValue) JSValue, whitelist map[string]bool, indent string) string {
+	if replacer != nil {
+		v = replacer("", v)
+	}
+	return serializeValue(v, replacer, whitelist, indent, 0)
+}
+
+func serializeValue(v JSValue, replacer func(key string, val JSValue) JSValue, whitelist map[string]bool, indent string, depth int) string {
+	prefix := ""
+	suffix := ""
+	if indent != "" {
+		prefix = "\n" + strings.Repeat(indent, depth+1)
+		suffix = "\n" + strings.Repeat(indent, depth)
+	}
+
+	switch v.Tag {
+	case TagUndefined:
+		return "undefined"
+	case TagNull:
+		return "null"
+	case TagBoolean:
+		if v.BoolVal {
+			return "true"
+		}
+		return "false"
+	case TagNumber:
+		return strconv.FormatFloat(v.NumVal, 'f', -1, 64)
+	case TagString:
+		b, _ := json.Marshal(v.StrVal)
+		return string(b)
+	case TagSymbol:
+		return "" // Symbols are ignored in JSON
+	case TagObject:
+		if v.ObjVal == nil {
+			return "null"
+		}
+		if v.ObjVal.isCallable() {
+			return "undefined"
+		}
+		// Check if it's an array.
+		lenVal := v.ObjVal.Get("length")
+		if lenVal.IsNumber() {
+			length := int(lenVal.ToNumber())
+			if indent == "" {
+				parts := make([]string, 0, length)
+				for i := 0; i < length; i++ {
+					elem := v.ObjVal.Get(intKey(i))
+					if replacer != nil {
+						elem = replacer(intKey(i), elem)
+					}
+					val := serializeValue(elem, replacer, nil, indent, depth+1)
+					if val == "undefined" {
+						val = "null"
+					}
+					parts = append(parts, val)
+				}
+				return "[" + strings.Join(parts, ",") + "]"
+			}
+			parts := make([]string, 0, length)
+			for i := 0; i < length; i++ {
+				elem := v.ObjVal.Get(intKey(i))
+				if replacer != nil {
+					elem = replacer(intKey(i), elem)
+				}
+				val := serializeValue(elem, replacer, nil, indent, depth+1)
+				if val == "undefined" {
+					val = "null"
+				}
+				parts = append(parts, prefix+val)
+			}
+			return "[" + strings.Join(parts, ",") + suffix + "]"
+		}
+		// Regular object.
+		parts := make([]string, 0)
+		if !v.ObjVal.Shape.IsDictionary {
+			for name, entry := range v.ObjVal.Shape.Properties {
+				if entry.Offset >= v.ObjVal.propLen() {
+					continue
+				}
+				// Whitelist filtering.
+				if whitelist != nil && !whitelist[name] {
+					continue
+				}
+				propVal := v.ObjVal.propAt(entry.Offset)
+				if replacer != nil {
+					propVal = replacer(name, propVal)
+				}
+				if propVal.IsUndefined() {
+					continue
+				}
+				if propVal.IsObject() && propVal.ObjVal != nil && propVal.ObjVal.isCallable() {
+					continue
+				}
+				key, _ := json.Marshal(name)
+				valStr := serializeValue(propVal, replacer, nil, indent, depth+1)
+				if valStr == "undefined" {
+					continue
+				}
+				if indent != "" {
+					parts = append(parts, prefix+string(key)+": "+valStr)
+				} else {
+					parts = append(parts, string(key)+":"+valStr)
+				}
+			}
+		}
+		if len(parts) == 0 {
+			return "{}"
+		}
+		return "{" + strings.Join(parts, ",") + suffix + "}"
 	}
 	return "null"
 }

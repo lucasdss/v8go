@@ -2218,6 +2218,62 @@ func TestJSONParseNumber(t *testing.T) {
 	}
 }
 
+func TestJSONStringifyReplacer(t *testing.T) {
+	vm := js.NewVM()
+	// Function replacer: transform values.
+	result := vm.Run(`
+		JSON.stringify({a:1,b:2}, function(k,v) { return k==='a' ? v*10 : v })
+	`)
+	s := result.ToString()
+	if !strings.Contains(s, `"a":10`) || !strings.Contains(s, `"b":2`) {
+		t.Errorf("JSON.stringify with function replacer: %q", s)
+	}
+	// Function replacer can filter out values by returning undefined.
+	result = vm.Run(`
+		JSON.stringify({a:1,b:2}, function(k,v) { return k==='b' ? undefined : v })
+	`)
+	s = result.ToString()
+	if strings.Contains(s, `"b"`) || !strings.Contains(s, `"a":1`) {
+		t.Errorf("JSON.stringify filter via replacer: %q", s)
+	}
+}
+
+func TestJSONStringifyArrayWhitelist(t *testing.T) {
+	vm := js.NewVM()
+	// Array whitelist: only include listed keys.
+	result := vm.Run(`JSON.stringify({a:1,b:2,c:3}, ["a","c"])`)
+	s := result.ToString()
+	if !strings.Contains(s, `"a":1`) || !strings.Contains(s, `"c":3`) || strings.Contains(s, `"b"`) {
+		t.Errorf("JSON.stringify with array whitelist: %q", s)
+	}
+}
+
+func TestJSONStringifySpace(t *testing.T) {
+	vm := js.NewVM()
+	// Space as number: indent with that many spaces.
+	result := vm.Run(`JSON.stringify({a:1,b:2}, null, 2)`)
+	s := result.ToString()
+	if !strings.Contains(s, `  "a": 1`) || !strings.Contains(s, `  "b": 2`) {
+		t.Errorf("JSON.stringify with space=2: %q", s)
+	}
+	// Space as string: use first 10 chars as indent.
+	result = vm.Run(`JSON.stringify({a:1}, null, ">>")`)
+	expectedStr := "{\n>>\"a\": 1\n}"
+	if result.ToString() != expectedStr {
+		t.Errorf("JSON.stringify with space='>>':\n got:  %q\n want: %q", result.ToString(), expectedStr)
+	}
+	// No space: compact output.
+	result = vm.Run(`JSON.stringify({a:1,b:2})`)
+	s = result.ToString()
+	if !strings.Contains(s, `"a":1`) || !strings.Contains(s, `"b":2`) {
+		t.Errorf("JSON.stringify compact: %q", s)
+	}
+	// Verify compact output has no whitespace padding.
+	if strings.Contains(s, "\n") || strings.Contains(s, "  ") {
+		t.Errorf("JSON.stringify compact should have no indentation: %q", s)
+	}
+}
+
 // =========================================================================
 // WeakSet Builtins — gap coverage for registerWeakSet
 // =========================================================================
