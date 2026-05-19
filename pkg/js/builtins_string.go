@@ -365,6 +365,38 @@ func (vm *VM) registerString() {
 	}))
 
 	// String.prototype.at(index) — ES2022
+	stringProto.Set("replaceAll", vm.createBuiltinFunction("String.replaceAll", func(this *JSObject, args []JSValue) JSValue {
+		str := this.Get("__value__").ToString()
+		if len(args) == 0 {
+			return NewString(str)
+		}
+		search := args[0]
+		replace := ""
+		if len(args) > 1 {
+			replace = args[1].ToString()
+		}
+
+		// If searchValue is a RegExp, it must have the global flag per spec.
+		if search.IsObject() && search.ObjVal != nil && search.ObjVal.ConstructorName == "RegExp" {
+			if !search.ObjVal.Get("global").IsTruthy() {
+				return NewString(str)
+			}
+			// Delegate to the RegExp's [Symbol.replace] (respects global flag).
+			symReplace := search.ObjVal.Get("[Symbol.replace]")
+			if symReplace.IsObject() && symReplace.ObjVal != nil && symReplace.ObjVal.CallFunc != nil {
+				return symReplace.ObjVal.CallFunc(search.ObjVal, []JSValue{NewString(str), args[1]})
+			}
+		}
+
+		// For string search values, split and join to replace all occurrences.
+		searchStr := search.ToString()
+		if searchStr == "" {
+			return NewString(str)
+		}
+		parts := strings.Split(str, searchStr)
+		return NewString(strings.Join(parts, replace))
+	}))
+
 	stringProto.Set("at", vm.createBuiltinFunction("String.at", func(this *JSObject, args []JSValue) JSValue {
 		s := this.Get("__value__").ToString()
 		if len(args) == 0 || len(s) == 0 {

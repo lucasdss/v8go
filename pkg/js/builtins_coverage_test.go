@@ -1651,6 +1651,30 @@ func TestStringReplaceNoArgs(t *testing.T) {
 	}
 }
 
+func TestStringReplaceAll(t *testing.T) {
+	vm := js.NewVM()
+	// Basic string replacement.
+	if vm.Run(`"abab".replaceAll("a","x")`).ToString() != "xbxb" {
+		t.Errorf(`replaceAll: %q`, vm.Run(`"abab".replaceAll("a","x")`).ToString())
+	}
+	// No match returns original.
+	if vm.Run(`"abc".replaceAll("z","x")`).ToString() != "abc" {
+		t.Errorf(`replaceAll no match: %q`, vm.Run(`"abc".replaceAll("z","x")`).ToString())
+	}
+	// No args returns original.
+	if vm.Run(`"hello".replaceAll()`).ToString() != "hello" {
+		t.Error(`replaceAll() should return original`)
+	}
+	// Single arg returns with empty replacement.
+	if vm.Run(`"a-b-c".replaceAll("-")`).ToString() != "abc" {
+		t.Errorf(`replaceAll single arg: %q`, vm.Run(`"a-b-c".replaceAll("-")`).ToString())
+	}
+	// RegExp with global flag.
+	if vm.Run(`"a-b-c".replaceAll(/-/g,":")`).ToString() != "a:b:c" {
+		t.Errorf(`replaceAll regexp: %q`, vm.Run(`"a-b-c".replaceAll(/-/g,":")`).ToString())
+	}
+}
+
 // =========================================================================
 // Number Builtins — gap coverage for registerNumber
 // =========================================================================
