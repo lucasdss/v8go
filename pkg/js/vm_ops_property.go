@@ -109,6 +109,7 @@ var builtinPrototypes = map[string]bool{
 	"WeakRef":              true,
 	"Promise":              true,
 	"ArrayBuffer":          true,
+	"SharedArrayBuffer":    true,
 	"DataView":             true,
 	"Int8Array":            true,
 	"Uint8Array":           true,
