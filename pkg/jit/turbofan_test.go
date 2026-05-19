@@ -333,3 +333,147 @@ func TestTurboFanInlining(t *testing.T) {
 
 	t.Logf("Inlining succeeded: call node replaced with callee body")
 }
+
+// =============================================================================
+// Benchmark Helpers — bytecode generation for SSA pass benchmarks
+// =============================================================================
+
+// makePropertyLoopFunc creates bytecode for:
+//
+//	function f(obj) { return obj.x + obj.x; }
+//
+// This has a redundant property load that load elimination can detect.
+func makePropertyLoopFunc() *js.BytecodeFunction {
+	propIdx := uint8(0)
+	return &js.BytecodeFunction{
+		Name:         "propLoop",
+		NumRegisters: 2,
+		NumParams:    1,
+		Instructions: []js.Instruction{
+			{Op: js.OpLdar, OperandA: 0},                                // load obj → acc
+			{Op: js.OpLdaNamedProperty, OperandA: 0, OperandB: propIdx}, // obj.x → acc
+			{Op: js.OpStar, OperandA: 1},                                // store → reg 1
+			{Op: js.OpLdar, OperandA: 0},                                // load obj → acc
+			{Op: js.OpLdaNamedProperty, OperandA: 0, OperandB: propIdx}, // obj.x → acc (redundant)
+			{Op: js.OpAdd, OperandA: 1},                                 // acc + reg1
+			{Op: js.OpReturn},
+		},
+		Constants: []js.JSValue{js.NewString("x")},
+	}
+}
+
+// makePolyCallFuncForBench creates bytecode for:
+//
+//	function f(obj) { return obj.method(); }
+//
+// With polymorphic IC feedback for 2 different shapes.
+func makePolyCallFuncForBench() *js.BytecodeFunction {
+	bf := &js.BytecodeFunction{
+		Name:         "polyCallBench",
+		NumRegisters: 2,
+		NumParams:    1,
+		Instructions: []js.Instruction{
+			{Op: js.OpLdar, OperandA: 0},               // load obj → acc
+			{Op: js.OpLdaNamedProperty, OperandA: 0, OperandB: 0}, // obj.method → acc
+			{Op: js.OpStar, OperandA: 1},               // store → reg 1
+			{Op: js.OpLdar, OperandA: 1},               // load method → acc
+			{Op: js.OpCall0, OperandA: 1, OperandC: 0}, // method() with IC slot 0
+			{Op: js.OpReturn},
+		},
+		Constants: []js.JSValue{js.NewString("method")},
+	}
+
+	callee1 := &js.BytecodeFunction{
+		Name:         "CalleeA",
+		NumRegisters: 1,
+		Instructions: []js.Instruction{
+			{Op: js.OpLdaSmi, OperandA: 42},
+			{Op: js.OpReturn},
+		},
+	}
+	callee2 := &js.BytecodeFunction{
+		Name:         "CalleeB",
+		NumRegisters: 1,
+		Instructions: []js.Instruction{
+			{Op: js.OpLdaSmi, OperandA: 99},
+			{Op: js.OpReturn},
+		},
+	}
+
+	bf.ICVector = js.NewFeedbackVector(1)
+	bf.ICVector.Slots[0].State = js.ICPolymorphic
+	bf.ICVector.Slots[0].PolyCallCount = 2
+	bf.ICVector.Slots[0].PolyCallees[0] = callee1
+	bf.ICVector.Slots[0].PolyCallees[1] = callee2
+
+	return bf
+}
+
+// =============================================================================
+// Micro-Benchmarks for SSA Passes
+// =============================================================================
+
+// BenchmarkEscapeAnalysis measures escape analysis + elimination on a loop function.
+func BenchmarkEscapeAnalysis(b *testing.B) {
+	bf := makeArithLoopFunc()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		g := BuildSSA(bf)
+		info := analyzeEscape(g)
+		eliminateNonEscaping(g, info)
+	}
+}
+
+// BenchmarkLoadElimination measures redundant load elimination on a property access function.
+func BenchmarkLoadElimination(b *testing.B) {
+	bf := makePropertyLoopFunc()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		g := BuildSSA(bf)
+		eliminateRedundantLoads(g)
+	}
+}
+
+// BenchmarkPolymorphicInlining measures polymorphic call inlining.
+func BenchmarkPolymorphicInlining(b *testing.B) {
+	bf := makePolyCallFuncForBench()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		g := BuildSSA(bf)
+		inlinePolymorphicCalls(g)
+	}
+}
+
+// =============================================================================
+// End-to-End TurboFan Compilation Benchmarks
+// =============================================================================
+
+// BenchmarkTurboFanWithOpts measures full TurboFan compilation with all
+// optimization passes enabled (escape analysis, load elimination, inlining).
+func BenchmarkTurboFanWithOpts(b *testing.B) {
+	bf := makeArithLoopFunc()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		buf, err := CompileTurboFan(bf)
+		if err != nil {
+			b.Fatal(err)
+		}
+		buf.Free()
+	}
+}
+
+// BenchmarkTurboFanWithoutOpts measures TurboFan compilation with optimizations
+// disabled — only SSA build, register allocation, and lowering.
+func BenchmarkTurboFanWithoutOpts(b *testing.B) {
+	bf := makeArithLoopFunc()
+	b.ResetTimer()
+	for i := 0; i < b.N; i++ {
+		g := BuildSSA(bf)
+		ra := allocateRegisters(g)
+		buf, err := lowerSSAToARM64(g, ra)
+		if err != nil {
+			b.Fatal(err)
+		}
+		buf.Free()
+	}
+}

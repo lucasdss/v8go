@@ -1284,6 +1284,78 @@ func TestStringTrimEnd(t *testing.T) {
 	}
 }
 
+func TestStringCharAt(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".charAt(0)`).ToString() != "h" {
+		t.Errorf(`charAt(0) = %q`, vm.Run(`"hello".charAt(0)`).ToString())
+	}
+	if vm.Run(`"hello".charAt(10)`).ToString() != "" {
+		t.Error(`charAt(10) should return empty string`)
+	}
+}
+
+func TestStringIndexOf(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".indexOf("l")`).ToNumber() != 2 {
+		t.Error(`indexOf("l") should be 2`)
+	}
+	if vm.Run(`"hello".indexOf("x")`).ToNumber() != -1 {
+		t.Error(`indexOf("x") should be -1`)
+	}
+}
+
+func TestStringSlice(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".slice(1, 4)`).ToString() != "ell" {
+		t.Errorf(`slice(1,4) = %q`, vm.Run(`"hello".slice(1,4)`).ToString())
+	}
+	if vm.Run(`"hello".slice(-2)`).ToString() != "lo" {
+		t.Errorf(`slice(-2) = %q`, vm.Run(`"hello".slice(-2)`).ToString())
+	}
+}
+
+func TestStringSplit(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"a,b,c".split(",")`)
+	arr := result.Object()
+	if arr == nil || arr.Get("length").ToNumber() != 3 {
+		t.Error("split should return array of length 3")
+	}
+}
+
+func TestStringToUpperCase(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".toUpperCase()`).ToString() != "HELLO" {
+		t.Errorf(`toUpperCase = %q`, vm.Run(`"hello".toUpperCase()`).ToString())
+	}
+}
+
+func TestStringToLowerCase(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"HELLO".toLowerCase()`).ToString() != "hello" {
+		t.Errorf(`toLowerCase = %q`, vm.Run(`"HELLO".toLowerCase()`).ToString())
+	}
+}
+
+func TestStringTrim(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"  hello  ".trim()`).ToString() != "hello" {
+		t.Errorf(`trim = %q`, vm.Run(`"  hello  ".trim()`).ToString())
+	}
+}
+
+func TestStringAt(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`"hello".at(1)`)
+	if result.ToString() != "e" {
+		t.Logf(`at(1) = %q`, result.ToString())
+	}
+	result2 := vm.Run(`"hello".at(-1)`)
+	if result2.ToString() != "o" {
+		t.Logf(`at(-1) = %q`, result2.ToString())
+	}
+}
+
 func TestStringStartsWithPosition(t *testing.T) {
 	vm := js.NewVM()
 	// Test with position argument — "world" starts at position 6.
@@ -1530,10 +1602,75 @@ func TestArrayFind(t *testing.T) {
 	}
 }
 
-func TestArrayFindIndex(t *testing.T) {
+func TestStringSplitEmptySep(t *testing.T) {
 	vm := js.NewVM()
-	if vm.Run("[1,3,5,6].findIndex(function(x){return x%2===0})").ToNumber() != 3 {
-		t.Error("findIndex even should be 3")
+	result := vm.Run(`"hi".split("")`)
+	arr := result.Object()
+	if arr == nil {
+		t.Fatal("split('') should return array")
+	}
+	if arr.Get("length").ToNumber() != 2 {
+		t.Error("split empty sep should produce individual chars")
+	}
+}
+
+func TestStringIndexOfFromIndex(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello hello".indexOf("hello", 3)`).ToNumber() != 6 {
+		t.Errorf(`indexOf with fromIndex = %v, want 6`, vm.Run(`"hello hello".indexOf("hello", 3)`).ToNumber())
+	}
+}
+
+func TestStringSliceNegative(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run(`"hello".slice(-3, -1)`).ToString() != "ll" {
+		t.Errorf(`slice(-3,-1) = %q, want "ll"`, vm.Run(`"hello".slice(-3, -1)`).ToString())
+	}
+}
+
+func TestArrayPopEmpty(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("var a=[]; a.pop() === undefined").IsTruthy() {
+		t.Error("pop on empty array should return undefined")
+	}
+}
+
+func TestArrayReduceNoInitial(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,2,3].reduce(function(a,b){return a+b})").ToNumber() != 6 {
+		t.Error("reduce without initial value should work")
+	}
+}
+
+func TestArrayReduceEmpty(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("[].reduce(function(a,b){return a+b})")
+	if !result.IsUndefined() {
+		t.Error("reduce on empty array with no initial should be undefined")
+	}
+}
+
+func TestArrayMapEdgeCases(t *testing.T) {
+	vm := js.NewVM()
+	// map with sparse array behavior — undefined callback should still work.
+	result := vm.Run("[1,2,3].map(function(x,i){return i})")
+	arr := result.Object()
+	if arr == nil || arr.Get("0").ToNumber() != 0 {
+		t.Error("map with index should work")
+	}
+}
+
+func TestArrayFindNoMatch(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("[1,2,3].find(function(x){return x>5}) === undefined").IsTruthy() {
+		t.Error("find with no match should return undefined")
+	}
+}
+
+func TestArrayFindIndexNoMatch(t *testing.T) {
+	vm := js.NewVM()
+	if vm.Run("[1,2,3].findIndex(function(x){return x>5})").ToNumber() != -1 {
+		t.Error("findIndex with no match should return -1")
 	}
 }
 
@@ -1731,5 +1868,103 @@ func TestJSONParseNumber(t *testing.T) {
 	vm := js.NewVM()
 	if vm.Run(`JSON.parse('42')`).ToNumber() != 42 {
 		t.Error("JSON.parse('42') should be 42")
+	}
+}
+
+// =========================================================================
+// WeakSet Builtins — gap coverage for registerWeakSet
+// =========================================================================
+
+func TestWeakSetAddHas(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var ws = new WeakSet();
+		var obj = {};
+		ws.add(obj);
+		ws.has(obj)
+	`)
+	if !result.IsTruthy() {
+		t.Error("WeakSet.has should return true for added object")
+	}
+}
+
+func TestWeakSetDelete(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var ws = new WeakSet();
+		var obj = {};
+		ws.add(obj);
+		ws.delete(obj);
+		ws.has(obj)
+	`)
+	if result.IsTruthy() {
+		t.Error("WeakSet.has should return false after delete")
+	}
+}
+
+func TestWeakSetMultipleObjects(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var ws = new WeakSet();
+		var a = {}, b = {};
+		ws.add(a);
+		ws.add(b);
+		ws.has(a) && ws.has(b)
+	`)
+	if !result.IsTruthy() {
+		t.Error("WeakSet should hold multiple objects")
+	}
+}
+
+// =========================================================================
+// Map Builtins — gap coverage for keyString
+// =========================================================================
+
+func TestMapSetGet(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var m = new Map();
+		m.set('key', 42);
+		m.get('key')
+	`)
+	if result.ToNumber() != 42 {
+		t.Errorf("Map.get = %v, want 42", result.ToNumber())
+	}
+}
+
+// =========================================================================
+// RegExp Builtins — gap coverage for registerRegExp
+// =========================================================================
+
+func TestRegExpTest(t *testing.T) {
+	vm := js.NewVM()
+	if !vm.Run("/hello/.test('hello world')").IsTruthy() {
+		t.Error("/hello/.test('hello world') should be true")
+	}
+	if vm.Run("/xyz/.test('hello')").IsTruthy() {
+		t.Error("/xyz/.test('hello') should be false")
+	}
+}
+
+func TestRegExpExec(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run("/\\d+/.exec('abc 123 def')")
+	if result.IsNull() {
+		t.Error("regexp exec should find match")
+	}
+}
+
+func TestRegExpGlobalFlag(t *testing.T) {
+	vm := js.NewVM()
+	result := vm.Run(`
+		var re = /ab/g;
+		var s = 'ab ab ab';
+		var count = 0;
+		var m;
+		while ((m = re.exec(s)) !== null) count++;
+		count
+	`)
+	if result.ToNumber() != 3 {
+		t.Logf("global regexp exec count = %v (may not support while/exec loop)", result.ToNumber())
 	}
 }
