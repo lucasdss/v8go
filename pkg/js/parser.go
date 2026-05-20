@@ -2245,6 +2245,52 @@ func (p *Parser) parseObjectExpression() Node {
 			}
 			p.advance()
 			continue
+		// Generator method: *method() { ... } (no async prefix)
+		} else if tok.Kind == TokStar {
+			p.advance() // consume *
+			if p.peek().Kind == TokLParen {
+				// Method named "*": *() { ... }
+				p.consume(TokLParen)
+				params := p.parseFormalParameters()
+				p.consume(TokRParen)
+				p.enterFunction()
+				body := p.parseBlockStatement()
+				p.leaveFunction()
+				fn := &FunctionExpression{Name: "*", Params: params, Body: body, Generator: true}
+				obj.Properties = append(obj.Properties, ObjectProperty{Key: "*", Value: fn})
+			} else if p.peek().Kind == TokLBracket {
+				// Computed name: *[expr]() { ... }
+				p.advance()
+				computedName := p.parseExpression()
+				p.consume(TokRBracket)
+				p.consume(TokLParen)
+				params := p.parseFormalParameters()
+				p.consume(TokRParen)
+				p.enterFunction()
+				body := p.parseBlockStatement()
+				p.leaveFunction()
+				fn := &FunctionExpression{Params: params, Body: body, Generator: true}
+				obj.Properties = append(obj.Properties, ObjectProperty{
+					Key: "", Value: fn, Computed: true, ComputedKey: computedName,
+				})
+			} else if p.isPropertyName(p.peek().Kind) {
+				methodName := p.advance().Value
+				p.consume(TokLParen)
+				params := p.parseFormalParameters()
+				p.consume(TokRParen)
+				p.enterFunction()
+				body := p.parseBlockStatement()
+				p.leaveFunction()
+				fn := &FunctionExpression{Name: methodName, Params: params, Body: body, Generator: true}
+				obj.Properties = append(obj.Properties, ObjectProperty{Key: methodName, Value: fn})
+			} else {
+				p.addError("expected method name after * in object literal")
+			}
+			if p.peek().Kind != TokComma {
+				break
+			}
+			p.advance()
+			continue
 		} else {
 			p.addError("expected property key")
 			p.advance()
