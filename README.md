@@ -191,7 +191,7 @@ Each VM gets a unique `RealmID`. Cross-realm `instanceof` falls back to `Constru
 
 ### How fast is it?
 
-For single operations, the interpreter runs at ~63 ns/op (Apple M3). Sparkplug JIT (Tier 1) activates after 100 calls with 1.7x loop speedup. TurboFan (Tier 2) activates at 1000 calls with 9 optimization passes (LICM, GVN, escape analysis, load elimination, poly/mono inlining). Object creation sees 2.2x speedup under JIT. See [Performance](#performance) for detailed benchmarks.
+For single operations, the interpreter runs at ~57 ns/op (Apple M3). Sparkplug JIT (Tier 1) activates after 100 calls with 1.7x loop speedup. TurboFan (Tier 2) activates at 1000 calls with 9 optimization passes. Object creation sees 2.0x speedup under JIT. See [Performance](#performance) for detailed benchmarks.
 
 **It is not a replacement for Chrome V8 in raw speed.** V8's C++ JIT uses pointer tagging, Smi encoding, and generational GC to achieve higher peak performance. V8Go trades absolute speed for Go safety, portability, and near-zero CGO.
 
@@ -225,30 +225,39 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 
 | Benchmark | ns/op | B/op | allocs/op |
 |-----------|-------|------|-----------|
-| `1 + 2` (simple arithmetic) | 63 | 0 | 0 |
-| `1 + 2 * 3 - 4 / 2` (multi-op) | 121 | 0 | 0 |
-| `var x = 42; x` (variable) | 58 | 0 | 0 |
-| `obj.x` (property, cold) | 117 | 0 | 0 |
-| `obj.x + obj.y` (property, hot) | 91 | 0 | 0 |
-| `f(1, 2)` (function call) | 274 | 512 | 1 |
-| `{a: 1, b: 2}` (object literal) | 250 | 320 | 1 |
-| Array iteration (100 items) | 2,182 ns | 1,504 | 3 |
+| `1 + 2` (simple arithmetic) | 57 | 0 | 0 |
+| `1 + 2 * 3 - 4 / 2` (multi-op) | 131 | 0 | 0 |
+| `var x = 42; x` (variable) | 56 | 0 | 0 |
+| `obj.x` (property, cold) | 109 | 0 | 0 |
+| `obj.x + obj.y` (property, hot) | 86 | 0 | 0 |
+| `f(1, 2)` (function call) | 238 | 512 | 1 |
+| `{a: 1, b: 2}` (object literal) | 224 | 320 | 1 |
+| Array iteration (100 items) | 1,880 | 1,504 | 3 |
 
 ### JIT Tier Performance (100-iteration loop)
 
 | Tier | ns/op | Speedup |
 |------|-------|---------|
-| Interpreter | 13,034 | 1.0x |
-| Sparkplug (Tier 1, 100 calls) | 7,473 | **1.7x** |
-| TurboFan (Tier 2, 1000 calls) | 7,408 | **1.8x** |
+| Interpreter | 11,755 | 1.0x |
+| Sparkplug (Tier 1, 100 calls) | 6,833 | **1.7x** |
+| TurboFan (Tier 2, 1000 calls) | 6,814 | **1.7x** |
 
 ### JIT on single operations
 
 | Benchmark | Interpreter | JIT | Impact |
 |-----------|-------------|-----|--------|
-| Function call | 274 ns | 278 ns | = (VM overhead dominates) |
-| Object creation | 250 ns | 116 ns | **2.2x faster** |
-| Property access (hot) | 91 ns | 98 ns | = (IC already handles this) |
+| Function call | 238 ns | 241 ns | = (VM overhead dominates) |
+| Object creation | 224 ns | 111 ns | **2.0x faster** |
+| Property access (hot) | 86 ns | 85 ns | = (IC already handles this) |
+
+### JIT Compilation Speed (ARM64, Apple M3)
+
+| Benchmark | ns/op | B/op | allocs/op |
+|-----------|-------|------|-----------|
+| Sparkplug compile (add) | 3,310 | 1,363 | 19 |
+| Sparkplug compile (loop) | 6,302 | 5,070 | 68 |
+| TurboFan compile (add) | 2,854 | 2,047 | 30 |
+| TurboFan compile (loop) | 6,333 | 7,111 | 116 |
 
 ### JIT Compilation Speed (ARM64, Apple M3)
 
@@ -259,7 +268,7 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 | TurboFan compile (add function) | 3,202 | 2,027 | 30 |
 | TurboFan compile (arithmetic loop) | 6,457 | 7,336 | 116 |
 
-**Performance ceiling:** The interpreter runs at ~63 ns/op. Sparkplug and TurboFan eliminate interpreter dispatch overhead for loops (1.7-1.8x) and object creation (2.2x). Single operations see no JIT gain because VM function-call overhead dominates. Full native speedup requires comprehensive inlining and stack-allocated JSValues.
+**Performance ceiling:** The interpreter runs at ~57 ns/op. Sparkplug and TurboFan eliminate interpreter dispatch overhead for loops (1.7x) and object creation (2.0x). Single operations see no JIT gain because VM function-call overhead dominates. Full native speedup requires comprehensive inlining and stack-allocated JSValues.
 
 ### AMD64 JIT
 
@@ -319,14 +328,14 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 | Benchmark | V8Go (interpreter) | V8Go (Sparkplug) | V8Go (TurboFan) | Chrome V8 |
 |-----------|-------------------|-----------------|-----------------|-----------|
-| Simple add (`1 + 2`) | 63 ns | — | — | ~2 ns |
-| Variable access | 58 ns | — | — | ~2 ns |
-| Property access (hot) | 91 ns | 91 ns | — | ~3 ns |
-| Function call | 274 ns | 261 ns | — | ~8 ns |
-| Object literal | 250 ns | — | **116 ns** | ~10 ns |
-| Loop (100 iter) | 13.0 µs | 7.5 µs | 7.4 µs | ~100 ns |
+| Simple add (`1 + 2`) | 57 ns | — | — | ~2 ns |
+| Variable access | 56 ns | — | — | ~2 ns |
+| Property access (hot) | 86 ns | 85 ns | — | ~3 ns |
+| Function call | 238 ns | 241 ns | — | ~8 ns |
+| Object literal | 224 ns | — | **111 ns** | ~10 ns |
+| Loop (100 iter) | 11.8 µs | 6.8 µs | 6.8 µs | ~100 ns |
 
-**Gap analysis**: V8 is ~25-30x faster for single operations due to Smi tagging (integers never allocate), pointer compression (2x cache density), and C++ inline code. V8Go closes this gap on loops (1.7-1.8x Sparkplug/TurboFan) and object creation (2.2x). A CGO V8 wrapper adds ~100ns per Go↔JS call; V8Go's interop is zero-cost (shared memory).
+**Gap analysis**: V8 is ~25-30x faster for single operations due to Smi tagging (integers never allocate), pointer compression (2x cache density), and C++ inline code. V8Go closes this gap on loops (1.7x Sparkplug/TurboFan) and object creation (2.0x). A CGO V8 wrapper adds ~100ns per Go↔JS call; V8Go's interop is zero-cost (shared memory).
 
 ## Packages
 
