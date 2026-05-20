@@ -124,6 +124,17 @@ type VM struct {
 	// pending promises. Keyed by the promise object; drained on settle.
 	promiseReactions map[*JSObject][]promiseReaction
 
+	// lastGeneratorError holds the last unhandled error thrown from a
+	// generator body. Set by makeGeneratorNext when the generator's
+	// bytecode throws without a catch handler. Callers of generator
+	// .next()/.throw()/.return() must check and clear this field to
+	// properly propagate errors into async function promise rejection.
+	lastGeneratorError JSValue
+
+	// functionPrototype caches Function.prototype for use by
+	// createBuiltinFunction, so builtins inherit .call/.apply/.bind.
+	functionPrototype *JSObject
+
 	// JIT backend interfaces (injected at construction, nil for pure interpreter).
 	compiler  JITCompiler
 	patcher   ICPatcher

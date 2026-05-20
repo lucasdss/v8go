@@ -263,6 +263,8 @@ func runTest262Test(t *Test262Test, vm *js.VM) (bool, string) {
 
 	// Inject async harness wrapper AFTER includes (to override any harness $DONE).
 	// The wrapper defines $asyncDone/$asyncError and a $DONE shim that sets them.
+	// IMPORTANT: $DONE must be a property of globalThis (not just a var),
+	// because asyncHelpers.js checks Object.prototype.hasOwnProperty.call(globalThis, "$DONE").
 	if isAsyncTest {
 		sourceBuilder.WriteString("var $asyncDone = false;\n")
 		sourceBuilder.WriteString("var $asyncError = undefined;\n")
@@ -270,6 +272,8 @@ func runTest262Test(t *Test262Test, vm *js.VM) (bool, string) {
 		sourceBuilder.WriteString("    $asyncDone = true;\n")
 		sourceBuilder.WriteString("    if (error !== undefined) { $asyncError = error; }\n")
 		sourceBuilder.WriteString("};\n")
+		// Also expose $DONE as a property of globalThis for asyncTest() detection.
+		sourceBuilder.WriteString("globalThis.$DONE = $DONE;\n")
 	}
 
 	sourceBuilder.WriteString(t.Source)

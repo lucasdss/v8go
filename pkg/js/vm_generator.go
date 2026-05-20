@@ -147,6 +147,16 @@ func (vm *VM) makeGeneratorNext(genObj *JSObject, gs *GeneratorState) JSValue {
 				GenState:  gs,
 			}
 			result := vm.executeFrame(frame)
+			// Check for unhandled throw from generator body.
+			if frame.Thrown.Tag != TagUndefined {
+				vm.lastGeneratorError = frame.Thrown
+				frame.Thrown = Undefined
+				gs.Done = true
+				resultObj := NewJSObject()
+				resultObj.Set("value", Undefined)
+				resultObj.Set("done", True)
+				return NewObject(resultObj)
+			}
 			// After execution, check generator state.
 			if gs.Done {
 				// Generator completed (OpReturn was hit).
@@ -196,6 +206,16 @@ func (vm *VM) makeGeneratorNext(genObj *JSObject, gs *GeneratorState) JSValue {
 			frame.This = vm.globalObject()
 		}
 		result := vm.executeFrame(frame)
+		// Check for unhandled throw from generator body (first call).
+		if frame.Thrown.Tag != TagUndefined {
+			vm.lastGeneratorError = frame.Thrown
+			frame.Thrown = Undefined
+			gs.Done = true
+			resultObj := NewJSObject()
+			resultObj.Set("value", Undefined)
+			resultObj.Set("done", True)
+			return NewObject(resultObj)
+		}
 		if gs.Done {
 			if result.IsObject() && result.ObjVal != nil {
 				if _, ok := result.ObjVal.getOwn("done"); ok {
@@ -327,6 +347,13 @@ func (vm *VM) createAsyncGeneratorObject(bf *BytecodeFunction, thisObj *JSObject
 			var result JSValue
 			if method.IsObject() && method.ObjVal != nil && method.ObjVal.isCallable() {
 				result = method.ObjVal.Call(genObj, args)
+				// Check for unhandled generator error propagated via lastGeneratorError.
+				if vm.lastGeneratorError.Tag != TagUndefined {
+					err := vm.lastGeneratorError
+					vm.lastGeneratorError = Undefined
+					reject(err)
+					return
+				}
 			} else {
 				reject(NewString("AsyncGenerator: method is not callable"))
 				return
@@ -394,6 +421,13 @@ func (vm *VM) createAsyncFunction(bf *BytecodeFunction, thisObj *JSObject, args 
 					callArgs = append(callArgs, prevValue)
 				}
 				result = nextFn.ObjVal.Call(genObj, callArgs)
+				// Check for unhandled generator error propagated via lastGeneratorError.
+				if vm.lastGeneratorError.Tag != TagUndefined {
+					err := vm.lastGeneratorError
+					vm.lastGeneratorError = Undefined
+					reject(err)
+					return
+				}
 			} else {
 				reject(NewString("Async function: generator.next is not callable"))
 				return

@@ -218,6 +218,7 @@ func init() {
 // RegisterBuiltins wires up all standard built-in objects into the VM.
 func (vm *VM) RegisterBuiltins() {
 	vm.registerConsole()
+	vm.registerFunctionProto() // Must be before registerObject so builtins inherit Function.prototype
 	vm.registerObject()
 	vm.registerArray()
 	vm.registerString()
@@ -226,7 +227,6 @@ func (vm *VM) RegisterBuiltins() {
 	vm.registerGlobalFunctions()
 	vm.registerJSON()
 	vm.registerError()
-	vm.registerFunctionProto()
 	vm.registerPromise()
 	vm.registerMap()
 	vm.registerSet()
@@ -321,6 +321,12 @@ func (vm *VM) createBuiltinFunction(name string, fn func(this *JSObject, args []
 	obj := NewJSObject()
 	obj.ConstructorName = "Function"
 	obj.CallFunc = fn
+	// Inherit Function.prototype so .call, .apply, .bind are available.
+	// Without this, builtins can't be used with .call() — which breaks
+	// patterns like Object.prototype.hasOwnProperty.call(obj, prop).
+	if vm.functionPrototype != nil {
+		obj.Prototype = vm.functionPrototype
+	}
 	return NewObject(obj)
 }
 
@@ -880,9 +886,15 @@ func (vm *VM) registerFunctionProto() {
 	fnProto := NewJSObject()
 	fnProto.ConstructorName = "Function"
 
+	// Set vm.functionPrototype early so subsequent createBuiltinFunction
+	// calls can inherit from it. This is critical: builtins like
+	// Object.prototype.hasOwnProperty need .call/.apply to work.
+	vm.functionPrototype = fnProto
+	FunctionPrototype = fnProto
+
 	fnProto.Set("call", vm.createBuiltinFunction("Function.call", func(this *JSObject, args []JSValue) JSValue {
 		// this is the function object to call.
-		if !this.isCallable() && this.Bytecode == nil {
+		if this == nil || (!this.isCallable() && this.Bytecode == nil) {
 			return Undefined
 		}
 		var thisArg *JSObject
@@ -952,9 +964,6 @@ func (vm *VM) registerFunctionProto() {
 	fnProto.Set("toString", vm.createBuiltinFunction("Function.toString", func(this *JSObject, args []JSValue) JSValue {
 		return NewString("function " + this.ConstructorName + "() { [native code] }")
 	}))
-
-	// Wire Function.prototype to all bytecode function objects and the Function constructor.
-	FunctionPrototype = fnProto
 }
 
 

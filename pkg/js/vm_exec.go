@@ -60,6 +60,9 @@ func (vm *VM) Run(source string) JSValue {
 	vm.mu.Lock()
 	defer vm.mu.Unlock()
 
+	// Clear any stale generator error from a previous run.
+	vm.lastGeneratorError = Undefined
+
 	// Check bytecode cache first.
 	if bf, ok := vm.registry.Cache[source]; ok {
 		vm.maybePromoteTier(bf)

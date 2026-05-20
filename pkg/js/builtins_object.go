@@ -18,6 +18,9 @@ func (vm *VM) registerObject() {
 
 	// Object.prototype.hasOwnProperty
 	ObjectPrototype.Set("hasOwnProperty", vm.createBuiltinFunction("hasOwnProperty", func(this *JSObject, args []JSValue) JSValue {
+		if this == nil {
+			return False
+		}
 		if len(args) == 0 {
 			return False
 		}
