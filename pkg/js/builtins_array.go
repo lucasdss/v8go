@@ -564,7 +564,88 @@ func (vm *VM) registerArray() {
 		return NewObject(result)
 	}))
 
-	arrayCtor.Set("isArray", vm.createBuiltinFunction("Array.isArray", func(this *JSObject, args []JSValue) JSValue {
+	// Array.fromAsync — ES2024 (Stage 4)
+// Returns a Promise that resolves to a new Array from an async iterable,
+// sync iterable, or array-like object. If a mapFn is provided, each element
+// is passed through it before insertion.
+arrayCtor.Set("fromAsync", vm.createBuiltinFunction("Array.fromAsync", func(this *JSObject, args []JSValue) JSValue {
+// Array.fromAsync returns a Promise that resolves to a new Array.
+return vm.NewPromise(func(resolve, reject func(JSValue)) {
+var items []JSValue
+if len(args) > 0 {
+source := args[0]
+var mapFn func(*JSObject, []JSValue) JSValue
+var thisArg *JSObject
+if len(args) > 1 && args[1].IsObject() && args[1].ObjVal != nil && args[1].ObjVal.isCallable() {
+mapFn = args[1].ObjVal.Call
+if len(args) > 2 && args[2].IsObject() && args[2].ObjVal != nil {
+thisArg = args[2].ObjVal
+}
+}
+if source.IsObject() && source.ObjVal != nil {
+obj := source.ObjVal
+// Try to call @@asyncIterator method if present.
+asyncIterFn := obj.Get(AsyncIteratorSymbol.SymVal)
+if asyncIterFn.IsObject() && asyncIterFn.ObjVal != nil && asyncIterFn.ObjVal.isCallable() {
+itResult := asyncIterFn.ObjVal.Call(obj, nil)
+if itResult.IsObject() && itResult.ObjVal != nil {
+iter := itResult.ObjVal
+for {
+nextFn := iter.Get("next")
+if nextFn.IsObject() && nextFn.ObjVal != nil && nextFn.ObjVal.isCallable() {
+nv := nextFn.ObjVal.Call(iter, nil)
+if nv.IsObject() && nv.ObjVal != nil {
+if nv.ObjVal.Get("done").IsTruthy() {
+break
+}
+elem := nv.ObjVal.Get("value")
+if mapFn != nil {
+elem = mapFn(thisArg, []JSValue{elem, NewNumber(float64(len(items)))})
+}
+items = append(items, elem)
+}
+} else {
+break
+}
+}
+}
+} else {
+// Array-like: iterate 0..length-1.
+lengthVal := obj.Get("length")
+if lengthVal.Tag == TagNumber {
+length := int(lengthVal.NumVal)
+if length < 0 {
+length = 0
+}
+if length > maxArrayLen {
+length = maxArrayLen
+}
+for i := 0; i < length; i++ {
+elem := obj.Get(intKey(i))
+if mapFn != nil {
+elem = mapFn(thisArg, []JSValue{elem, NewNumber(float64(i))})
+}
+items = append(items, elem)
+}
+}
+}
+}
+}
+// Build result array.
+result := NewJSObject()
+result.ConstructorName = "Array"
+if ArrayPrototype != nil {
+result.Prototype = ArrayPrototype
+}
+for i, item := range items {
+result.Set(intKey(i), item)
+}
+result.Set("length", NewNumber(float64(len(items))))
+resolve(NewObject(result))
+})
+}))
+
+arrayCtor.Set("isArray", vm.createBuiltinFunction("Array.isArray", func(this *JSObject, args []JSValue) JSValue {
 		if len(args) == 0 {
 			return False
 		}
