@@ -43,7 +43,7 @@ import (
 
 func main() {
     result := v8go.Evaluate("2 + 2")
-    fmt.Println(result) // 4
+    fmt.Println(result.ToNumber()) // 4
 }
 ```
 
@@ -83,7 +83,7 @@ func main() {
 
     // Call the function
     result := engine.Evaluate("add(3, 4)")
-    fmt.Println(result) // 7
+    fmt.Println(result.ToNumber()) // 7
 }
 ```
 
