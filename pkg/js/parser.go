@@ -59,7 +59,7 @@ func (p *Parser) Parse() (*Program, []string) {
 
 // detectUseStrict checks for a "use strict" directive at the current position.
 // If params is non-nil, also checks for duplicate parameter names (strict mode error).
-func (p *Parser) detectUseStrict(params []string) {
+func (p *Parser) detectUseStrict(params []string) bool {
 	savedPos := p.pos
 	// Skip any leading semicolons (empty statements).
 	for p.pos < len(p.tokens) && p.peek().Kind == TokSemicolon {
@@ -99,8 +99,8 @@ func (p *Parser) detectUseStrict(params []string) {
 			}
 		}
 	}
+	return foundUseStrict
 }
-
 // --- Token helpers ---
 
 func (p *Parser) peek() Token {
@@ -1056,10 +1056,10 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	savedPos := p.pos
 	if p.peek().Kind == TokLBrace {
 		p.advance() // skip {
-		p.detectUseStrict(paramNames(params))
+		hasUseStrict := p.detectUseStrict(paramNames(params))
 		// It is a SyntaxError if ContainsUseStrict of FunctionBody is true
 		// and IsSimpleParameterList of FormalParameters is false.
-		if p.Strict && !paramsAreSimple {
+		if hasUseStrict && !paramsAreSimple {
 			p.addError("non-simple parameter list cannot have a 'use strict' directive in the function body")
 		}
 		p.pos = savedPos // rewind to parse block normally
@@ -1302,8 +1302,8 @@ func (p *Parser) parseClassMethod() ClassMethod {
 	savedPos := p.pos
 	if p.peek().Kind == TokLBrace {
 		p.advance() // skip {
-		p.detectUseStrict(paramNames(params))
-		if p.Strict && !paramsAreSimple {
+		hasUseStrict := p.detectUseStrict(paramNames(params))
+		if hasUseStrict && !paramsAreSimple {
 			p.addError("non-simple parameter list cannot have a 'use strict' directive in the function body")
 		}
 		p.pos = savedPos
@@ -2353,23 +2353,44 @@ func (p *Parser) parseObjectExpression() Node {
 
 		// Getter/setter in object literal: get foo() { ... } or set foo(v) { ... }
 		// Only valid if key is "get"/"set" and next token is a valid property name.
-		if (key == "get" || key == "set") && p.isPropertyName(p.peek().Kind) {
+		if key == "get" || key == "set" {
 			isGetter := key == "get"
 			isSetter := key == "set"
-			actualKey := p.advance().Value // consume the actual property name
-			p.consume(TokLParen)
-			params := p.parseFormalParameters()
-			p.consume(TokRParen)
-			p.enterFunction()
-			body := p.parseBlockStatement()
-			p.leaveFunction()
-			fn := &FunctionExpression{Name: actualKey, Params: params, Body: body}
-			obj.Properties = append(obj.Properties, ObjectProperty{Key: actualKey, Value: fn, IsGetter: isGetter, IsSetter: isSetter})
-			if p.peek().Kind != TokComma {
-				break
+			nextKind := p.peek().Kind
+			if p.isPropertyName(nextKind) || nextKind == TokLBracket || nextKind == TokString || nextKind == TokNumber {
+				if nextKind == TokLBracket {
+					// Computed getter/setter: get [expr]() { ... }
+					p.advance() // consume [
+					computedName := p.parseExpression()
+					p.consume(TokRBracket)
+					p.consume(TokLParen)
+					params := p.parseFormalParameters()
+					p.consume(TokRParen)
+					p.enterFunction()
+					body := p.parseBlockStatement()
+					p.leaveFunction()
+					fn := &FunctionExpression{Params: params, Body: body}
+					obj.Properties = append(obj.Properties, ObjectProperty{
+						Key: "", Value: fn, IsGetter: isGetter, IsSetter: isSetter,
+						Computed: true, ComputedKey: computedName,
+					})
+				} else {
+					actualKey := p.advance().Value // consume the actual property name
+					p.consume(TokLParen)
+					params := p.parseFormalParameters()
+					p.consume(TokRParen)
+					p.enterFunction()
+					body := p.parseBlockStatement()
+					p.leaveFunction()
+					fn := &FunctionExpression{Name: actualKey, Params: params, Body: body}
+					obj.Properties = append(obj.Properties, ObjectProperty{Key: actualKey, Value: fn, IsGetter: isGetter, IsSetter: isSetter})
+				}
+				if p.peek().Kind != TokComma {
+					break
+				}
+				p.advance()
+				continue
 			}
-			p.advance()
-			continue
 		}
 		// Shorthand: {x} or method: { foo() {} }
 		if p.peek().Kind == TokComma || p.peek().Kind == TokRBrace || p.peek().Kind == TokEOF || p.peek().Kind == TokLParen {
@@ -2451,8 +2472,8 @@ func (p *Parser) parseFunctionExpression() Node {
 	savedPos := p.pos
 	if p.peek().Kind == TokLBrace {
 		p.advance() // skip {
-		p.detectUseStrict(paramNames(params))
-		if p.Strict && !paramsAreSimple {
+		hasUseStrict := p.detectUseStrict(paramNames(params))
+		if hasUseStrict && !paramsAreSimple {
 			p.addError("non-simple parameter list cannot have a 'use strict' directive in the function body")
 		}
 		p.pos = savedPos
