@@ -237,15 +237,14 @@ func (p *Parser) declareLetConst(name string) {
 }
 
 // checkStrictBindingIdentifier reports an error if name is a restricted identifier
-// in strict mode (eval, arguments, await).
+// in strict mode (eval, arguments, await) or if await is used in an async context.
 func (p *Parser) checkStrictBindingIdentifier(name string) {
-	if !p.Strict {
-		return
+	if p.Strict {
+		if name == "eval" || name == "arguments" {
+			p.addError("'" + name + "' may not be used as a binding identifier in strict mode")
+		}
 	}
-	if name == "eval" || name == "arguments" {
-		p.addError("'" + name + "' may not be used as a binding identifier in strict mode")
-	}
-	if name == "await" {
+	if name == "await" && (p.Strict || p.asyncContext) {
 		p.addError("'await' may not be used as a binding identifier in strict mode")
 	}
 }
@@ -334,9 +333,10 @@ func (p *Parser) parseStatement() Node {
 		return p.parseWithStatement()
 	case TokThrow:
 		return p.parseThrowStatement()
-	case TokIdentifier, TokYield:
+	case TokIdentifier, TokYield, TokAwait:
 		// Check for label: Identifier : Statement
 		// Check for label: yield : Statement (yield is only a keyword in generator context)
+		// Check for label: await : Statement (await is a keyword in async context, but a label check here delegates to parseLabeledStatement for error reporting)
 		if p.peekN(1).Kind == TokColon {
 			return p.parseLabeledStatement()
 		}
@@ -390,7 +390,8 @@ func (p *Parser) parseVariableDeclaration() Node {
 	nameTok := p.peek()
 	// Allow keywords that are valid identifiers in certain contexts (await, yield, async, etc.).
 	// In strict mode, await may not be used as an identifier.
-	if nameTok.Kind == TokAwait && p.Strict && !p.asyncContext {
+	// In async context, await may not be used as a binding identifier.
+	if nameTok.Kind == TokAwait && (p.Strict || p.asyncContext) {
 		p.addError("'await' may not be used as a binding identifier in strict mode")
 		p.advance()
 		p.sync()
@@ -993,9 +994,13 @@ func (p *Parser) parseContinueStatement() *ContinueStatement {
 
 // parseLabeledStatement parses LabelIdentifier : Statement
 func (p *Parser) parseLabeledStatement() Node {
-	nameTok := p.advance() // consume the label identifier (or yield)
+	nameTok := p.advance() // consume the label identifier (or yield, await)
 	p.consume(TokColon)    // consume :
 	label := nameTok.Value
+	// In async context, await cannot be used as a label identifier.
+	if label == "await" && p.asyncContext {
+		p.addError("'await' may not be used as a label identifier in an async function")
+	}
 	p.addLabel(label)
 
 	// Look ahead to determine if the labeled statement is a loop or switch.
@@ -1025,22 +1030,38 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 		p.advance()
 	}
 	name := ""
+	// Set asyncContext before name check so await is properly rejected as function name.
+	savedStrict := p.Strict
+	savedAsync := p.asyncContext
+	p.asyncContext = async
 	if p.peek().Kind == TokIdentifier || (p.peek().Kind == TokAwait && !p.asyncContext && !p.Strict) {
 		name = p.advance().Value
 		p.checkStrictBindingIdentifier(name)
 	}
 	p.consume(TokLParen)
+
 	params := p.parseFormalParameters()
 	p.consume(TokRParen)
 
+	// Compute isSimpleParameterList for NSPL+use-strict check.
+	paramsAreSimple := true
+	for _, param := range params {
+		if param.Default != nil || param.Rest || param.Destructure != nil {
+			paramsAreSimple = false
+			break
+		}
+	}
+
 	// Detect strict mode inside function body before parsing it.
-	savedStrict := p.Strict
-	savedAsync := p.asyncContext
-	p.asyncContext = async
 	savedPos := p.pos
 	if p.peek().Kind == TokLBrace {
 		p.advance() // skip {
 		p.detectUseStrict(paramNames(params))
+		// It is a SyntaxError if ContainsUseStrict of FunctionBody is true
+		// and IsSimpleParameterList of FormalParameters is false.
+		if p.Strict && !paramsAreSimple {
+			p.addError("non-simple parameter list cannot have a 'use strict' directive in the function body")
+		}
 		p.pos = savedPos // rewind to parse block normally
 	}
 
@@ -1054,7 +1075,19 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 	p.iterationLabels = nil
 	p.switchLabels = nil
 
+	// Pre-register parameter names in the function body scope so that
+	// let/const re-declarations of param names are caught as errors.
+	p.enterScope()
+	paramScopeIdx := len(p.scopeStack) - 1
+	for _, param := range params {
+		if param.Name != "" {
+			p.scopeStack[paramScopeIdx].bindings[param.Name] = true
+		}
+	}
+
 	body := p.parseBlockStatement()
+
+	p.leaveScope()
 
 	// Restore outer context.
 	p.labels = savedLabels
@@ -1174,8 +1207,20 @@ func (p *Parser) parseClassMethod() ClassMethod {
 
 	// Optional "static" keyword.
 	if p.peek().Kind == TokIdentifier && p.peek().Value == "static" {
+		// Check if it's "static" followed by an identifier or other method-start token
+		// (not a static initialization block which is "static {").
+		next := p.peekN(1)
+		if next.Kind != TokLBrace {
+			p.advance()
+			method.Static = true
+		}
+	}
+
+	// Optional "async" keyword (before get/set/*/name).
+	async := false
+	if p.peek().Kind == TokAsync {
+		async = true
 		p.advance()
-		method.Static = true
 	}
 
 	// Check for getter/setter: get foo() or set foo(v) or get #foo() or set #foo(v).
@@ -1185,6 +1230,13 @@ func (p *Parser) parseClassMethod() ClassMethod {
 	} else if p.peek().Kind == TokSet && p.peekN(1).Kind != TokLParen {
 		p.advance()
 		method.Setter = true
+	}
+
+	// Optional "*" for generator method.
+	generator := false
+	if p.peek().Kind == TokStar {
+		generator = true
+		p.advance()
 	}
 
 	// Private method or getter/setter: #identifier or get #identifier or set #identifier.
@@ -1227,13 +1279,35 @@ func (p *Parser) parseClassMethod() ClassMethod {
 	}
 
 	p.consume(TokLParen)
-	// Class methods are always in strict mode; set Strict before parsing
-	// parameters so duplicate param checks apply.
+	// Class methods are always in strict mode; set Strict and asyncContext
+	// before parsing parameters so await-in-formals and duplicate checks apply.
 	savedStrict := p.Strict
+	savedAsync := p.asyncContext
 	p.Strict = true
+	p.asyncContext = async
 	params := p.parseFormalParameters()
 	method.Params = params
 	p.consume(TokRParen)
+
+	// Compute isSimpleParameterList for NSPL+use-strict check.
+	paramsAreSimple := true
+	for _, param := range params {
+		if param.Default != nil || param.Rest || param.Destructure != nil {
+			paramsAreSimple = false
+			break
+		}
+	}
+
+	// Check for "use strict" in method body and NSPL conflict.
+	savedPos := p.pos
+	if p.peek().Kind == TokLBrace {
+		p.advance() // skip {
+		p.detectUseStrict(paramNames(params))
+		if p.Strict && !paramsAreSimple {
+			p.addError("non-simple parameter list cannot have a 'use strict' directive in the function body")
+		}
+		p.pos = savedPos
+	}
 
 	p.enterFunction()
 	savedLabels := p.labels
@@ -1243,19 +1317,56 @@ func (p *Parser) parseClassMethod() ClassMethod {
 	p.iterationLabels = nil
 	p.switchLabels = nil
 
+	// Pre-register parameter names to detect let/const re-declaration in body.
+	p.enterScope()
+	paramScopeIdx := len(p.scopeStack) - 1
+	for _, param := range params {
+		if param.Name != "" {
+			p.scopeStack[paramScopeIdx].bindings[param.Name] = true
+		}
+	}
+
 	body := p.parseBlockStatement()
+
+	p.leaveScope()
 
 	p.labels = savedLabels
 	p.iterationLabels = savedIterLabels
 	p.switchLabels = savedSwitchLabels
 	p.leaveFunction()
 	p.Strict = savedStrict
+	p.asyncContext = savedAsync
 	method.Body = body
+	method.Generator = generator
+	method.Async = async
 
 	return method
 }
 
-// isInDerivedClass returns true if we're currently inside a class with an extends clause.
+// isValidAssignmentTarget checks whether a node is a valid left-hand side for assignment.
+func (p *Parser) isValidAssignmentTarget(node Node) bool {
+	switch node.(type) {
+	case *Identifier, *MemberExpression:
+		return true
+	case *Literal:
+		// Literals (true, false, "string", 42, null, undefined) are not valid targets.
+		return false
+	case *ThisExpression, *SuperExpression:
+		return false
+	case *BinaryExpression, *UnaryExpression, *UpdateExpression:
+		return false
+	case *CallExpression, *NewExpression:
+		return false
+	case *FunctionExpression, *ClassDeclaration:
+		return false
+	case *ArrayExpression, *ObjectExpression:
+		// Array/object expressions should have been converted to destructuring patterns,
+		// but if not, they're not valid targets.
+		return false
+	default:
+		return true
+	}
+}
 func (p *Parser) isInDerivedClass() bool {
 	if len(p.classExtendsStack) == 0 {
 		return false
@@ -1499,8 +1610,9 @@ func (p *Parser) parseFormalParameters() []DefaultParam {
 					p.advance()
 					param := DefaultParam{Name: next.Value, Rest: true}
 					if p.peek().Kind == TokEq {
+						p.addError("rest parameter may not have a default initializer")
 						p.advance()
-						param.Default = p.parseExpression()
+						p.parseExpression() // skip the default expression
 					}
 					params = append(params, param)
 					break // rest parameter must be the last one
@@ -1538,8 +1650,20 @@ func (p *Parser) parseFormalParameters() []DefaultParam {
 		}
 	}
 
-	// Check for duplicate parameter names in strict mode.
-	if p.Strict {
+	// Determine if this is a simple parameter list (no defaults, destructuring, or rest).
+	isSimple := true
+	for _, param := range params {
+		if param.Default != nil || param.Rest || param.Destructure != nil {
+			isSimple = false
+			break
+		}
+	}
+
+	// Check for duplicate parameter names.
+	// - Always an error in strict mode.
+	// - In non-strict mode, it's an error only if the parameter list is non-simple
+	//   (has defaults, destructuring, or rest).
+	if p.Strict || !isSimple {
 		seen := make(map[string]bool)
 		for _, param := range params {
 			name := param.Name
@@ -1550,14 +1674,23 @@ func (p *Parser) parseFormalParameters() []DefaultParam {
 				p.addError("duplicate parameter name '" + name + "' in strict mode")
 			}
 			seen[name] = true
+		}
+	}
+
+	// Strict mode + async context: check restricted parameter names.
+	if p.Strict || p.asyncContext {
+		for _, param := range params {
+			name := param.Name
+			if name == "await" && (p.Strict || p.asyncContext) {
+				p.addError("'await' may not be used as a parameter name in strict mode")
+			}
 			if name == "eval" || name == "arguments" {
 				p.addError("'" + name + "' may not be used as a parameter name in strict mode")
 			}
-			if name == "await" {
-				p.addError("'await' may not be used as a parameter name in strict mode")
-			}
 		}
 	}
+
+	_ = isSimple // caller computes isSimple from params slice
 
 	return params
 }
@@ -1738,6 +1871,10 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 		right := p.parseExpressionPrecedence(assocPrec)
 		// Convert array/object literal to destructuring pattern if it's a valid assignment target.
 		left = p.tryConvertToDestructuringTarget(left)
+		// Check that the left-hand side is a valid assignment target.
+		if !p.isValidAssignmentTarget(left) {
+			p.addError("invalid left-hand side in assignment")
+		}
 		// In strict mode, assignment to eval or arguments is a SyntaxError.
 		if p.Strict {
 			if id, ok := left.(*Identifier); ok && (id.Name == "eval" || id.Name == "arguments") {
@@ -2188,16 +2325,31 @@ func (p *Parser) parseFunctionExpression() Node {
 		p.checkStrictBindingIdentifier(name)
 	}
 	p.consume(TokLParen)
-	params := p.parseFormalParameters()
-	p.consume(TokRParen)
 
+	// Set asyncContext BEFORE parsing params so await-in-formals is caught.
 	savedStrict := p.Strict
 	savedAsync := p.asyncContext
 	p.asyncContext = async
+
+	params := p.parseFormalParameters()
+	p.consume(TokRParen)
+
+	// Compute isSimpleParameterList for NSPL+use-strict check.
+	paramsAreSimple := true
+	for _, param := range params {
+		if param.Default != nil || param.Rest || param.Destructure != nil {
+			paramsAreSimple = false
+			break
+		}
+	}
+
 	savedPos := p.pos
 	if p.peek().Kind == TokLBrace {
 		p.advance() // skip {
 		p.detectUseStrict(paramNames(params))
+		if p.Strict && !paramsAreSimple {
+			p.addError("non-simple parameter list cannot have a 'use strict' directive in the function body")
+		}
 		p.pos = savedPos
 	}
 
@@ -2210,7 +2362,19 @@ func (p *Parser) parseFunctionExpression() Node {
 	p.iterationLabels = nil
 	p.switchLabels = nil
 
+	// Pre-register parameter names in the function body scope so that
+	// let/const re-declarations of param names are caught as errors.
+	p.enterScope()
+	paramScopeIdx := len(p.scopeStack) - 1
+	for _, param := range params {
+		if param.Name != "" {
+			p.scopeStack[paramScopeIdx].bindings[param.Name] = true
+		}
+	}
+
 	body := p.parseBlockStatement()
+
+	p.leaveScope()
 
 	// Restore.
 	p.labels = savedLabels
@@ -2291,8 +2455,33 @@ func (p *Parser) parseAsyncPrefix() Node {
 
 func (p *Parser) parseAwaitExpression() Node {
 	p.consume(TokAwait)
+	// await requires a UnaryExpression argument. If the next token cannot start
+	// a unary expression, report a syntax error.
+	next := p.peek()
+	if !canStartUnaryExpression(next.Kind) {
+		p.addError("unexpected token '" + next.Kind.String() + "' after await expression")
+		return &AwaitExpression{Argument: &Literal{Value: Undefined}}
+	}
 	arg := p.parseExpressionPrecedence(precUnary)
 	return &AwaitExpression{Argument: arg}
+}
+
+// canStartUnaryExpression reports whether a token kind can begin a unary expression.
+func canStartUnaryExpression(k TokenKind) bool {
+	switch k {
+	case TokNumber, TokBigInt, TokRegExp, TokString,
+		TokTrue, TokFalse, TokNull, TokUndefined,
+		TokIdentifier, TokThis, TokSuper,
+		TokLParen, TokLBracket, TokLBrace,
+		TokFunction, TokAsync,
+		TokTemplateStart,
+		TokBang, TokMinus, TokPlus, TokTilde, TokTypeof, TokVoid, TokDelete,
+		TokPlusPlus, TokMinusMinus,
+		TokNew, TokYield, TokAwait, TokClass,
+		TokImport:
+		return true
+	}
+	return false
 }
 
 func (p *Parser) parseNewExpression() Node {

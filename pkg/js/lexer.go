@@ -741,6 +741,8 @@ func (l *Lexer) readString(quote byte) Token {
 		buf.WriteByte(ch)
 		l.advance()
 	}
+	// Unterminated string literal.
+	l.errors = append(l.errors, fmt.Sprintf("line %d: unterminated string literal", l.line))
 	return Token{Kind: TokString, Value: buf.String(), StartPos: startPos, EndPos: l.pos}
 }
 

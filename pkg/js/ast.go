@@ -432,6 +432,8 @@ type ClassMethod struct {
 	Computed    bool  // [expr]() { ... }
 	ComputedKey Node  // expression for computed key
 	IsPrivate   bool  // #method() { ... }
+	Generator   bool  // *method() { ... }
+	Async       bool  // async method() { ... }
 	Params      []DefaultParam
 	Body        *BlockStatement
 }

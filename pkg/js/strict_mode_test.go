@@ -279,3 +279,101 @@ func TestStrict_NoErrorAssignEvalNonStrict(t *testing.T) {
 func TestStrict_WithStatement(t *testing.T) {
 	assertHasError(t, `"use strict"; with ({}) {}`, "with")
 }
+
+// =========================================================================
+// Non-Simple Parameter List + "use strict" (~6 tests)
+// =========================================================================
+
+func TestNSPL_RestParamWithUseStrict(t *testing.T) {
+	// rest param makes the param list non-simple; "use strict" in body is an error
+	assertHasError(t, `function f(a, ...rest) { "use strict"; }`, "non-simple parameter list")
+}
+
+func TestNSPL_DefaultParamWithUseStrict(t *testing.T) {
+	assertHasError(t, `function f(x = 1) { "use strict"; }`, "non-simple parameter list")
+}
+
+func TestNSPL_DestructuringWithUseStrict(t *testing.T) {
+	assertHasError(t, `function f([element]) { "use strict"; }`, "non-simple parameter list")
+}
+
+func TestNSPL_ObjectDestructuringWithUseStrict(t *testing.T) {
+	assertHasError(t, `function f({prop}) { "use strict"; }`, "non-simple parameter list")
+}
+
+func TestNSPL_SimpleParamsWithUseStrict_NoError(t *testing.T) {
+	// Simple params + "use strict" is fine
+	assertNoError(t, `function f(a, b) { "use strict"; }`)
+}
+
+func TestNSPL_AsyncFunction_DefaultWithUseStrict(t *testing.T) {
+	assertHasError(t, `async function foo(x = 1) { "use strict"; }`, "non-simple parameter list")
+}
+
+// =========================================================================
+// Duplicate params with defaults (non-simple) even in non-strict (~2 tests)
+// =========================================================================
+
+func TestDupParams_WithDefaults_NonStrict(t *testing.T) {
+	// Non-simple param list with duplicates should error even in non-strict mode
+	assertHasError(t, `function f(x = 0, x) {}`, "duplicate parameter name")
+}
+
+func TestDupParams_SimpleParams_NonStrict_NoError(t *testing.T) {
+	// Simple params in non-strict mode: duplicates are allowed
+	assertNoError(t, `function f(a, a) {}`)
+}
+
+// =========================================================================
+// Rest parameter with initializer (~2 tests)
+// =========================================================================
+
+func TestRestParam_WithDefault(t *testing.T) {
+	assertHasError(t, `function f(...x = []) {}`, "rest parameter may not have a default")
+}
+
+func TestRestParam_WithDefault_Expression(t *testing.T) {
+	assertHasError(t, `function f(...x = 1 + 2) {}`, "rest parameter may not have a default")
+}
+
+// =========================================================================
+// await restrictions in async functions (~6 tests)
+// =========================================================================
+
+func TestAwait_AsBindingIdentifier_InAsync(t *testing.T) {
+	assertHasError(t, `async function f() { var await = 5; }`, "await")
+}
+
+func TestAwait_AsLabel_InAsync(t *testing.T) {
+	assertHasError(t, `async function f() { await: ; }`, "await")
+}
+
+func TestAwait_AsIdentifierReference_InAsync(t *testing.T) {
+	assertHasError(t, `async function f() { void await; }`, "await")
+}
+
+func TestAwait_AsParamName_InAsync(t *testing.T) {
+	assertHasError(t, `async function f(await) {}`, "await")
+}
+
+func TestAwait_InDefaultExpression_InAsync(t *testing.T) {
+	assertHasError(t, `async function f(x = await) {}`, "await")
+}
+
+func TestAwait_AsFunctionName_InAsync_NoError(t *testing.T) {
+	// Async function can be named await? No, await cannot be a BindingIdentifier in async context
+	// But this is the function NAME, not a binding inside async context
+	assertHasError(t, `async function await() {}`, "await")
+}
+
+// =========================================================================
+// Formal parameter names conflict with body lexical declarations (~2 tests)
+// =========================================================================
+
+func TestFormalParam_ConflictWithLet(t *testing.T) {
+	assertHasError(t, `function f(bar) { let bar; }`, "already been declared")
+}
+
+func TestFormalParam_ConflictWithConst(t *testing.T) {
+	assertHasError(t, `function f(bar) { const bar = 1; }`, "already been declared")
+}

@@ -67,7 +67,14 @@ func (vm *VM) Run(source string) JSValue {
 	}
 
 	// Parse.
-	tokens := NewLexer(source).Tokenize()
+	lexer := NewLexer(source)
+	tokens := lexer.Tokenize()
+	// Surface lexer errors as parse errors.
+	lexErrs := lexer.Errors()
+	if len(lexErrs) > 0 {
+		vm.console.Log("Parse error: " + strings.Join(lexErrs, "; "))
+		return Undefined
+	}
 	prog, errs := NewParser(tokens).Parse()
 	if len(errs) > 0 {
 		vm.console.Log("Parse error: " + strings.Join(errs, "; "))
