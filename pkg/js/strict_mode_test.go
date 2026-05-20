@@ -161,3 +161,93 @@ func TestStrict_NoFalsePositives_NonStrict(t *testing.T) {
 	assertNoError(t, `function f(a, a) {}`)
 	assertNoError(t, `(a, a) => {}`) // arrow with dup params
 }
+
+// =========================================================================
+// Return outside function context (~3 tests)
+// =========================================================================
+
+func TestReturn_OutsideFunction(t *testing.T) {
+	assertHasError(t, `return 42`, "Illegal return statement")
+}
+
+func TestReturn_InsideFunction(t *testing.T) {
+	assertNoError(t, `function f() { return 42; }`)
+}
+
+func TestReturn_InsideGetter(t *testing.T) {
+	assertNoError(t, `var obj = { get x() { return 42; } }`)
+}
+
+// =========================================================================
+// Break/Continue outside loop/switch (~4 tests)
+// =========================================================================
+
+func TestBreak_OutsideLoop(t *testing.T) {
+	assertHasError(t, `break`, "Illegal break statement")
+}
+
+func TestBreak_InsideLoop(t *testing.T) {
+	assertNoError(t, `while (true) { break; }`)
+}
+
+func TestBreak_InsideSwitch(t *testing.T) {
+	assertNoError(t, `switch (1) { case 1: break; }`)
+}
+
+func TestContinue_OutsideLoop(t *testing.T) {
+	assertHasError(t, `continue`, "Illegal continue statement")
+}
+
+// =========================================================================
+// Label statements (~4 tests)
+// =========================================================================
+
+func TestLabel_Basic(t *testing.T) {
+	assertNoError(t, `label: for (;;) { break label; }`)
+}
+
+func TestLabel_Duplicate(t *testing.T) {
+	assertHasError(t, `function f() { label: while (true) { label: break label; } }`, "already been declared")
+}
+
+func TestLabel_UndefinedBreak(t *testing.T) {
+	// Break to undefined label
+	assertHasError(t, `function f() { while (true) { break undefined_label; } }`, "Undefined label")
+}
+
+func TestLabel_UndefinedContinue(t *testing.T) {
+	assertHasError(t, `function f() { while (true) { continue undefined_label; } }`, "Undefined label")
+}
+
+// =========================================================================
+// let/const re-declaration (~4 tests)
+// =========================================================================
+
+func TestLet_Redeclaration(t *testing.T) {
+	assertHasError(t, `{ let x = 1; let x = 2; }`, "already been declared")
+}
+
+func TestLet_NoRedeclarationSeparateScopes(t *testing.T) {
+	assertNoError(t, `{ let x = 1; } { let x = 2; }`)
+}
+
+func TestConst_Redeclaration(t *testing.T) {
+	assertHasError(t, `{ const x = 1; const x = 2; }`, "already been declared")
+}
+
+func TestVar_NoRedeclarationError(t *testing.T) {
+	// var can be redeclared without error
+	assertNoError(t, `{ var x = 1; var x = 2; }`)
+}
+
+// =========================================================================
+// Duplicate params in class methods (always strict) (~2 tests)
+// =========================================================================
+
+func TestClassMethod_DuplicateParams(t *testing.T) {
+	assertHasError(t, `class Foo { bar(a, a) {} }`, "duplicate parameter name")
+}
+
+func TestClassMethod_NoDupParams(t *testing.T) {
+	assertNoError(t, `class Foo { bar(a, b) {} }`)
+}

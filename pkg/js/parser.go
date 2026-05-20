@@ -9,6 +9,12 @@ import (
 	"fmt"
 )
 
+// scopeInfo tracks let/const bindings in a block scope.
+type scopeInfo struct {
+	bindings map[string]bool // names declared with let/const in this scope
+	parent   *scopeInfo
+}
+
 // Parser produces an AST from a token stream.
 type Parser struct {
 	tokens            []Token
@@ -18,6 +24,19 @@ type Parser struct {
 	asyncContext      bool // true when parsing inside an async function body
 	inWith            bool // true when parsing inside a with statement
 	classExtendsStack []bool // stack tracking whether enclosing class has extends
+
+	// Context tracking (depths track nesting levels).
+	functionDepth int
+	loopDepth     int
+	switchDepth   int
+
+	// Label tracking for the current function body.
+	labels          map[string]bool // all labels in current function
+	iterationLabels map[string]bool // labels on enclosing iterations (for continue label validation)
+	switchLabels     map[string]bool // labels on enclosing switch (for break label validation)
+
+	// Scope stack for let/const re-declaration detection.
+	scopeStack []*scopeInfo
 }
 
 // NewParser creates a parser for the given token stream.
@@ -125,6 +144,98 @@ func (p *Parser) addError(msg string) {
 	p.errors = append(p.errors, fmt.Sprintf("line %d: %s", p.peek().Line, msg))
 }
 
+// --- Context tracking helpers ---
+
+func (p *Parser) enterFunction() {
+	p.functionDepth++
+	// Save current label state for restoration on leave.
+}
+
+func (p *Parser) leaveFunction() {
+	p.functionDepth--
+}
+
+func (p *Parser) inFunction() bool {
+	return p.functionDepth > 0
+}
+
+func (p *Parser) enterLoop() {
+	p.loopDepth++
+}
+
+func (p *Parser) leaveLoop() {
+	p.loopDepth--
+}
+
+func (p *Parser) inLoop() bool {
+	return p.loopDepth > 0
+}
+
+func (p *Parser) enterSwitch() {
+	p.switchDepth++
+}
+
+func (p *Parser) leaveSwitch() {
+	p.switchDepth--
+}
+
+func (p *Parser) inSwitch() bool {
+	return p.switchDepth > 0
+}
+
+// addLabel registers a label and reports an error if it's a duplicate.
+func (p *Parser) addLabel(name string) {
+	if p.labels == nil {
+		p.labels = make(map[string]bool)
+	}
+	if p.labels[name] {
+		p.addError("Label '" + name + "' has already been declared")
+		return
+	}
+	p.labels[name] = true
+}
+
+// addIterationLabel tracks a label attached to a loop.
+func (p *Parser) addIterationLabel(name string) {
+	if p.iterationLabels == nil {
+		p.iterationLabels = make(map[string]bool)
+	}
+	p.iterationLabels[name] = true
+}
+
+// addSwitchLabel tracks a label attached to a switch.
+func (p *Parser) addSwitchLabel(name string) {
+	if p.switchLabels == nil {
+		p.switchLabels = make(map[string]bool)
+	}
+	p.switchLabels[name] = true
+}
+
+// enterScope pushes a new block scope for let/const tracking.
+func (p *Parser) enterScope() {
+	p.scopeStack = append(p.scopeStack, &scopeInfo{bindings: make(map[string]bool)})
+}
+
+// leaveScope pops the current block scope.
+func (p *Parser) leaveScope() {
+	if len(p.scopeStack) > 0 {
+		p.scopeStack = p.scopeStack[:len(p.scopeStack)-1]
+	}
+}
+
+// declareLetConst registers a let/const binding and reports re-declaration errors.
+func (p *Parser) declareLetConst(name string) {
+	if len(p.scopeStack) == 0 {
+		return
+	}
+	scope := p.scopeStack[len(p.scopeStack)-1]
+	if scope.bindings[name] {
+		p.addError("Identifier '" + name + "' has already been declared")
+		return
+	}
+	scope.bindings[name] = true
+}
+
 // checkStrictBindingIdentifier reports an error if name is a restricted identifier
 // in strict mode (eval, arguments, await).
 func (p *Parser) checkStrictBindingIdentifier(name string) {
@@ -168,7 +279,10 @@ func (p *Parser) parseStatement() Node {
 		p.advance()
 		return &EmptyStatement{}
 	case TokLBrace:
-		return p.parseBlockStatement()
+		p.enterScope()
+		block := p.parseBlockStatement()
+		p.leaveScope()
+		return block
 	case TokVar, TokLet, TokConst:
 		return p.parseVariableDeclaration()
 	case TokIf:
@@ -184,17 +298,9 @@ func (p *Parser) parseStatement() Node {
 	case TokTry:
 		return p.parseTryStatement()
 	case TokBreak:
-		p.advance()
-		if p.peek().Kind == TokSemicolon {
-			p.advance()
-		}
-		return &BreakStatement{}
+		return p.parseBreakStatement()
 	case TokContinue:
-		p.advance()
-		if p.peek().Kind == TokSemicolon {
-			p.advance()
-		}
-		return &ContinueStatement{}
+		return p.parseContinueStatement()
 	case TokReturn:
 		return p.parseReturnStatement()
 	case TokFunction:
@@ -228,6 +334,17 @@ func (p *Parser) parseStatement() Node {
 		return p.parseWithStatement()
 	case TokThrow:
 		return p.parseThrowStatement()
+	case TokIdentifier, TokYield:
+		// Check for label: Identifier : Statement
+		// Check for label: yield : Statement (yield is only a keyword in generator context)
+		if p.peekN(1).Kind == TokColon {
+			return p.parseLabeledStatement()
+		}
+		expr := p.parseExpression()
+		if p.peek().Kind == TokSemicolon {
+			p.advance()
+		}
+		return &ExpressionStatement{Expression: expr}
 	default:
 		expr := p.parseExpression()
 		if p.peek().Kind == TokSemicolon {
@@ -290,6 +407,11 @@ func (p *Parser) parseVariableDeclaration() Node {
 	p.advance()
 
 	p.checkStrictBindingIdentifier(nameTok.Value)
+
+	// Check for let/const re-declaration in the same scope.
+	if kind == "let" || kind == "const" {
+		p.declareLetConst(nameTok.Value)
+	}
 
 	decl := &VariableDeclaration{Kind: kind, Name: nameTok.Value}
 
@@ -635,13 +757,17 @@ func (p *Parser) parseWhileStatement() *WhileStatement {
 	p.consume(TokLParen)
 	test := p.parseExpression()
 	p.consume(TokRParen)
+	p.enterLoop()
 	body := p.parseStatement()
+	p.leaveLoop()
 	return &WhileStatement{Test: test, Body: body}
 }
 
 func (p *Parser) parseDoWhileStatement() *DoWhileStatement {
 	p.consume(TokDo)
+	p.enterLoop()
 	body := p.parseStatement()
+	p.leaveLoop()
 	p.consume(TokWhile)
 	p.consume(TokLParen)
 	test := p.parseExpression()
@@ -694,7 +820,9 @@ func (p *Parser) parseForStatement() Node {
 		p.advance()
 		right := p.parseExpression()
 		p.consume(TokRParen)
+		p.enterLoop()
 		body := p.parseStatement()
+		p.leaveLoop()
 		return &ForInStatement{Left: init, Right: right, Body: body}
 	}
 
@@ -702,7 +830,9 @@ func (p *Parser) parseForStatement() Node {
 		p.advance()
 		right := p.parseExpression()
 		p.consume(TokRParen)
+		p.enterLoop()
 		body := p.parseStatement()
+		p.leaveLoop()
 		return &ForOfStatement{Left: init, Right: right, Body: body}
 	}
 
@@ -716,7 +846,9 @@ func (p *Parser) parseForStatement() Node {
 		update = p.parseExpression()
 	}
 	p.consume(TokRParen)
+	p.enterLoop()
 	body := p.parseStatement()
+	p.leaveLoop()
 	return &ForStatement{Init: init, Test: test, Update: update, Body: body}
 }
 
@@ -727,6 +859,7 @@ func (p *Parser) parseSwitchStatement() *SwitchStatement {
 	p.consume(TokRParen)
 	p.consume(TokLBrace)
 
+	p.enterSwitch()
 	sw := &SwitchStatement{Discriminant: discriminant}
 	var defaultCase *SwitchCase
 
@@ -755,6 +888,7 @@ func (p *Parser) parseSwitchStatement() *SwitchStatement {
 	if defaultCase != nil {
 		sw.Cases = append(sw.Cases, *defaultCase)
 	}
+	p.leaveSwitch()
 	p.consume(TokRBrace)
 	return sw
 }
@@ -800,6 +934,9 @@ func (p *Parser) parseTryStatement() *TryStatement {
 
 func (p *Parser) parseReturnStatement() *ReturnStatement {
 	p.consume(TokReturn)
+	if !p.inFunction() {
+		p.addError("Illegal return statement")
+	}
 	var arg Node
 	if p.peek().Kind != TokSemicolon && p.peek().Kind != TokRBrace && p.peek().Kind != TokEOF {
 		arg = p.parseExpression()
@@ -808,6 +945,71 @@ func (p *Parser) parseReturnStatement() *ReturnStatement {
 		p.advance()
 	}
 	return &ReturnStatement{Argument: arg}
+}
+
+func (p *Parser) parseBreakStatement() *BreakStatement {
+	p.consume(TokBreak)
+	var label string
+	if p.peek().Kind == TokIdentifier || p.peek().Kind == TokYield {
+		label = p.advance().Value
+	}
+	if !p.inLoop() && !p.inSwitch() {
+		p.addError("Illegal break statement")
+	}
+	if label != "" {
+		// Check that the label exists on an enclosing iteration or switch.
+		inIter := p.iterationLabels != nil && p.iterationLabels[label]
+		inSw := p.switchLabels != nil && p.switchLabels[label]
+		if !inIter && !inSw {
+			p.addError("Undefined label '" + label + "'")
+		}
+	}
+	if p.peek().Kind == TokSemicolon {
+		p.advance()
+	}
+	return &BreakStatement{}
+}
+
+func (p *Parser) parseContinueStatement() *ContinueStatement {
+	p.consume(TokContinue)
+	var label string
+	if p.peek().Kind == TokIdentifier || p.peek().Kind == TokYield {
+		label = p.advance().Value
+	}
+	if !p.inLoop() {
+		p.addError("Illegal continue statement")
+	}
+	if label != "" {
+		// For continue with a label, the label must reference an iteration statement.
+		if p.iterationLabels == nil || !p.iterationLabels[label] {
+			p.addError("Undefined label '" + label + "'")
+		}
+	}
+	if p.peek().Kind == TokSemicolon {
+		p.advance()
+	}
+	return &ContinueStatement{}
+}
+
+// parseLabeledStatement parses LabelIdentifier : Statement
+func (p *Parser) parseLabeledStatement() Node {
+	nameTok := p.advance() // consume the label identifier (or yield)
+	p.consume(TokColon)    // consume :
+	label := nameTok.Value
+	p.addLabel(label)
+
+	// Look ahead to determine if the labeled statement is a loop or switch.
+	// Register the label in iterationLabels/switchLabels BEFORE parsing the body
+	// so that break/continue statements inside the body can reference it.
+	kind := p.peek().Kind
+	if kind == TokWhile || kind == TokDo || kind == TokFor {
+		p.addIterationLabel(label)
+	} else if kind == TokSwitch {
+		p.addSwitchLabel(label)
+	}
+
+	stmt := p.parseStatement()
+	return &LabeledStatement{Label: label, Body: stmt}
 }
 
 func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
@@ -842,8 +1044,23 @@ func (p *Parser) parseFunctionDeclaration() *FunctionDeclaration {
 		p.pos = savedPos // rewind to parse block normally
 	}
 
+	// Push function context.
+	p.enterFunction()
+	// Save and reset label state for the new function.
+	savedLabels := p.labels
+	savedIterLabels := p.iterationLabels
+	savedSwitchLabels := p.switchLabels
+	p.labels = nil
+	p.iterationLabels = nil
+	p.switchLabels = nil
+
 	body := p.parseBlockStatement()
-	// Restore strict mode and async context to outer scope.
+
+	// Restore outer context.
+	p.labels = savedLabels
+	p.iterationLabels = savedIterLabels
+	p.switchLabels = savedSwitchLabels
+	p.leaveFunction()
 	p.Strict = savedStrict
 	p.asyncContext = savedAsync
 	return &FunctionDeclaration{Name: name, Params: params, Body: body, Generator: generator, Async: async}
@@ -1010,11 +1227,29 @@ func (p *Parser) parseClassMethod() ClassMethod {
 	}
 
 	p.consume(TokLParen)
+	// Class methods are always in strict mode; set Strict before parsing
+	// parameters so duplicate param checks apply.
+	savedStrict := p.Strict
+	p.Strict = true
 	params := p.parseFormalParameters()
 	method.Params = params
 	p.consume(TokRParen)
 
+	p.enterFunction()
+	savedLabels := p.labels
+	savedIterLabels := p.iterationLabels
+	savedSwitchLabels := p.switchLabels
+	p.labels = nil
+	p.iterationLabels = nil
+	p.switchLabels = nil
+
 	body := p.parseBlockStatement()
+
+	p.labels = savedLabels
+	p.iterationLabels = savedIterLabels
+	p.switchLabels = savedSwitchLabels
+	p.leaveFunction()
+	p.Strict = savedStrict
 	method.Body = body
 
 	return method
@@ -1299,6 +1534,28 @@ func (p *Parser) parseFormalParameters() []DefaultParam {
 			p.advance()
 		}
 	}
+
+	// Check for duplicate parameter names in strict mode.
+	if p.Strict {
+		seen := make(map[string]bool)
+		for _, param := range params {
+			name := param.Name
+			if name == "" {
+				continue // destructured params have empty name
+			}
+			if seen[name] {
+				p.addError("duplicate parameter name '" + name + "' in strict mode")
+			}
+			seen[name] = true
+			if name == "eval" || name == "arguments" {
+				p.addError("'" + name + "' may not be used as a parameter name in strict mode")
+			}
+			if name == "await" {
+				p.addError("'await' may not be used as a parameter name in strict mode")
+			}
+		}
+	}
+
 	return params
 }
 
@@ -1633,11 +1890,13 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 			// For now, treat as empty params.
 		}
 		var body Node
+		p.enterFunction()
 		if p.peek().Kind == TokLBrace {
 			body = p.parseBlockStatement()
 		} else {
 			body = p.parseExpression()
 		}
+		p.leaveFunction()
 		return &ArrowFunctionExpression{Params: params, Body: body}
 	case TokTemplateStart:
 		// Tagged template: expr`quasi ${...} quasi`
@@ -1661,11 +1920,13 @@ func (p *Parser) parseParenthesizedOrArrow() Node {
 		if p.peek().Kind == TokArrow {
 			p.advance()
 			var body Node
+			p.enterFunction()
 			if p.peek().Kind == TokLBrace {
 				body = p.parseBlockStatement()
 			} else {
 				body = p.parseExpression()
 			}
+			p.leaveFunction()
 			return &ArrowFunctionExpression{Body: body}
 		}
 		return &Literal{Value: Undefined}
@@ -1710,11 +1971,13 @@ func (p *Parser) parseParenthesizedOrArrow() Node {
 			if p.peek().Kind == TokArrow {
 				p.advance()
 				var body Node
+				p.enterFunction()
 				if p.peek().Kind == TokLBrace {
 					body = p.parseBlockStatement()
 				} else {
 					body = p.parseExpression()
 				}
+				p.leaveFunction()
 				return &ArrowFunctionExpression{Params: params, Body: body}
 			}
 			// Parenthesized identifier: return it.
@@ -1796,7 +2059,9 @@ func (p *Parser) parseObjectExpression() Node {
 				p.consume(TokLParen)
 				params := p.parseFormalParameters()
 				p.consume(TokRParen)
+				p.enterFunction()
 				body := p.parseBlockStatement()
+				p.leaveFunction()
 				fn := &FunctionExpression{Params: params, Body: body}
 				obj.Properties = append(obj.Properties, ObjectProperty{
 					Key:         "",
@@ -1834,7 +2099,9 @@ func (p *Parser) parseObjectExpression() Node {
 			p.consume(TokLParen)
 			params := p.parseFormalParameters()
 			p.consume(TokRParen)
+			p.enterFunction()
 			body := p.parseBlockStatement()
+			p.leaveFunction()
 			fn := &FunctionExpression{Name: actualKey, Params: params, Body: body}
 			obj.Properties = append(obj.Properties, ObjectProperty{Key: actualKey, Value: fn, IsGetter: isGetter, IsSetter: isSetter})
 			if p.peek().Kind != TokComma {
@@ -1853,7 +2120,9 @@ func (p *Parser) parseObjectExpression() Node {
 				p.consume(TokLParen)
 				params := p.parseFormalParameters()
 				p.consume(TokRParen)
+				p.enterFunction()
 				body := p.parseBlockStatement()
+				p.leaveFunction()
 				fn := &FunctionExpression{Name: key, Params: params, Body: body}
 				obj.Properties = append(obj.Properties, ObjectProperty{Key: key, Value: fn})
 			} else {
@@ -1913,7 +2182,22 @@ func (p *Parser) parseFunctionExpression() Node {
 		p.pos = savedPos
 	}
 
+	// Push function context.
+	p.enterFunction()
+	savedLabels := p.labels
+	savedIterLabels := p.iterationLabels
+	savedSwitchLabels := p.switchLabels
+	p.labels = nil
+	p.iterationLabels = nil
+	p.switchLabels = nil
+
 	body := p.parseBlockStatement()
+
+	// Restore.
+	p.labels = savedLabels
+	p.iterationLabels = savedIterLabels
+	p.switchLabels = savedSwitchLabels
+	p.leaveFunction()
 	p.Strict = savedStrict
 	p.asyncContext = savedAsync
 	return &FunctionExpression{Name: name, Params: params, Body: body, Generator: generator, Async: async}
@@ -1964,14 +2248,16 @@ func (p *Parser) parseAsyncPrefix() Node {
 		if p.peek().Kind == TokArrow {
 			p.advance()
 			var body Node
+			savedCtx := p.asyncContext
+			p.asyncContext = true
+			p.enterFunction()
 			if p.peek().Kind == TokLBrace {
-				savedCtx := p.asyncContext
-				p.asyncContext = true
 				body = p.parseBlockStatement()
-				p.asyncContext = savedCtx
 			} else {
 				body = p.parseExpression()
 			}
+			p.leaveFunction()
+			p.asyncContext = savedCtx
 			result = &ArrowFunctionExpression{Params: []DefaultParam{{Name: name}}, Body: body, Async: true}
 		} else {
 			// Not an arrow: async used as identifier reference

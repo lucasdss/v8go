@@ -279,15 +279,27 @@ type SwitchCase struct {
 
 func (*SwitchStatement) nodeMarker() {}
 
-// BreakStatement: break (exits innermost loop or switch).
-type BreakStatement struct{}
+// BreakStatement: break [label] (exits innermost loop or switch).
+type BreakStatement struct {
+	Label string // optional label name, empty if no label
+}
 
 func (*BreakStatement) nodeMarker() {}
 
-// ContinueStatement: continue (exits current loop iteration).
-type ContinueStatement struct{}
+// ContinueStatement: continue [label] (exits current loop iteration).
+type ContinueStatement struct {
+	Label string // optional label name, empty if no label
+}
 
 func (*ContinueStatement) nodeMarker() {}
+
+// LabeledStatement: label: statement
+type LabeledStatement struct {
+	Label string
+	Body  Node
+}
+
+func (*LabeledStatement) nodeMarker() {}
 type ThisExpression struct{}
 
 func (*ThisExpression) nodeMarker() {}
