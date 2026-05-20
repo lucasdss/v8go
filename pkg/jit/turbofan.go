@@ -59,10 +59,14 @@ func CompileTurboFan(bf *js.BytecodeFunction) (*CodeBuf, error) {
 	// Phase 8: Algebraic simplification — peephole identity reductions.
 	simplifyAlgebraic(g)
 
-	// Phase 9: Linear-scan register allocation.
+	// Phase 9: LICM — hoist loop-invariant computations out of loops.
+	licmCount := runLICM(g)
+	_ = licmCount
+
+	// Phase 11: Linear-scan register allocation.
 	ra := allocateRegisters(g)
 
-	// Phase 10: Lower SSA to ARM64 machine code.
+	// Phase 12: Lower SSA to ARM64 machine code.
 	buf, err := lowerSSAToARM64(g, ra)
 	if err != nil {
 		return nil, fmt.Errorf("turbofan: lowering failed: %w", err)
