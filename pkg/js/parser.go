@@ -1904,6 +1904,10 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 					break
 				}
 				p.advance()
+				// Trailing comma: if next token is ), stop (no more args).
+				if p.peek().Kind == TokRParen {
+					break
+				}
 			}
 		}
 		p.consume(TokRParen)
@@ -2246,6 +2250,61 @@ func (p *Parser) parseObjectExpression() Node {
 			p.advance()
 			continue
 		}
+		// Async method / async generator method in object literal.
+		// async *method() { ... } or async method() { ... }
+		// Must be checked before getter/setter since key=="async" overlaps.
+		if key == "async" && (p.peek().Kind == TokStar || p.isPropertyName(p.peek().Kind) || p.peek().Kind == TokLBracket || p.peek().Kind == TokLParen) {
+			isGenerator := false
+			if p.peek().Kind == TokStar {
+				isGenerator = true
+				p.advance() // consume *
+			}
+			// Function name is optional without *, required with *.
+			if p.peek().Kind == TokLParen {
+				// Method named "async": async() { ... } or async *() { ... }
+				p.consume(TokLParen)
+				params := p.parseFormalParameters()
+				p.consume(TokRParen)
+				p.enterFunction()
+				body := p.parseBlockStatement()
+				p.leaveFunction()
+				fn := &FunctionExpression{Name: "async", Params: params, Body: body, Generator: isGenerator, Async: true}
+				obj.Properties = append(obj.Properties, ObjectProperty{Key: "async", Value: fn})
+			} else if p.peek().Kind == TokLBracket {
+				// Computed name: async *[expr]() {} or async [expr]() {}
+				p.advance()
+				computedName := p.parseExpression()
+				p.consume(TokRBracket)
+				p.consume(TokLParen)
+				params := p.parseFormalParameters()
+				p.consume(TokRParen)
+				p.enterFunction()
+				body := p.parseBlockStatement()
+				p.leaveFunction()
+				fn := &FunctionExpression{Params: params, Body: body, Generator: isGenerator, Async: true}
+				obj.Properties = append(obj.Properties, ObjectProperty{
+					Key: "", Value: fn, Computed: true, ComputedKey: computedName,
+				})
+			} else if p.isPropertyName(p.peek().Kind) {
+				methodName := p.advance().Value
+				p.consume(TokLParen)
+				params := p.parseFormalParameters()
+				p.consume(TokRParen)
+				p.enterFunction()
+				body := p.parseBlockStatement()
+				p.leaveFunction()
+				fn := &FunctionExpression{Name: methodName, Params: params, Body: body, Generator: isGenerator, Async: true}
+				obj.Properties = append(obj.Properties, ObjectProperty{Key: methodName, Value: fn})
+			} else if isGenerator {
+				p.addError("expected method name after async * in object literal")
+			}
+			if p.peek().Kind != TokComma {
+				break
+			}
+			p.advance()
+			continue
+		}
+
 		// Getter/setter in object literal: get foo() { ... } or set foo(v) { ... }
 		// Only valid if key is "get"/"set" and next token is a valid property name.
 		if (key == "get" || key == "set") && p.isPropertyName(p.peek().Kind) {
