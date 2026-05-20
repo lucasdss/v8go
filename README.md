@@ -329,7 +329,7 @@ These ECMAScript features are not yet implemented:
 
 | Feature | ES Version | Status |
 |---------|-----------|--------|
-The curated Test262 benchmark covers the implemented features only (58/58 pass). The full Test262 suite runs 500 tests per CI run (language/ + built-ins/) with ~70% pass rate. Remaining failures are early parse-time error checks the parser doesn't yet enforce. The full suite sampler runs 500 tests split between language/ and built-ins/ (177/500 pass as of current VM capabilities).
+The curated Test262 benchmark covers the implemented features only (58/58 pass). The full Test262 suite runs 500 tests per CI run (language/ + built-ins/) with ~65% pass rate (333/500). Remaining failures are destructuring patterns, async promise handling, and edge-case parse checks. The full suite sampler runs 500 tests split between language/ and built-ins/ (177/500 pass as of current VM capabilities).
 
 ## Architecture
 
