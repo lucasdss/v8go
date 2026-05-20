@@ -1265,6 +1265,9 @@ func (p *Parser) isInDerivedClass() bool {
 
 func (p *Parser) parseWithStatement() Node {
 	p.consume(TokWith)
+	if p.Strict {
+		p.addError("'with' statement is not allowed in strict mode")
+	}
 	p.consume(TokLParen)
 	p.parseExpression()
 	p.consume(TokRParen)
@@ -1666,6 +1669,11 @@ func (p *Parser) parsePrefix() Node {
 	case TokPlusPlus, TokMinusMinus:
 		p.advance()
 		arg := p.parseExpressionPrecedence(precUnary)
+		if p.Strict {
+			if id, ok := arg.(*Identifier); ok && (id.Name == "eval" || id.Name == "arguments") {
+				p.addError("Assignment to '" + id.Name + "' is not allowed in strict mode")
+			}
+		}
 		return &UpdateExpression{Operator: tokenOpString(tok.Kind), Argument: arg, Prefix: true}
 	case TokNew:
 		return p.parseNewExpression()
@@ -1730,6 +1738,12 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 		right := p.parseExpressionPrecedence(assocPrec)
 		// Convert array/object literal to destructuring pattern if it's a valid assignment target.
 		left = p.tryConvertToDestructuringTarget(left)
+		// In strict mode, assignment to eval or arguments is a SyntaxError.
+		if p.Strict {
+			if id, ok := left.(*Identifier); ok && (id.Name == "eval" || id.Name == "arguments") {
+				p.addError("Assignment to '" + id.Name + "' is not allowed in strict mode")
+			}
+		}
 		return &AssignmentExpression{Operator: tokenOpString(op.Kind), Left: left, Right: right}
 	case TokLParen:
 		_ = p.infixPrecedence(op)
@@ -1877,6 +1891,11 @@ func (p *Parser) parseInfix(left Node, op Token) Node {
 		return &OptionalMemberExpression{Object: left, Property: prop, Computed: false, StartPos: startPos, EndPos: propTok.EndPos}
 	case TokPlusPlus, TokMinusMinus:
 		p.advance()
+		if p.Strict {
+			if id, ok := left.(*Identifier); ok && (id.Name == "eval" || id.Name == "arguments") {
+				p.addError("Assignment to '" + id.Name + "' is not allowed in strict mode")
+			}
+		}
 		return &UpdateExpression{Operator: tokenOpString(op.Kind), Argument: left, Prefix: false}
 	case TokArrow:
 		// Arrow function: left is either an identifier or a list of params (from parenthesized).

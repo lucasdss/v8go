@@ -251,3 +251,31 @@ func TestClassMethod_DuplicateParams(t *testing.T) {
 func TestClassMethod_NoDupParams(t *testing.T) {
 	assertNoError(t, `class Foo { bar(a, b) {} }`)
 }
+
+// =========================================================================
+// Strict mode — assignment to eval/arguments (~6 tests)
+// =========================================================================
+
+func TestStrict_AssignToEval(t *testing.T) {
+	assertHasError(t, `"use strict"; eval = 1`, "eval")
+}
+
+func TestStrict_AssignToArguments(t *testing.T) {
+	assertHasError(t, `"use strict"; arguments = 1`, "arguments")
+}
+
+func TestStrict_PrefixIncEval(t *testing.T) {
+	assertHasError(t, `"use strict"; ++eval`, "eval")
+}
+
+func TestStrict_PostfixIncArguments(t *testing.T) {
+	assertHasError(t, `"use strict"; arguments++`, "arguments")
+}
+
+func TestStrict_NoErrorAssignEvalNonStrict(t *testing.T) {
+	assertNoError(t, `eval = 1`)
+}
+
+func TestStrict_WithStatement(t *testing.T) {
+	assertHasError(t, `"use strict"; with ({}) {}`, "with")
+}
