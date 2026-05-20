@@ -1,7 +1,7 @@
 # V8Go — V8-compatible JavaScript Engine in Go with JIT Compiler
 
 [![Go Reference](https://pkg.go.dev/badge/github.com/lucasdss/v8go.svg)](https://pkg.go.dev/github.com/lucasdss/v8go)
-[![Tests](https://img.shields.io/badge/tests-2370+-blue)](https://github.com/lucasdss/v8go)
+[![Tests](https://img.shields.io/badge/tests-1690+-blue)](https://github.com/lucasdss/v8go)
 [![Coverage](https://img.shields.io/badge/coverage-80.0%25_js_%7C_82.6%25_jit-brightgreen)](https://github.com/lucasdss/v8go)
 [![License](https://img.shields.io/badge/license-BSD_3--Clause-blue)](LICENSE)
 
@@ -244,10 +244,10 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 
 | Metric | Value |
 |--------|-------|
-| **Total lines** | 68,000+ (155 Go files) |
+| **Total lines** | 77,000+ (167 Go files) |
 | **pkg/jit coverage** | **82.6%** (exceeds 80% gate) |
 | **pkg/js coverage** | **80.0%** (meets 80% gate) |
-| **Tests** | 2,370+ across 8 packages |
+| **Tests** | 1,690+ across 8 packages |
 | **Benchmarks** | 23 (interpreter, JIT compilation, SSA passes) |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
@@ -264,7 +264,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 
 | Aspect | V8Go | Chrome V8 |
 |--------|------|-----------|
-| **Language** | Go (34K lines, 155 files) | C++ (2M+ lines) |
+| **Language** | Go (42K lines, 167 files) | C++ (2M+ lines) |
 | **Interpreter** | Ignition-style register VM (197 main ops, 375 total) | Ignition register VM |
 | **Baseline JIT** | Sparkplug (196/196 ops ARM64, 186/196 ops AMD64) | Sparkplug (ARM64/x86-64) |
 | **Optimizing JIT** | TurboFan (82 SSA ops, LICM, GVN, escape analysis, load elim, poly/mono inlining) | Maglev + TurboFan |
@@ -275,7 +275,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | **Memory model** | Go managed heap, no pointer arithmetic | Raw pointers, Smi tagging, pointer compression |
 | **W^X** | Dual-mapped: memfd_create (Linux), MAP_JIT + pthread_jit (Darwin) | RWX pages + W^X on macOS |
 | **Security hardening** | ARM64 PAC (Apple Silicon), constant blinding | CFI, sandbox, W^X hardening |
-| **Test suite** | 1,480+ tests, 23 benchmarks, Test262 (282/500 default, 58/58 curated) | Test262 (~45K tests), Web Platform Tests |
+| **Test suite** | 1,690+ tests, 23 benchmarks, Test262 (282/500 default, 58/58 curated) | Test262 (~45K tests), Web Platform Tests |
 | **Peak speed** | ~25% of V8 (estimate) | Baseline |
 | **Safety** | Go memory safety, no use-after-free | V8 sandbox, CFI, W^X hardening |
 | **Portability** | Go cross-compile (GOOS/GOARCH) | Platform-specific builds |
