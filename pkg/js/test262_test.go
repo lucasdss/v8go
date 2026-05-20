@@ -63,11 +63,11 @@ func parseTest262(path string) (*Test262Test, error) {
 					t.Negative = true
 					// Peek at remaining lines for phase/type.
 				}
-				if t.Negative && strings.HasPrefix(yl, "  phase:") {
-					t.NegativePhase = strings.TrimSpace(strings.TrimPrefix(yl, "  phase:"))
+				if t.Negative && strings.HasPrefix(yl, "phase:") {
+					t.NegativePhase = strings.TrimSpace(strings.TrimPrefix(yl, "phase:"))
 				}
-				if t.Negative && strings.HasPrefix(yl, "  type:") {
-					t.NegativeType = strings.TrimSpace(strings.TrimPrefix(yl, "  type:"))
+				if t.Negative && strings.HasPrefix(yl, "type:") {
+					t.NegativeType = strings.TrimSpace(strings.TrimPrefix(yl, "type:"))
 				}
 				if strings.HasPrefix(yl, "features:") {
 					features := strings.TrimPrefix(yl, "features:")
@@ -223,7 +223,7 @@ func runTest262Test(t *Test262Test, vm *js.VM) (bool, string) {
 	// Check flags for unsupported modes — auto-skip.
 	for _, flag := range t.Flags {
 		switch flag {
-		case "raw", "onlyStrict", "noStrict":
+		case "raw", "onlyStrict", "noStrict", "CanBlockIsFalse", "CanBlockIsTrue":
 			return true, "skipped (unsupported flag: " + flag + ")"
 		}
 	}
@@ -337,7 +337,17 @@ func runTest262Test(t *Test262Test, vm *js.VM) (bool, string) {
 	}
 
 	// --- Async test $DONE protocol check ---
+	// Must check parse errors first; async generator/async function tests
+	// that fail to parse should report "unexpected parse error" not
+	// "$DONE() not called".
 	if isAsyncTest {
+		// If the test failed to parse, treat as non-async for error reporting.
+		if hasParseError {
+			if t.Negative && t.NegativePhase == "parse" {
+				return true, "" // expected parse error
+			}
+			return false, "unexpected parse error"
+		}
 		asyncDoneVal := vm.GetGlobal("$asyncDone")
 		if asyncDoneVal.Tag == js.TagUndefined || !asyncDoneVal.IsTruthy() {
 			return false, "async test: $DONE() not called"
@@ -515,21 +525,40 @@ func TestTest262(t *testing.T) {
 
 	t.Logf("Found %d Test262 test files in language/", len(files))
 
+	// Also scan built-ins directory
+	builtinsDir := filepath.Join(test262Dir, "test", "built-ins")
+	var builtinFiles []string
+	if _, err := os.Stat(builtinsDir); err == nil {
+		builtinFiles, err = findTest262Files(builtinsDir)
+		if err == nil && len(builtinFiles) > 0 {
+			t.Logf("Found %d Test262 test files in built-ins/", len(builtinFiles))
+		}
+	}
+
 	var passed, failed, skipped int
 	results := make(map[string][2]int) // feature → [passed, failed]
 
 	// Limit to 500 tests for speed; 50 when -short. Set TEST262_FULL=1 for all.
+	// Split limit evenly between language/ and built-ins/ so both are sampled.
 	maxTests := 500
 	if testing.Short() {
 		maxTests = 50
 	}
 	if os.Getenv("TEST262_FULL") == "1" {
-		maxTests = len(files)
+		maxTests = len(files) + len(builtinFiles)
 	}
-	totalFiles := len(files)
-	if len(files) > maxTests {
-		files = files[:maxTests]
-		t.Logf("Running first %d of %d tests (set TEST262_FULL=1 for all)", maxTests, totalFiles)
+	totalLang := len(files)
+	totalBuiltins := len(builtinFiles)
+	if len(files) > maxTests/2 {
+		files = files[:maxTests/2]
+	}
+	if len(builtinFiles) > maxTests/2 {
+		builtinFiles = builtinFiles[:maxTests/2]
+	}
+	files = append(files, builtinFiles...)
+	totalFiles := totalLang + totalBuiltins
+	if len(files) < totalFiles {
+		t.Logf("Running %d of %d tests (set TEST262_FULL=1 for all)", len(files), totalFiles)
 	}
 
 	vm := newTestVM()
@@ -745,6 +774,18 @@ func resolveTest262Dir(t *testing.T) string {
 		return ""
 	}
 	return test262Dir
+}
+
+// TestTest262Full runs the full Test262 suite (language/ + built-ins/) unbounded.
+// Activated by TEST262_FULL=1 env var, allowing CI to opt in without modifying
+// the default test.
+func TestTest262Full(t *testing.T) {
+	if os.Getenv("TEST262_FULL") != "1" {
+		t.Skip("Set TEST262_FULL=1 to run full Test262 suite")
+	}
+	// Force full mode by setting the env var (already checked above, but
+	// TestTest262 also checks it internally).
+	TestTest262(t)
 }
 
 // TestTest262Smoke runs a quick smoke test with inline test cases.

@@ -27,7 +27,7 @@ The minimum required Go version is 1.24.
 - **Atomics & SharedArrayBuffer**: `Atomics.add/sub/load/store/compareExchange/isLockFree`, `SharedArrayBuffer` (compatibility stubs, single-threaded VM)
 - **Shadow Stack**: GC-safe object references in JIT native frames
 - **Minimal CGO**: Darwin-only (pthread_jit_write_protect_np); Linux uses pure Go dual-mapping. Cross-compiles everywhere.
-- **Passes 100% of curated Test262 benchmark** (58/58 tests covering major ECMAScript features)
+- **Passes curated Test262 benchmark** (58/58 on implemented features; 177/500 default run against full language/ + built-ins/ suite)
 
 ## Basic Example
 
@@ -150,7 +150,7 @@ vm.Run("console.log('Hello from Go!')")
 
 ## ECMAScript Compatibility: ~99%
 
-V8Go passes **100% of the curated Test262 benchmark (58/58)** covering the implemented ECMAScript features:
+V8Go passes **100% of the curated Test262 benchmark (58/58)** covering the implemented ECMAScript features. The full Test262 suite (language/ + built-ins/) runs 177/500 in the default sampling mode.
 
 | Category | Features |
 |----------|----------|
@@ -275,7 +275,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | **Memory model** | Go managed heap, no pointer arithmetic | Raw pointers, Smi tagging, pointer compression |
 | **W^X** | Dual-mapped: memfd_create (Linux), MAP_JIT + pthread_jit (Darwin) | RWX pages + W^X on macOS |
 | **Security hardening** | ARM64 PAC (Apple Silicon), constant blinding | CFI, sandbox, W^X hardening |
-| **Test suite** | 1,480+ tests, 23 benchmarks, Test262 (58/58) | Test262 (~45K tests), Web Platform Tests |
+| **Test suite** | 1,480+ tests, 23 benchmarks, Test262 (177/500 default, 58/58 curated) | Test262 (~45K tests), Web Platform Tests |
 | **Peak speed** | ~25% of V8 (estimate) | Baseline |
 | **Safety** | Go memory safety, no use-after-free | V8 sandbox, CFI, W^X hardening |
 | **Portability** | Go cross-compile (GOOS/GOARCH) | Platform-specific builds |
@@ -329,7 +329,7 @@ These ECMAScript features are not yet implemented:
 
 | Feature | ES Version | Status |
 |---------|-----------|--------|
-The curated Test262 benchmark covers the implemented features only (58/58 pass).
+The curated Test262 benchmark covers the implemented features only (58/58 pass). The full suite sampler runs 500 tests split between language/ and built-ins/ (177/500 pass as of current VM capabilities).
 
 ## Architecture
 
