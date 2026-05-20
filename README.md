@@ -250,7 +250,26 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 | Object creation | 250 ns | 116 ns | **2.2x faster** |
 | Property access (hot) | 91 ns | 98 ns | = (IC already handles this) |
 
+### JIT Compilation Speed (ARM64, Apple M3)
+
+| Benchmark | ns/op | B/op | allocs/op |
+|-----------|-------|------|-----------|
+| Sparkplug compile (add function) | 3,211 | 1,166 | 19 |
+| Sparkplug compile (arithmetic loop) | 6,312 | 5,070 | 68 |
+| TurboFan compile (add function) | 3,202 | 2,027 | 30 |
+| TurboFan compile (arithmetic loop) | 6,457 | 7,336 | 116 |
+
 **Performance ceiling:** The interpreter runs at ~63 ns/op. Sparkplug and TurboFan eliminate interpreter dispatch overhead for loops (1.7-1.8x) and object creation (2.2x). Single operations see no JIT gain because VM function-call overhead dominates. Full native speedup requires comprehensive inlining and stack-allocated JSValues.
+
+### AMD64 JIT
+
+AMD64 Sparkplug has 196/196 ops with native handlers (inline assembly + Go helper calls). Compilation benchmarks are available on AMD64 hardware:
+
+```bash
+GOARCH=amd64 go test ./pkg/jit/ -bench=BenchmarkAMD64 -benchmem
+```
+
+*Note: Execution benchmarks require AMD64 hardware (the machine code is AMD64-native). Compilation speed benchmarks work on any architecture.*
 
 ## Code Quality
 
@@ -260,7 +279,7 @@ Single-op benchmarks are dominated by VM overhead (function lookup, frame alloca
 | **pkg/jit coverage** | **82.6%** (exceeds 80% gate) |
 | **pkg/js coverage** | **80.0%** (meets 80% gate) |
 | **Tests** | 1,690+ across 8 packages |
-| **Benchmarks** | 23 (interpreter, JIT compilation, SSA passes) |
+| **Benchmarks** | 24 (interpreter, JIT compilation, SSA passes) |
 | **Lint issues** | 0 (pkg/jit, vs origin/main) |
 | **Vulnerabilities** | 0 (govulncheck) |
 | **Static analysis** | clean (go vet, gosec ≤12 pre-existing) |
