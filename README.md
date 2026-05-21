@@ -335,7 +335,7 @@ make test-cover-gate   # enforces 80% minimum coverage on pkg/js + pkg/jit
 | Object literal | 224 ns | — | **111 ns** | ~10 ns |
 | Loop (100 iter) | 11.8 µs | 6.8 µs | 6.8 µs | ~100 ns |
 
-**Gap analysis**: V8 is ~25-30x faster for single operations due to Smi tagging (integers never allocate), pointer compression (2x cache density), and C++ inline code. V8Go closes this gap on loops (1.7x Sparkplug/TurboFan) and object creation (2.0x). A CGO V8 wrapper adds ~100ns per Go↔JS call; V8Go's interop is zero-cost (shared memory).
+**Gap analysis**: V8 is ~25-30x faster for single operations due to Smi tagging (integers never allocate), pointer compression (2x cache density), and C++ inline code. V8Go closes this gap on loops (1.7x Sparkplug/TurboFan) and object creation (2.0x). A CGO V8 wrapper adds ~100ns per Go↔JS call; V8Go's interop is zero-cost (shared memory). See [Performance Deep-Dive](docs/PERFORMANCE-DEEP-DIVE.md) for details.
 
 ## Packages
 
