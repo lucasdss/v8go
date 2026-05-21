@@ -1723,7 +1723,7 @@ func sparkplugOpGetIterator(frame *js.VMFrame) {
 		for _, key := range []string{
 			"Symbol(Symbol.iterator)", "Symbol.iterator", "@@iterator",
 			"Symbol(Symbol.asyncIterator)", "Symbol.asyncIterator",
-			js.AsyncIteratorSymbol.SymVal,
+			js.AsyncIteratorSymbol.StrVal,
 		} {
 			if key == "" {
 				continue

@@ -144,7 +144,7 @@ func keyString(v JSValue) string {
 	case TagUndefined:
 		return "__undef"
 	case TagSymbol:
-		return "__sym_" + v.SymVal
+		return "__sym_" + v.StrVal
 	}
 	return "__unknown"
 }

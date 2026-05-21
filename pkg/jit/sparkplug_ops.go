@@ -1620,7 +1620,7 @@ func emitSparkplugLdaConstantNative(as *Assembler, instr *js.Instruction) {
 
 // --- Loop 3: Native register copy ops (inline ARM64, no Go call) ---
 
-// emitSparkplugStarNative copies Acc (64 bytes) → Regs[OperandA] using 4 LDP/STP pairs.
+// emitSparkplugStarNative copies Acc (48 bytes) → Regs[OperandA] using 3 LDP/STP pairs.
 func emitSparkplugStarNative(as *Assembler, instr *js.Instruction) {
 	reg := int(instr.OperandA)
 	regSlot := reg * jsValueSize
@@ -1628,18 +1628,16 @@ func emitSparkplugStarNative(as *Assembler, instr *js.Instruction) {
 	// Load Regs slice data pointer.
 	as.LDR(REG_R12, REG_VM0, regsOff)
 
-	// Copy Acc → Regs[reg]: 4 × LDP/STP (16 bytes each = 64 bytes).
+	// Copy Acc → Regs[reg]: 3 × LDP/STP (16 bytes each = 48 bytes).
 	as.LDP(REG_R8, REG_R9, REG_VM0, accOffset) // bytes 0-15: StrVal
 	as.STP(REG_R8, REG_R9, REG_R12, regSlot)
 	as.LDP(REG_R8, REG_R9, REG_VM0, accOffset+16) // bytes 16-31: NumVal(8)+ObjVal(8)
 	as.STP(REG_R8, REG_R9, REG_R12, regSlot+16)
-	as.LDP(REG_R8, REG_R9, REG_VM0, accOffset+32) // bytes 32-47: BigIntVal(8)+SymVal(16 first half)
+	as.LDP(REG_R8, REG_R9, REG_VM0, accOffset+32) // bytes 32-47: BigIntVal(8)+BoolVal+Tag+padding
 	as.STP(REG_R8, REG_R9, REG_R12, regSlot+32)
-	as.LDP(REG_R8, REG_R9, REG_VM0, accOffset+48) // bytes 48-63: SymVal cont+BoolVal+Tag+padding
-	as.STP(REG_R8, REG_R9, REG_R12, regSlot+48)
 }
 
-// emitSparkplugLdarNative copies Regs[OperandA] → Acc (64 bytes).
+// emitSparkplugLdarNative copies Regs[OperandA] → Acc (48 bytes).
 func emitSparkplugLdarNative(as *Assembler, instr *js.Instruction) {
 	reg := int(instr.OperandA)
 	regSlot := reg * jsValueSize
@@ -1647,15 +1645,13 @@ func emitSparkplugLdarNative(as *Assembler, instr *js.Instruction) {
 	// Load Regs slice data pointer.
 	as.LDR(REG_R12, REG_VM0, regsOff)
 
-	// Copy Regs[reg] → Acc: 4 × LDP/STP.
+	// Copy Regs[reg] → Acc: 3 × LDP/STP (48 bytes).
 	as.LDP(REG_R8, REG_R9, REG_R12, regSlot) // bytes 0-15
 	as.STP(REG_R8, REG_R9, REG_VM0, accOffset)
 	as.LDP(REG_R8, REG_R9, REG_R12, regSlot+16) // bytes 16-31
 	as.STP(REG_R8, REG_R9, REG_VM0, accOffset+16)
 	as.LDP(REG_R8, REG_R9, REG_R12, regSlot+32) // bytes 32-47
 	as.STP(REG_R8, REG_R9, REG_VM0, accOffset+32)
-	as.LDP(REG_R8, REG_R9, REG_R12, regSlot+48) // bytes 48-63
-	as.STP(REG_R8, REG_R9, REG_VM0, accOffset+48)
 }
 
 // emitSparkplugMovNative copies Regs[OperandB] → Regs[OperandA] (64 bytes).

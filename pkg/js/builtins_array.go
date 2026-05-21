@@ -585,7 +585,7 @@ thisArg = args[2].ObjVal
 if source.IsObject() && source.ObjVal != nil {
 obj := source.ObjVal
 // Try to call @@asyncIterator method if present.
-asyncIterFn := obj.Get(AsyncIteratorSymbol.SymVal)
+asyncIterFn := obj.Get(AsyncIteratorSymbol.StrVal)
 if asyncIterFn.IsObject() && asyncIterFn.ObjVal != nil && asyncIterFn.ObjVal.isCallable() {
 itResult := asyncIterFn.ObjVal.Call(obj, nil)
 if itResult.IsObject() && itResult.ObjVal != nil {

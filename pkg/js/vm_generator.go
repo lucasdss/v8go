@@ -378,10 +378,10 @@ func (vm *VM) createAsyncGeneratorObject(bf *BytecodeFunction, thisObj *JSObject
 	}))
 
 	// [Symbol.asyncIterator]() — returns this.
-	// Use the SymVal of the well-known AsyncIteratorSymbol as the property key,
+	// Use the StrVal of the well-known AsyncIteratorSymbol as the property key,
 	// so that JS code doing g[Symbol.asyncIterator]() resolves correctly.
 	selfRef := NewObject(asyncGenObj)
-	asyncGenObj.Set(AsyncIteratorSymbol.SymVal, vm.createBuiltinFunction("[Symbol.asyncIterator]", func(this *JSObject, args []JSValue) JSValue {
+	asyncGenObj.Set(AsyncIteratorSymbol.StrVal, vm.createBuiltinFunction("[Symbol.asyncIterator]", func(this *JSObject, args []JSValue) JSValue {
 		return selfRef
 	}))
 

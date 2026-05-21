@@ -75,7 +75,7 @@ func formatConstant(c JSValue) string {
 		}
 		return "Object"
 	case TagSymbol:
-		return fmt.Sprintf("Symbol: %s", c.SymVal)
+		return fmt.Sprintf("Symbol: %s", c.StrVal)
 	}
 	return "<unknown>"
 }

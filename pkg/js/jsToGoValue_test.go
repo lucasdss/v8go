@@ -33,8 +33,8 @@ func TestJsToGoValueScalars(t *testing.T) {
 	}
 	// Symbol
 	sym := NewSymbol("test")
-	if result := jsToGoValue(sym); result != sym.SymVal {
-		t.Errorf("jsToGoValue(Symbol(\"test\")) = %v, want %q", result, sym.SymVal)
+	if result := jsToGoValue(sym); result != sym.StrVal {
+		t.Errorf("jsToGoValue(Symbol(\"test\")) = %v, want %q", result, sym.StrVal)
 	}
 }
 

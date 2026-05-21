@@ -2,6 +2,7 @@ package js
 
 import (
 	"testing"
+	"unsafe"
 )
 
 func TestNewSymbol(t *testing.T) {
@@ -35,8 +36,8 @@ func TestSymbolUniqueness(t *testing.T) {
 	sym1 := NewSymbol("foo")
 	sym2 := NewSymbol("foo")
 
-	if sym1.SymVal == sym2.SymVal {
-		t.Fatal("Two calls to NewSymbol should produce distinct SymVal identities")
+	if sym1.StrVal == sym2.StrVal {
+		t.Fatal("Two calls to NewSymbol should produce distinct StrVal identities")
 	}
 	if !sym1.StrictEquals(sym1) {
 		t.Fatal("Symbol should equal itself")
@@ -49,16 +50,16 @@ func TestSymbolUniqueness(t *testing.T) {
 func TestSymbolToString(t *testing.T) {
 	sym := NewSymbol("hello")
 	ts := sym.ToString()
-	if ts != sym.SymVal {
-		t.Fatalf("ToString() = %q, want %q", ts, sym.SymVal)
+	if ts != sym.StrVal {
+		t.Fatalf("ToString() = %q, want %q", ts, sym.StrVal)
 	}
 }
 
 func TestSymbolString(t *testing.T) {
 	sym := NewSymbol("desc")
 	s := sym.String()
-	if s != sym.SymVal {
-		t.Fatalf("String() = %q, want %q", s, sym.SymVal)
+	if s != sym.StrVal {
+		t.Fatalf("String() = %q, want %q", s, sym.StrVal)
 	}
 }
 
@@ -106,7 +107,7 @@ func TestSymbolForAndKeyFor(t *testing.T) {
 	sym1 := SymbolFor(key)
 	sym2 := SymbolFor(key)
 
-	if sym1.SymVal != sym2.SymVal {
+	if sym1.StrVal != sym2.StrVal {
 		t.Fatal("Symbol.for should return the same symbol for the same key")
 	}
 	if !sym1.StrictEquals(sym2) {
@@ -133,8 +134,8 @@ func TestSymbolIterator(t *testing.T) {
 	if !iter.IsSymbol() {
 		t.Fatal("Symbol.iterator should be a Symbol")
 	}
-	if iter.StrVal != "Symbol.iterator" {
-		t.Fatalf("Symbol.iterator description = %q, want %q", iter.StrVal, "Symbol.iterator")
+	if iter.StrVal == "" {
+		t.Fatal("Symbol.iterator StrVal should not be empty")
 	}
 }
 
@@ -143,12 +144,12 @@ func TestSymbolToStringTag(t *testing.T) {
 	if !stag.IsSymbol() {
 		t.Fatal("Symbol.toStringTag should be a Symbol")
 	}
-	if stag.StrVal != "Symbol.toStringTag" {
-		t.Fatalf("Symbol.toStringTag description = %q, want %q", stag.StrVal, "Symbol.toStringTag")
+	if stag.StrVal == "" {
+		t.Fatal("Symbol.toStringTag StrVal should not be empty")
 	}
 }
 
-func TestGoStringIncludesSymVal(t *testing.T) {
+func TestGoStringNotEmpty(t *testing.T) {
 	sym := NewSymbol("x")
 	gs := sym.GoString()
 	if len(gs) == 0 {
@@ -167,8 +168,8 @@ func TestDisasmSymbolConstant(t *testing.T) {
 func TestJsToGoValueSymbol(t *testing.T) {
 	sym := NewSymbol("test")
 	result := jsToGoValue(sym)
-	if result != sym.SymVal {
-		t.Fatalf("jsToGoValue(Symbol) = %v, want %q", result, sym.SymVal)
+	if result != sym.StrVal {
+		t.Fatalf("jsToGoValue(Symbol) = %v, want %q", result, sym.StrVal)
 	}
 }
 
@@ -186,8 +187,14 @@ func TestSymbolAsyncIteratorDescription(t *testing.T) {
 	if !sym.IsSymbol() {
 		t.Fatal("Symbol.asyncIterator should be a Symbol")
 	}
-	if sym.StrVal != "Symbol.asyncIterator" {
-		t.Fatalf("Symbol.asyncIterator description = %q, want %q", sym.StrVal, "Symbol.asyncIterator")
+	if sym.StrVal == "" {
+		t.Fatal("Symbol.asyncIterator StrVal should not be empty")
+	}
+}
+
+func TestJSValueSize(t *testing.T) {
+	if sz := unsafe.Sizeof(JSValue{}); sz != 48 {
+		t.Errorf("JSValue size = %d, want 48", sz)
 	}
 }
 

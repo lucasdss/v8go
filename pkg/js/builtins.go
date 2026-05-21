@@ -39,7 +39,7 @@ var DatePrototype *JSObject
 var AsyncGeneratorPrototype *JSObject
 
 // AsyncIteratorSymbol is the well-known Symbol.asyncIterator value, stored
-// at registration time so that async generator objects can use its SymVal
+// at registration time so that async generator objects can use its StrVal
 // as the property key for [Symbol.asyncIterator]() lookups.
 var AsyncIteratorSymbol JSValue
 
@@ -1109,7 +1109,7 @@ func (vm *VM) registerAsyncGenerator() {
 
 	// [Symbol.asyncIterator]() — fallback returns this
 	selfProto := NewObject(proto)
-	proto.Set(AsyncIteratorSymbol.SymVal, vm.createBuiltinFunction("[Symbol.asyncIterator]", func(this *JSObject, args []JSValue) JSValue {
+	proto.Set(AsyncIteratorSymbol.StrVal, vm.createBuiltinFunction("[Symbol.asyncIterator]", func(this *JSObject, args []JSValue) JSValue {
 		return selfProto
 	}))
 

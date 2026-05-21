@@ -623,7 +623,7 @@ func jsToGoValue(v JSValue) interface{} {
 	case TagString:
 		return v.StrVal
 	case TagSymbol:
-		return v.SymVal
+		return v.StrVal
 	case TagObject:
 		if v.ObjVal == nil {
 			return nil

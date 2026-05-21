@@ -137,7 +137,7 @@ func TestAsyncGeneratorPrototypeSymbolAsyncIterator(t *testing.T) {
 	if AsyncGeneratorPrototype == nil {
 		t.Fatal("AsyncGeneratorPrototype not registered")
 	}
-	itFn := AsyncGeneratorPrototype.Get(AsyncIteratorSymbol.SymVal)
+	itFn := AsyncGeneratorPrototype.Get(AsyncIteratorSymbol.StrVal)
 	if !itFn.IsObject() || itFn.ObjVal == nil || !itFn.ObjVal.IsCallable() {
 		t.Fatal("AsyncGeneratorPrototype[Symbol.asyncIterator] should be callable")
 	}

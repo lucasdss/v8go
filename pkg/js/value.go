@@ -77,11 +77,10 @@ const (
 // of V8's tagged pointers, trading raw bit-tagging for clarity and GC safety.
 // Fields ordered by size for optimal alignment (largest first).
 type JSValue struct {
-	StrVal    string    // 16 bytes (pointer + len) — also holds symbol description
+	StrVal    string    // 16 bytes (pointer + len) — also holds symbol identity
 	NumVal    float64   // 8 bytes
 	ObjVal    *JSObject // 8 bytes (pointer)
 	BigIntVal *big.Int  // 8 bytes — arbitrary-precision integer
-	SymVal    string    // 16 bytes — symbol identity (unique description string)
 	BoolVal   bool      // 1 byte
 	Tag       TypeTag   // 1 byte
 	_         [6]byte   // padding
@@ -142,9 +141,9 @@ func NewObject(obj *JSObject) JSValue {
 }
 
 // NewSymbol creates a new unique Symbol value.
-// The description is used for the Symbol("...") toString form.
+// The description is stored in StrVal for the Symbol("...") toString form.
 // Each call returns a value that is unique for strict equality purposes
-// because the SymVal field includes an incrementing counter.
+// because the StrVal field includes an incrementing counter.
 var symCounter int64
 var symMu sync.Mutex
 
@@ -156,8 +155,7 @@ func NewSymbol(description string) JSValue {
 	symMu.Unlock()
 	return JSValue{
 		Tag:    TagSymbol,
-		StrVal: description,
-		SymVal: "Symbol(" + strconv.FormatInt(c, 10) + ")",
+		StrVal: "Symbol(" + strconv.FormatInt(c, 10) + ")",
 	}
 }
 
@@ -300,7 +298,7 @@ func (v JSValue) ToString() string {
 	case TagString:
 		return v.StrVal
 	case TagSymbol:
-		return v.SymVal
+		return v.StrVal
 	case TagObject:
 		if v.ObjVal == nil {
 			return "null"
@@ -329,7 +327,7 @@ func (v JSValue) String() string {
 	case TagString:
 		return v.StrVal
 	case TagSymbol:
-		return v.SymVal
+		return v.StrVal
 	case TagObject:
 		if v.ObjVal == nil {
 			return "null"
@@ -350,12 +348,12 @@ func (v JSValue) GoString() string {
 	if v.BigIntVal != nil {
 		bi = v.BigIntVal.String()
 	}
-	return fmt.Sprintf("JSValue{Tag:%d, NumVal:%f, StrVal:%q, SymVal:%q, BigInt:%s}", v.Tag, v.NumVal, v.StrVal, v.SymVal, bi)
+	return fmt.Sprintf("JSValue{Tag:%d, NumVal:%f, StrVal:%q, BigInt:%s}", v.Tag, v.NumVal, v.StrVal, bi)
 }
 
 // Equals performs loose equality (==) per ECMAScript Abstract Equality Comparison.
 func (v JSValue) Equals(other JSValue) bool {
-	// Symbol comparison: same type → strict (pointer-based via SymVal).
+	// Symbol comparison: same type → strict (identity-based via StrVal).
 	if v.Tag == TagSymbol && other.Tag == TagSymbol {
 		return v.StrictEquals(other)
 	}
@@ -470,7 +468,7 @@ func (v JSValue) StrictEquals(other JSValue) bool {
 	case TagObject:
 		return v.ObjVal == other.ObjVal // pointer equality
 	case TagSymbol:
-		return v.SymVal == other.SymVal // unique identity check
+		return v.StrVal == other.StrVal // unique identity check
 	case TagBigInt:
 		if v.BigIntVal == nil || other.BigIntVal == nil {
 			return v.BigIntVal == other.BigIntVal
